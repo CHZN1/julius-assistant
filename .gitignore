@@ -1,0 +1,8 @@
+data/
+artifacts/*.npz
+artifacts/*.npy
+artifacts/models/
+artifacts/*_crops/
+artifacts/*_feat/
+__pycache__/
+.ipynb_checkpoints/
