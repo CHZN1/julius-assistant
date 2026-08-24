@@ -6,3 +6,4 @@ artifacts/*_crops/
 artifacts/*_feat/
 __pycache__/
 .ipynb_checkpoints/
+julius_memory/
