@@ -230,7 +230,7 @@ SCHEMAS = [
         "day":{"type":"string","description":"'today' or 'yesterday'"}},
         "required":["league"]}}},
     {"type":"function","function":{"name":"calculate",
-        "description":"Calculate bounded arithmetic with +, -, *, /, %, **, parentheses, sqrt, abs, pi and e. Algebra and calculus are not supported.",
+        "description":"Calculate bounded arithmetic with +, -, *, /, **, parentheses, sqrt, abs, pi and e. For percentages write 'X% of Y' (for example '17.5% of 2480'); a bare % is modulo. Algebra and calculus are not supported.",
         "parameters":{"type":"object","properties":{
         "expression":{"type":"string"}},"required":["expression"]}}},
     {"type":"function","function":{"name":"get_quote",

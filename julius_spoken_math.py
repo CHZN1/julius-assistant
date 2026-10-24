@@ -21,6 +21,10 @@ def arithmetic_expression(text):
     if not isinstance(text,str) or len(text)>512:return None
     text=re.sub(r'^(?:what(?:\'s| is) |calculate )','',text.lower().strip().rstrip('?.!'))
     if number(text) is not None:return None
+    percent=re.fullmatch(r'(.+?) ?(?:%|per ?cent) of (.+)',text.replace(',',''))
+    if percent:
+        part,whole=number(percent.group(1)),number(percent.group(2))
+        return f'{part}/100*{whole}' if part is not None and whole is not None else None
     candidates=[]
     for match in re.finditer(r'(?<![a-z])(?:multiplied by|divided by|plus|minus|times)(?![a-z])|[+*/-]',text):
         left=number(text[:match.start()]);right=number(text[match.end():])
