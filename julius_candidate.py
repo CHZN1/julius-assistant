@@ -461,7 +461,12 @@ def transcribe(a):
 def transcribe_input(audio):
     """A failed recognition turn must not stop listening or invent a request."""
     try:
-        return transcribe(audio)
+        result = transcribe(audio)
+        import os as _os
+        if _os.environ.get('JULIUS_DEBUG_ASR') == '1':
+            from julius_listening import has_wake as _has_wake
+            print(f"  [heard {result[0]!r} lang={result[1]} no_speech={result[2]:.2f} wake_word={_has_wake(result[0])}]", flush=True)
+        return result
     except Exception as exc:
         globals()['_last_asr_confidence']={'rejected':'recognition_failure','error_type':type(exc).__name__}
         print(f'  [recognition failed: {type(exc).__name__}; input discarded, listening continues]',flush=True)
