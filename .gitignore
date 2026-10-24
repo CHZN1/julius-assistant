@@ -35,3 +35,4 @@ fer2013.csv
 # Local planner/reminder state and audio (audio backed up separately)
 **/state/*.sqlite3
 *.wav
+.env

@@ -1,0 +1,22 @@
+# Julius runtime configuration. Secrets never go here: put ANTHROPIC_API_KEY in .env (gitignored).
+
+[brain]
+mode = "cloud"              # "cloud" (Haiku front end + Sonnet planner) or "local" (Ollama only)
+
+[models]
+haiku  = "claude-haiku-5-5"   # voice front end: every turn starts here
+sonnet = "claude-sonnet-5-5"  # planner/orchestrator: reached through escalate_to_planner
+
+[spend]
+daily_cap_usd = 5.00        # total across tiers; once reached Julius says so and stays on Haiku only
+
+[orchestrator]
+max_steps = 8               # Sonnet planner tool-loop limit per escalation
+subagent_max_steps = 6      # sub-agent tool-loop limit
+
+[offline]
+model = "llama3.2:3b"       # loaded only while the API is unreachable
+retry_seconds = 60          # how long to stay offline before trying the API again
+
+[voice]
+keep_loaded = true          # with the brain in the cloud the TTS voice is never unloaded between turns
