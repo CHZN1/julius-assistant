@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parent
 DEFAULTS = {
     "brain": {"mode": "cloud"},
     "models": {"haiku": "claude-haiku-5-5", "sonnet": "claude-sonnet-5-5"},
-    "spend": {"daily_cap_usd": 5.0},
+    "spend": {"daily_cap_usd": 5.0, "offline_at_multiple": 2.0},
     "orchestrator": {"max_steps": 8, "subagent_max_steps": 6},
     "offline": {"model": "llama3.2:3b", "retry_seconds": 60},
     "voice": {"keep_loaded": True},
@@ -47,6 +47,8 @@ def load_config(path=None):
         raise ValueError("brain.mode must be 'cloud' or 'local'")
     if not config["spend"]["daily_cap_usd"] > 0:
         raise ValueError("spend.daily_cap_usd must be positive")
+    if not config["spend"]["offline_at_multiple"] > 1:
+        raise ValueError("spend.offline_at_multiple must be greater than 1")
     return config
 
 

@@ -13,6 +13,7 @@ import julius_costs as costs
 
 AUTH_MESSAGE = "My API key expired or is invalid."
 CAP_MESSAGE = "I've hit today's spending limit, so I'll stick to the quick model for the rest of the day."
+HARD_CAP_MESSAGE = "I've now used twice today's spending limit, so I'm switching to my offline model for the rest of the day."
 
 # Per-tier request settings. Sampling parameters are omitted (rejected on these models); Haiku answers
 # with thinking off at low effort for latency, Sonnet keeps adaptive thinking at medium effort.
@@ -107,8 +108,9 @@ class CloudBrain:
         self.auth_bad = False
         self.auth_pending = False  # the spoken auth message has not been delivered through a streamed reply yet
         self.offline_until = 0.0
-        self.cap_announced_day = None
+        self.announced = {}
         self.status = {"mode": "cloud"}
+        self._last_tools = None
 
     # ---------- client and state ----------
     def client(self):
@@ -126,23 +128,26 @@ class CloudBrain:
         self.auth_bad, self._client, self._slow = False, None, None
 
     def cap_notice(self):
-        """Returns CAP_MESSAGE once per day when the spend cap is first seen reached."""
-        if self.tracker.cap_reached():
-            day = time.strftime("%Y-%m-%d")
-            if self.cap_announced_day != day:
-                self.cap_announced_day = day
-                return CAP_MESSAGE
+        """The spoken notice for a spend threshold, once per day each: the cap (Haiku only), then twice the cap (offline)."""
+        day = time.strftime("%Y-%m-%d")
+        for key, reached, message in (("hard", self.tracker.offline_required(), HARD_CAP_MESSAGE), ("cap", self.tracker.cap_reached(), CAP_MESSAGE)):
+            if reached and self.announced.get(key) != day:
+                self.announced.update({key: day, "cap": day} if key == "hard" else {key: day})
+                return message
         return None
 
     def tool_schemas(self, schemas):
-        """The stable full tool list (cache-friendly) plus escalate_to_planner unless the cap is reached."""
+        """The selected tools for this turn plus escalate_to_planner unless the cap is reached.
+
+        Selective tools keep the prompt small; each distinct subset is cached on its own (5-minute TTL).
+        """
         if schemas is None:
             return None
-        import julius_tools as jt
-        full = list(jt.SCHEMAS)
+        chosen = [s for s in schemas if s["function"]["name"] != "escalate_to_planner"]
         if not self.tracker.cap_reached():
-            full.append(ESCALATE_SCHEMA)
-        return full
+            chosen.append(ESCALATE_SCHEMA)
+        self._last_tools = chosen
+        return chosen
 
     # ---------- request building ----------
     def request(self, messages, tools, max_tokens=None):
@@ -156,7 +161,8 @@ class CloudBrain:
             kwargs["tools"] = api_tools
         elif _has_tool_blocks(api_messages):  # history contains tool calls: tools must be declared, but not callable now
             import julius_tools as jt
-            kwargs["tools"] = convert_tools(self.tool_schemas(jt.SCHEMAS))
+            # Reuse this turn's tool list so the cached system+tools prefix from the tool phase is hit again.
+            kwargs["tools"] = convert_tools(self._last_tools or self.tool_schemas(jt.SCHEMAS))
             kwargs["tool_choice"] = {"type": "none"}
         return kwargs
 
@@ -170,7 +176,7 @@ class CloudBrain:
                     return iter([SimpleNamespace(message=SimpleNamespace(content=AUTH_MESSAGE))])
                 return SimpleNamespace(message=SimpleNamespace(content=AUTH_MESSAGE, tool_calls=None))
             return self._offline(messages, tools, stream, options, announce=False)
-        if self._clock() < self.offline_until:
+        if self._clock() < self.offline_until or self.tracker.offline_required():
             return self._offline(messages, tools, stream, options, announce=False)
         try:
             kwargs = self.request(messages, tools, max_tokens=int((options or {}).get("num_predict", 0)) or None)
@@ -257,7 +263,7 @@ def get_tracker():
             import julius_memory as jm
             config = cfg.load_config()
             path = Path(os.environ.get("JULIUS_COSTS_FILE") or Path(jm.MEM) / "costs.jsonl")
-            _TRACKER = costs.CostTracker(path, config["spend"]["daily_cap_usd"])
+            _TRACKER = costs.CostTracker(path, config["spend"]["daily_cap_usd"], offline_multiple=config["spend"]["offline_at_multiple"])
         return _TRACKER
 
 

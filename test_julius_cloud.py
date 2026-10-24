@@ -61,10 +61,17 @@ class RequestTests(unittest.TestCase):
   self.assertEqual(kw['cache_control'],{'type':'ephemeral'});self.assertEqual(kw['system'][0]['cache_control'],{'type':'ephemeral'})
   self.assertEqual(kw['tools'][-1]['cache_control'],{'type':'ephemeral'});self.assertEqual(kw['output_config'],{'effort':'low'})
   self.assertEqual(kw['thinking'],{'type':'disabled'})
- def test_tool_list_is_stable_and_includes_escalation(self):
+ def test_tools_are_selective_per_turn_and_always_include_escalation(self):
   b=brain(FakeMessages());names=lambda kw:[t['name'] for t in kw['tools']]
-  self.assertEqual(names(b.request(MSGS,jt.select_schemas('weather'))),names(b.request(MSGS,jt.select_schemas('bitcoin'))))
-  self.assertEqual(names(b.request(MSGS,jt.SCHEMAS))[-1],'escalate_to_planner')
+  weather=names(b.request(MSGS,jt.select_schemas('weather')));self.assertEqual(weather,['get_weather','get_forecast','escalate_to_planner'])
+  self.assertEqual(names(b.request(MSGS,jt.select_schemas('bitcoin'))),['get_quote','escalate_to_planner'])
+  self.assertLess(len(names(b.request(MSGS,jt.select_schemas('weather')))),len(jt.SCHEMAS))
+ def test_each_tool_subset_is_cache_marked_on_its_last_tool(self):
+  kw=brain(FakeMessages()).request(MSGS,jt.select_schemas('weather'));self.assertEqual(kw['tools'][-1]['cache_control'],{'type':'ephemeral'});self.assertNotIn('cache_control',kw['tools'][0])
+ def test_follow_up_after_tools_reuses_the_same_tool_list_for_a_cache_hit(self):
+  b=brain(FakeMessages());first=b.request(MSGS,jt.select_schemas('weather'))
+  history=MSGS+[{'role':'assistant','content':'','tool_calls':[{'function':{'name':'get_weather','arguments':{}}}]},{'role':'tool','name':'get_weather','content':'75F'}]
+  second=b.request(history,None);self.assertEqual(second['tools'],first['tools']);self.assertEqual(second['tool_choice'],{'type':'none'})
  def test_escalation_is_withdrawn_when_cap_is_reached(self):
   b=brain(FakeMessages(),cap=0.0000001);b.tracker.record('sonnet',usage(o=1000))
   self.assertNotIn('escalate_to_planner',[t['name'] for t in b.request(MSGS,jt.SCHEMAS)['tools']])
@@ -115,10 +122,22 @@ class FailureTests(unittest.TestCase):
     yield 'Partial. ';raise conn_error()
   b=brain(FakeMessages(stream=Half([],usage())),offline=lambda *a:self.fail('no restart after partial speech'))
   self.assertEqual(''.join(p.message.content for p in b.chat(MSGS,stream=True)),'Partial. ')
- def test_cap_notice_is_given_once(self):
-  b=brain(FakeMessages(),cap=0.0000001);self.assertIsNone(b.cap_notice());b.tracker.record('sonnet',usage(o=1000))
+ def test_cap_then_double_cap_notices_are_each_given_once(self):
+  b=brain(FakeMessages(),cap=0.01);self.assertIsNone(b.cap_notice());b.tracker.record('sonnet',usage(o=1500))  # $0.015: over the cap, under twice the cap
   self.assertEqual(b.cap_notice(),jc.CAP_MESSAGE);self.assertIsNone(b.cap_notice())
-
+  b.tracker.record('sonnet',usage(o=1500));self.assertEqual(b.cap_notice(),jc.HARD_CAP_MESSAGE);self.assertIsNone(b.cap_notice())
+ def test_jumping_straight_past_double_the_cap_announces_the_offline_switch_only_once(self):
+  b=brain(FakeMessages(),cap=0.001);b.tracker.record('sonnet',usage(o=5000))
+  self.assertEqual(b.cap_notice(),jc.HARD_CAP_MESSAGE);self.assertIsNone(b.cap_notice())
+ def test_at_double_the_cap_the_api_is_not_called_and_the_offline_model_answers(self):
+  api=FakeMessages(response=SimpleNamespace(content=[block('text',text='cloud')],usage=usage()))
+  b=brain(api,offline=lambda m,t,s,o:SimpleNamespace(message=SimpleNamespace(content='offline',tool_calls=None)),cap=0.001);b.tracker.record('sonnet',usage(o=5000))
+  self.assertEqual(b.chat(MSGS).message.content,'offline');self.assertEqual(api.calls,[])
+ def test_between_cap_and_double_cap_haiku_still_answers_without_escalation(self):
+  api=FakeMessages(response=SimpleNamespace(content=[block('text',text='cloud')],usage=usage()))
+  b=brain(api,cap=0.01);b.tracker.record('sonnet',usage(o=1500))
+  self.assertEqual(b.chat(MSGS,tools=jt.select_schemas('weather')).message.content,'cloud')
+  self.assertNotIn('escalate_to_planner',[t['name'] for t in api.calls[0]['tools']])
 
 class BackendWiringTests(unittest.TestCase):
  def test_llm_chat_routes_to_the_cloud_brain_and_hands_it_the_offline_fallback(self):

@@ -22,6 +22,12 @@ class VoiceStaysLoadedTests(unittest.TestCase):
     def test_cloud_profile_keeps_the_voice_by_default(self):
         launcher=Path('run_julius.sh').read_text()
         self.assertIn('cloud) PROFILE_BACKEND=cloud',launcher);self.assertIn('JULIUS_KEEP_VOICE',launcher);self.assertIn('${JULIUS_PROFILE:-cloud}',launcher)
+    def test_default_cloud_profile_uses_the_mlx_voice_and_torch_remains_a_fallback_profile(self):
+        launcher=Path('run_julius.sh').read_text()
+        cloud=launcher.split('  cloud) ')[1].split(';;')[0];torch=launcher.split('  cloud-torch) ')[1].split(';;')[0]
+        self.assertIn('PROFILE_VOICE=qwen-mlx',cloud);self.assertIn('JULIUS_MLX_KEEP_WORKER',cloud);self.assertIn('PROFILE_VOICE=qwen-clone',torch)
+        self.assertIn('JULIUS_KEEP_VOICE',torch)
+        import subprocess;self.assertEqual(subprocess.run(['zsh','-n','run_julius.sh']).returncode,0)
 class EscalationHintTests(unittest.TestCase):
     def test_multistep_requests_get_the_tool_turn(self):
         hint=candidate_constant('ESCALATE_HINT')

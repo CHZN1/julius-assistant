@@ -31,6 +31,11 @@ class ConfigTests(unittest.TestCase):
      self.assertNotIn('secret',cfg.describe_key());self.assertEqual(cfg.describe_key(),'set (20 chars)')
    with patch.dict(os.environ,{'ANTHROPIC_API_KEY':'existing'},clear=True):
     cfg.load_dotenv(p);self.assertEqual(os.environ['ANTHROPIC_API_KEY'],'existing')
+ def test_offline_multiple_defaults_to_two_and_must_exceed_one(self):
+  self.assertEqual(cfg.load_config()['spend']['offline_at_multiple'],2.0)
+  with tempfile.TemporaryDirectory() as d:
+   p=Path(d)/'j.toml';p.write_text('[spend]\noffline_at_multiple = 1\n')
+   with self.assertRaises(ValueError):cfg.load_config(p)
  def test_missing_env_file_is_reported_as_missing_key(self):
   with patch.dict(os.environ,{'JULIUS_ENV_FILE':'/nonexistent/.env'},clear=True):
    self.assertEqual(cfg.describe_key(),'missing')

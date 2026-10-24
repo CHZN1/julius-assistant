@@ -8,7 +8,8 @@ haiku  = "claude-haiku-5-5"   # voice front end: every turn starts here
 sonnet = "claude-sonnet-5-5"  # planner/orchestrator: reached through escalate_to_planner
 
 [spend]
-daily_cap_usd = 5.00        # total across tiers; once reached Julius says so and stays on Haiku only
+daily_cap_usd = 5.00        # total across tiers; once reached Julius says so and stays on Haiku only (no planner)
+offline_at_multiple = 2.0   # at this multiple of the cap Julius says so and switches to the offline model for the rest of the day
 
 [orchestrator]
 max_steps = 8               # Sonnet planner tool-loop limit per escalation

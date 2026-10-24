@@ -32,8 +32,9 @@ def cost_of(tier, usage):
 
 
 class CostTracker:
-    def __init__(self, path, cap_usd, clock=time.time):
+    def __init__(self, path, cap_usd, clock=time.time, offline_multiple=2.0):
         self.path, self.cap_usd, self._clock = Path(path), float(cap_usd), clock
+        self.offline_multiple = float(offline_multiple)
         self._lock = threading.Lock()
         self.turn = 0
         self._day, self._total, self._by_tier = None, 0.0, {}
@@ -97,10 +98,16 @@ class CostTracker:
             return dict(self._turn_costs)
 
     def cap_reached(self):
+        """At the cap: Haiku only (no planner)."""
         return self.today_total() >= self.cap_usd
+
+    def offline_required(self):
+        """At offline_multiple times the cap: stop calling the API altogether and use the offline model."""
+        return self.today_total() >= self.cap_usd * self.offline_multiple
 
     def status_line(self):
         costs = self.turn_costs()
         parts = " ".join(f"{tier} ${usd:.5f}" for tier, usd in costs.items()) or "no API calls"
+        state = " | OFFLINE (2x cap)" if self.offline_required() else " | cap reached: Haiku only" if self.cap_reached() else ""
         return (f"  [cost: {parts} | turn ${sum(costs.values()):.5f} | "
-                f"today ${self.today_total():.4f} of ${self.cap_usd:.2f}]")
+                f"today ${self.today_total():.4f} of ${self.cap_usd:.2f}{state}]")

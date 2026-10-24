@@ -46,6 +46,12 @@ class TrackerTests(unittest.TestCase):
  def test_cap_reached_stops_being_true_on_a_new_day(self):
   t=self.tracker(cap=0.5);t.record('sonnet',usage(o=100_000));self.assertTrue(t.cap_reached())
   self.now[0]+=86400;self.assertFalse(t.cap_reached());self.assertEqual(t.today_total(),0)
+ def test_offline_is_required_at_double_the_cap_and_resets_next_day(self):
+  t=self.tracker(cap=0.5);t.record('sonnet',usage(o=60_000));self.assertTrue(t.cap_reached() and not t.offline_required())  # $0.60
+  t.record('sonnet',usage(o=60_000));self.assertTrue(t.offline_required());self.assertIn('OFFLINE',t.status_line())
+  self.now[0]+=86400;self.assertFalse(t.offline_required())
+ def test_status_line_marks_the_cap_state(self):
+  t=self.tracker(cap=0.5);self.assertNotIn('cap reached',t.status_line());t.record('sonnet',usage(o=60_000));self.assertIn('cap reached: Haiku only',t.status_line())
  def test_corrupt_lines_are_ignored(self):
   self.path.write_text('not json\n');self.assertEqual(self.tracker().today_total(),0)
 if __name__=='__main__':unittest.main()
