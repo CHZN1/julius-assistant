@@ -95,6 +95,7 @@ class CloudBrain:
 
     def __init__(self, config, tracker, client=None, offline=None, clock=time.monotonic):
         self.config, self.tracker, self._client, self.offline, self._clock = config, tracker, client, offline, clock
+        self._slow = None
         self.model = config["models"]["haiku"]
         self.auth_bad = False
         self.offline_until = 0.0
@@ -107,8 +108,14 @@ class CloudBrain:
             self._client = make_client()
         return self._client
 
+    def slow_client(self):
+        """Longer timeout for planner and sub-agent calls (non-streaming, adaptive thinking)."""
+        if self._slow is None:
+            self._slow = make_client(timeout=120.0, max_retries=2)
+        return self._slow
+
     def reset_auth(self):
-        self.auth_bad, self._client = False, None
+        self.auth_bad, self._client, self._slow = False, None, None
 
     def cap_notice(self):
         """Returns CAP_MESSAGE once per day when the spend cap is first seen reached."""

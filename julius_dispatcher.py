@@ -29,6 +29,7 @@ class Dispatcher:
         self.turn_tasks = deque(maxlen=8)
         self._calls = 0
         self._turn_budget_active = False
+        self.turn_call_limit = 8
 
     def begin_turn(self):
         self._turn_budget_active = True
@@ -81,7 +82,7 @@ class Dispatcher:
         try:
             args = {} if args is None else args
             self._validate(name, args)
-            if self._turn_budget_active and self._calls >= 8:
+            if self._turn_budget_active and self._calls >= self.turn_call_limit:
                 raise ValueError('Utility limit reached for this turn; please narrow the request.')
             self._calls += 1
             # One active utility avoids racing confirmations or adding model residency.
@@ -112,6 +113,14 @@ class Dispatcher:
                         message=f"{name} failed: {type(exc).__name__}: {exc}")
         task['seconds'] = round(time.perf_counter() - started, 4)
         # Keep metadata only: file contents and user queries do not linger here.
+        self._remember(task)
+        return task
+
+    def record_external(self, tool, ok, message, agent='planner'):
+        """Record a tool that runs outside the specialist lock (the planner runs other tools inside itself)."""
+        task = {'id': uuid.uuid4().hex, 'agent': agent, 'tool': tool, 'started_at': datetime.now(timezone.utc).isoformat(),
+                'ok': ok, 'status': 'completed' if ok else 'failed', 'code': 'completed' if ok else 'unavailable',
+                'message': message, 'data': {}, 'seconds': 0}
         self._remember(task)
         return task
 

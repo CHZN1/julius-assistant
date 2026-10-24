@@ -305,6 +305,9 @@ def dispatcher():
 
 def call(name, args):
     service = dispatcher()
+    if name == "escalate_to_planner":  # runs other tools inside itself, so it cannot hold the dispatcher's lock
+        import julius_orchestrator
+        return julius_orchestrator.run_escalation(args, service)
     return service.render(service.dispatch(name, args))
 
 
