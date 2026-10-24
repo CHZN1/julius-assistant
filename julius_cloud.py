@@ -21,12 +21,19 @@ TIERS = {
     "sonnet": {"max_tokens": 4096, "output_config": {"effort": "medium"}},
 }
 
+# Appended to Julius's system prompt in cloud mode so the front end knows when to escalate.
+PLANNING_PROMPT = ("\n\nPLANNING\nYou have a planner: escalate_to_planner. Use it instead of answering yourself whenever a request "
+                   "combines several lookups (for example weather and the time, or comparing two places), asks for a plan or itinerary, "
+                   "needs research or comparison, or involves moving, sorting, organising, copying or renaming files. The planner can only "
+                   "propose file changes; nothing happens until the user says yes, so never say a change was made. Pass the full task. "
+                   "Its result is your answer: say it in your own voice, briefly. Answer one-step requests with your own tools.")
+
 ESCALATE_SCHEMA = {"type": "function", "function": {
     "name": "escalate_to_planner",
     "description": ("Hand a multi-step task to the planner (a stronger model that can run sub-agents, look several things up "
-                    "and propose file reorganisations). Use it for planning, research needing several lookups, organising "
-                    "files, or anything that needs more than one tool. Do not use it for simple facts or one tool call. "
-                    "Describe the task fully in your own words. The result is what you should say aloud."),
+                    "and propose file reorganisations). ALWAYS use it for: plans and itineraries, requests that combine several "
+                    "lookups, research or comparisons, and organising/sorting/moving/renaming files. Do not use it for a simple fact "
+                    "or a single tool call. Describe the task fully in your own words. The result is what you should say aloud."),
     "parameters": {"type": "object", "properties": {"task": {"type": "string", "description": "The full task, with every detail the planner needs"}},
                    "required": ["task"]}}}
 

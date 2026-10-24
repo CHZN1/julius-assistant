@@ -10,6 +10,11 @@ class LiveIntentRouter:
         self.relative_only = False
         t = re.sub(r'\s*\[you can see:.*', '', text, flags=re.S).strip().rstrip('?.!')
         low = t.lower()
+        # Compound requests (plans, comparisons, several lookups in one sentence) belong to the brain, not a single-tool shortcut.
+        if re.search(r'\b(?:plan|trip|itinerary|compare|organi[sz]e|research|step by step|and then)\b', low) or (
+                re.search(r'\b(?:weather|forecast)\b', low) and re.search(r'\b(?:what time|current time|what day|date)\b', low)):
+            self.last = None
+            return None
         loc = re.search(r'\bin\s+(.+)$', t, re.I) or re.search(r'\bfor\s+(.+)$', t, re.I)
         location = loc.group(1).strip() if loc else None
         if location and location.lower() in {'today', 'tomorrow', 'this week', 'right now', 'the week'}:

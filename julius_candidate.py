@@ -193,10 +193,8 @@ eyes = create_vision(show_window=SHOW_WINDOW,
     allowed_modules=["detection", "recognition"]).start()
 SYSTEM += vision_capability_prompt(eyes.enabled)
 if LLM_BACKEND == 'cloud':
-    SYSTEM += ("\n\nPLANNING\nFor work with several steps (planning, research needing several lookups, organising files, anything "
-               "needing more than one tool) call escalate_to_planner with the full task. Its result is your answer: say it in your own "
-               "voice, briefly. Use your other tools directly for one-step requests. Never claim a file was changed; changes need the "
-               "user's yes.")
+    import julius_cloud
+    SYSTEM += julius_cloud.PLANNING_PROMPT
 if not eyes.enabled:
     print("  [vision disabled — camera and perception models not loaded]", flush=True)
 if os.environ.get('JULIUS_MLX_BRAIN_PREPARE')=='1':
@@ -605,7 +603,14 @@ def _process(text, lang):
                     globals()['_reasoning_release_seconds']=time.perf_counter()-release_started
                 speak(reply)
             else:
-                reply = ask_streaming(text, vline, speak_fn=speak_sentence)
+                reasoning_started = time.perf_counter()
+                globals()['_first_token_at'] = None
+                try:
+                    reply = ask_streaming(text, vline, speak_fn=speak_sentence)
+                finally:
+                    # Streaming speech: reasoning time includes sentence playback; first-token time is the brain's own latency.
+                    globals()['_reasoning_seconds'] = time.perf_counter() - reasoning_started
+                    globals()['_brain_first_token_seconds'] = (globals()['_first_token_at'] - reasoning_started) if globals().get('_first_token_at') is not None else None
         except TurnCancelled:
             turn_error='cancelled';reply='Response stopped by user.'
             print('  [response stopped; completed actions remain completed]',flush=True)
