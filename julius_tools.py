@@ -306,3 +306,36 @@ def dispatcher():
 def call(name, args):
     service = dispatcher()
     return service.render(service.dispatch(name, args))
+
+
+# Tool schemas cost ~1.2k prompt tokens. Offer the model only the tools a request could use;
+# unmatched requests keep the full catalogue, so this never removes a capability.
+_SCHEMA_GROUPS = (
+    (r"weather|forecast|rain|temperature|degrees|\bhot\b|\bcold\b|snow|sunny|humid", ("get_weather", "get_forecast")),
+    (r"\btime\b|clock|timezone|time zone|what day|\bdate\b|days? (?:until|from|between|ago)|weeks? (?:until|from)|hours? (?:ahead|behind)",
+     ("get_datetime", "date_calculate")),
+    (r"price|worth|trading|stock|crypto|bitcoin|\bbtc\b|\beth\b|ticker|market", ("get_quote",)),
+    (r"score|scores|\bgames?\b|\bwon\b|\bbeat\b|standings|playing", ("get_scores",)),
+    (r"calculate|\btimes\b|\bplus\b|\bminus\b|divided|multipl|squared|sqrt|percent|%|\d\s*[-+*/x]\s*\d",
+     ("calculate", "convert_units")),
+    (r"convert|kilomet|\bmiles?\b|pounds?|kilogram|celsius|fahrenheit|\binch|\bfeet\b|\bmeters?\b|liters?|gallon|ounce",
+     ("convert_units",)),
+    (r"search|look up|google|\bnews\b|latest|recent|headline", ("web_search", "get_news")),
+    (r"\bfiles?\b|folder|director|\blist\b|downloads|desktop", ("list_files",)),
+    (r"\bread\b|\bopen\b|contents|\bfile\b", ("read_file",)),
+    (r"\bfind\b|where|locate|named|search for", ("find_files",)),
+    (r"document|\bpdf\b|\bdocx?\b", ("read_document", "read_file")),
+    (r"remind|\btasks?\b|calendar|\bevents?\b|to-?do|schedule", ("list_planner_items",)),
+)
+
+
+def select_schemas(user_text):
+    """Schemas relevant to this request, in catalogue order; all of them when nothing matches."""
+    import re
+    text = (user_text or "").lower()
+    names = set()
+    for pattern, tools in _SCHEMA_GROUPS:
+        if re.search(pattern, text):
+            names.update(tools)
+    chosen = [s for s in SCHEMAS if s["function"]["name"] in names]
+    return chosen or SCHEMAS

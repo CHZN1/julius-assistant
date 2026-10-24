@@ -330,7 +330,7 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
     if (not forced_current_time) and TOOL_HINT.search(user_text):
         for _ in range(2):
             prepare_inference()
-            r = llm_chat(messages=msgs, tools=jt.SCHEMAS, think=False,
+            r = llm_chat(messages=msgs, tools=jt.select_schemas(user_text), think=False,
                          options={"temperature": 0.0, "num_predict": 256})
             m = r.message
             calls = m.tool_calls or []
@@ -407,7 +407,7 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
             "You just stalled. You cannot do anything between messages. Call the "
             "tool NOW and give the real answer in this reply, or say plainly "
             "that you can't."})
-        r = llm_chat(messages=msgs, tools=jt.SCHEMAS, think=False,
+        r = llm_chat(messages=msgs, tools=jt.select_schemas(user_text), think=False,
                      options={"temperature": 0.3, "num_predict": 200})
         for c in (r.message.tool_calls or []):
             fn, args = c.function.name, dict(c.function.arguments)
