@@ -37,6 +37,13 @@ class PlannerTests(unittest.TestCase):
         self.assertNotIn('thinking',kw);self.assertEqual(kw['output_config'],{'effort':'medium'})
         self.assertEqual(kw['cache_control'],{'type':'ephemeral'});self.assertEqual(kw['system'][0]['cache_control'],{'type':'ephemeral'})
         self.assertEqual(kw['tools'][-1]['cache_control'],{'type':'ephemeral'});self.assertEqual(brain.tracker.today_by_tier().keys(),{'sonnet'})
+    def test_empty_task_falls_back_to_the_users_own_words(self):
+        brain,api=make(resp([text('Planned.')]));orch.configure(user_text='Plan a trip to Tokyo');self.addCleanup(lambda:orch.configure(user_text=''))
+        self.assertEqual(orch.run_escalation({},None,brain=brain),'Planned.');self.assertEqual(api.calls[0]['messages'][0]['content'],'Plan a trip to Tokyo')
+    def test_the_users_exact_words_are_appended_to_a_paraphrased_task(self):
+        brain,api=make(resp([text('ok')]));orch.configure(user_text='Organize my downloads by file type, keep PDFs on top');self.addCleanup(lambda:orch.configure(user_text=''))
+        orch.run_escalation({'task':'Sort the Downloads folder'},None,brain=brain);sent=api.calls[0]['messages'][0]['content']
+        self.assertIn('Sort the Downloads folder',sent);self.assertIn('keep PDFs on top',sent)
     def test_planner_tools_are_utilities_plus_delegate_and_propose_only_files(self):
         names={t['name'] for t in orch.Planner(make()[0]).tools()}
         self.assertTrue({'delegate','files_propose','calculate','get_weather','list_files'}<=names)

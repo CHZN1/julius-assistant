@@ -58,7 +58,7 @@ for kind, text in CHAT:
     print(rows[-1], flush=True)
 def haiku_tool(kind, text, want, check):
     before, t0 = spent(), time.perf_counter()
-    r = brain.chat([{"role": "system", "content": SYSTEM}, {"role": "user", "content": text}], tools=jt.SCHEMAS, options={"num_predict": 256})
+    r = brain.chat([{"role": "system", "content": SYSTEM}, {"role": "user", "content": text}], tools=jt.select_schemas(text), options={"num_predict": 256})
     total = time.perf_counter() - t0; calls = r.message.tool_calls or []; c = calls[0].function if calls else None
     ok = bool(c and c.name == want and check(dict(c.arguments)))
     rows.append(dict(tier='haiku', kind='tool_' + kind, ttft_s=round(total, 2), total_s=round(total, 2), ok=ok, usd=round(spent() - before, 6),

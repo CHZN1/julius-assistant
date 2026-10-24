@@ -53,11 +53,13 @@ FILES_PROPOSE_SCHEMA = {"name": "files_propose", "description": "Stage a file ch
         "content": {"type": "string", "description": "Exact text for create"}},
         "required": ["action"]}}
 
-_STATE = {"file_session": None, "turn": lambda: 0}
+_STATE = {"file_session": None, "turn": lambda: 0, "user_text": ""}
 
 
-def configure(file_session=None, turn=None):
-    """Called once by the runtime: the human FileSession that owns confirmations, and the current turn number."""
+def configure(file_session=None, turn=None, user_text=None):
+    """The runtime supplies the human FileSession that owns confirmations, the turn number, and each turn's exact words."""
+    if user_text is not None:
+        _STATE["user_text"] = user_text
     if file_session is not None:
         _STATE["file_session"] = file_session
     if turn is not None:
@@ -199,6 +201,11 @@ def run_escalation(args, dispatcher, brain=None):
     import anthropic
     brain = brain or jc.get_brain()
     task = (args or {}).get("task", "")
+    original = _STATE["user_text"].strip()
+    if not (isinstance(task, str) and task.strip()):
+        task = original  # the front end sometimes sends no arguments; the user's own words are the task
+    elif original and original.lower() not in task.lower():
+        task = f"{task}\n\nThe user's exact words: {original}"  # keeps details a paraphrase could drop
     ok, message = False, ""
     previous_limit = getattr(dispatcher, "turn_call_limit", None)
     try:

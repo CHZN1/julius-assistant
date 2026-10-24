@@ -561,6 +561,8 @@ def _process(text, lang):
     jt.dispatcher().begin_turn()
     if globals().get('cloud_brain') is not None:
         cloud_tracker.begin_turn()
+        import julius_orchestrator
+        julius_orchestrator.configure(user_text=text)
         notice = cloud_brain.cap_notice()
         if notice:
             print(f"  JULIUS: {notice}", flush=True)

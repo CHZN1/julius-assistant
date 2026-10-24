@@ -36,13 +36,16 @@ ESCALATE_SCHEMA = {"type": "function", "function": {
                     "lookups, research or comparisons, and organising/sorting/moving/renaming files. Do not use it for a simple fact "
                     "or a single tool call. Describe the task fully in your own words. The result is what you should say aloud."),
     "parameters": {"type": "object", "properties": {"task": {"type": "string", "description": "The full task, with every detail the planner needs"}},
-                   "required": ["task"]}}}
+                   "required": ["task"], "additionalProperties": False}}}
 
 
 def convert_tools(schemas):
     """Ollama/OpenAI function schemas -> Messages API tools; the last tool carries the cache breakpoint."""
     tools = [{"name": s["function"]["name"], "description": s["function"].get("description", ""),
               "input_schema": s["function"].get("parameters") or {"type": "object", "properties": {}}} for s in schemas]
+    for tool in tools:
+        if tool["name"] == "escalate_to_planner":
+            tool["strict"] = True  # schema-valid arguments: the front end must always send a task
     if tools:
         tools[-1] = {**tools[-1], "cache_control": {"type": "ephemeral"}}
     return tools

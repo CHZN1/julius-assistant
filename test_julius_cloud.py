@@ -66,6 +66,9 @@ class RequestTests(unittest.TestCase):
   weather=names(b.request(MSGS,jt.select_schemas('weather')));self.assertEqual(weather,['get_weather','get_forecast','escalate_to_planner'])
   self.assertEqual(names(b.request(MSGS,jt.select_schemas('bitcoin'))),['get_quote','escalate_to_planner'])
   self.assertLess(len(names(b.request(MSGS,jt.select_schemas('weather')))),len(jt.SCHEMAS))
+ def test_escalation_tool_is_strict_so_arguments_are_always_valid(self):
+  tools=brain(FakeMessages()).request(MSGS,jt.select_schemas('weather'))['tools'];esc=[t for t in tools if t['name']=='escalate_to_planner'][0]
+  self.assertTrue(esc['strict']);self.assertFalse(esc['input_schema']['additionalProperties']);self.assertNotIn('strict',tools[0])
  def test_each_tool_subset_is_cache_marked_on_its_last_tool(self):
   kw=brain(FakeMessages()).request(MSGS,jt.select_schemas('weather'));self.assertEqual(kw['tools'][-1]['cache_control'],{'type':'ephemeral'});self.assertNotIn('cache_control',kw['tools'][0])
  def test_follow_up_after_tools_reuses_the_same_tool_list_for_a_cache_hit(self):
