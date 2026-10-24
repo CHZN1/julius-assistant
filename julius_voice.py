@@ -215,3 +215,9 @@ with sd.InputStream(samplerate=SR, channels=1, blocksize=CHUNK, callback=cb):
             except Exception as e:
                 print(f"  extraction failed ({type(e).__name__}) — transcript still saved")
         print("  goodbye")
+        if jm.staged():
+            try:
+                import subprocess, sys
+                subprocess.run([sys.executable, "julius_review.py"])
+            except Exception:
+                print("  run: python julius_review.py")

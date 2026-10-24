@@ -7,3 +7,31 @@ artifacts/*_feat/
 __pycache__/
 .ipynb_checkpoints/
 julius_memory/
+
+# Local voice dependency environment and compilation cache
+.venv-qwen-tts/
+.venv-mlx-tts/
+.cache/
+
+# Local Apple account inventories and temporary linked-item identifiers
+benchmarks/**/apple_inventory.json
+benchmarks/**/apple_integration.json
+native/apple/.build/
+
+# Personal memory export, model weights, datasets, environments, logs
+julius_memory.zip
+*.gguf
+*.pt
+*.pth
+*.h5
+*.bin
+fer2013/
+fer2013.csv
+.venv/
+.venv*/
+*.log
+.DS_Store
+
+# Local planner/reminder state and audio (audio backed up separately)
+**/state/*.sqlite3
+*.wav

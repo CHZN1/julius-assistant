@@ -1,0 +1,4 @@
+# Install only inside .venv-qwen-tts; mlx-lm requires newer Transformers.
+transformers==4.57.3
+tokenizers==0.22.2
+huggingface-hub==0.36.2
