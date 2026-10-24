@@ -3,7 +3,10 @@ import os, time, re, json as _json
 from types import SimpleNamespace
 import julius_tools as jt
 LLM_BACKEND = os.environ.get("JULIUS_BACKEND", "ollama")
-LLM = os.environ.get("JULIUS_MODEL", "qwen3:8b" if LLM_BACKEND == "ollama" else "mlx-community/Qwen3-8B-4bit")
+LLM = os.environ.get("JULIUS_MODEL", "qwen3:4b-instruct-2507-q4_K_M" if LLM_BACKEND == "ollama" else "mlx-community/Qwen3-8B-4bit")
+# Used for the turn when the primary Ollama model is missing or cannot be loaded; "" disables it.
+OLLAMA_FALLBACK = os.environ.get("JULIUS_FALLBACK_MODEL", "llama3.2:3b")
+_ACTIVE_OLLAMA = None
 KEEP_ALIVE = "5m"
 KEEP_BRAIN_MIN_FREE = float(os.environ.get("JULIUS_KEEP_BRAIN_MIN_FREE", "35"))
 _FREE_CACHE = (0.0, 100.0)
@@ -120,6 +123,51 @@ def _mlx_generation_kwargs(options=None):
     return kwargs
 
 
+def _fallback_applies(exc, model):
+    """Missing model (404) or a model too large to load (5xx mentioning memory)."""
+    if not OLLAMA_FALLBACK or OLLAMA_FALLBACK == model:
+        return False
+    status = getattr(exc, "status_code", None) or 0
+    return status == 404 or (status >= 500 and "memory" in str(exc).lower())
+
+
+def _ollama_chat(**kwargs):
+    """ollama.chat on the primary model, falling back to OLLAMA_FALLBACK for this and later turns
+    until close_backend() resets it, so the primary is retried at the next model phase."""
+    global _ACTIVE_OLLAMA
+    import ollama
+    model = _ACTIVE_OLLAMA or LLM
+
+    def switch(exc):
+        global _ACTIVE_OLLAMA
+        print(f"  [brain {model} unavailable ({str(exc)[:80]}); using fallback {OLLAMA_FALLBACK}]", flush=True)
+        _ACTIVE_OLLAMA = OLLAMA_FALLBACK
+        return OLLAMA_FALLBACK
+
+    if not kwargs.get("stream"):
+        try:
+            return ollama.chat(model=model, **kwargs)
+        except ollama.ResponseError as exc:
+            if not _fallback_applies(exc, model):
+                raise
+            return ollama.chat(model=switch(exc), **kwargs)
+
+    def parts():
+        use = model
+        try:
+            it = iter(ollama.chat(model=use, **kwargs))
+            first = next(it)
+        except ollama.ResponseError as exc:
+            if not _fallback_applies(exc, use):
+                raise
+            use = switch(exc)
+            it = iter(ollama.chat(model=use, **kwargs))
+            first = next(it)
+        yield first
+        yield from it
+    return parts()
+
+
 def llm_chat(*, messages, tools=None, think=False, stream=False,
              keep_alive=KEEP_ALIVE, options=None):
     """MLX-backed drop-in adapter for the subset of ollama.chat Julius uses.
@@ -140,8 +188,8 @@ def llm_chat(*, messages, tools=None, think=False, stream=False,
             if not 32<=batch<=512:raise ValueError('JULIUS_LLM_BATCH_SIZE must be between 32 and 512')
             defaults['num_batch']=batch
         options = {**defaults, **(options or {})}
-        return ollama.chat(model=LLM, messages=messages, tools=tools, think=False,
-                           stream=stream, keep_alive=keep_alive, options=options)
+        return _ollama_chat(messages=messages, tools=tools, think=False,
+                            stream=stream, keep_alive=keep_alive, options=options)
     from mlx_lm import generate as mlx_generate, stream_generate as mlx_stream_generate
     if LLM_BACKEND != "mlx":
         raise RuntimeError(f"Unsupported LLM backend: {LLM_BACKEND}")
@@ -238,10 +286,11 @@ def release_metrics():
 
 def close_backend():
     """Release model weights and caches before another model phase starts."""
-    global _BACKEND_USED, _MLX_MODEL, _MLX_TOKENIZER, _PROMPT_CACHE
+    global _BACKEND_USED, _MLX_MODEL, _MLX_TOKENIZER, _PROMPT_CACHE, _ACTIVE_OLLAMA
     if _BACKEND_USED and LLM_BACKEND == "ollama":
         import ollama
-        ollama.generate(model=LLM, prompt="", keep_alive=0)
+        ollama.generate(model=_ACTIVE_OLLAMA or LLM, prompt="", keep_alive=0)
+        _ACTIVE_OLLAMA = None
         _BACKEND_USED = False
         _RELEASE_METRICS.clear()
         _RELEASE_METRICS.update(backend='ollama',released=True)
