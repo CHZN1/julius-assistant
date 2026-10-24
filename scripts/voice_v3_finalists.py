@@ -1,4 +1,6 @@
+"""Voice-selection experiment (generation script, not a unit test). Run with .venv-qwen-tts/bin/python scripts/voice_v3_finalists.py"""
 from pathlib import Path
+import random
 import time
 
 import numpy as np
@@ -23,26 +25,43 @@ VOICE_INSTRUCT = (
     "exaggerated bass, or radio-announcer delivery."
 )
 
-LINES = [
-    "Hey there. Yeah, I'm here. What's up?",
-    "Oh, that's actually pretty interesting. I hadn't thought about it that way.",
-    "Yeah, I like that idea. There's definitely something there.",
-    "Huh. Okay, now you've got my attention.",
-    "That's a good question. Give me a second to think about it.",
-    "Yeah, absolutely. That makes a lot more sense.",
-    "Oh, that's cool. I want to see where this goes.",
-    "Alright, now we're getting somewhere."
+# Same text for EVERY candidate.
+# This gives us calm speech, curiosity, amusement, confidence, and a question.
+TEXT = (
+    "Hey there. Yeah, I'm here. Oh, that's actually pretty interesting. "
+    "I like where you're going with this. There's definitely something there. "
+    "Alright, walk me through it — what are you thinking?"
+)
+
+SEEDS = [
+    101,
+    203,
+    307,
+    409,
+    503,
+    607,
+    709,
+    811,
 ]
 
-OUT_DIR = Path(__file__).resolve().parent / "julius_v3_candidates"
+OUT_DIR = Path(__file__).resolve().parent.parent / "julius_v3_finalists"
 OUT_DIR.mkdir(exist_ok=True)
 
 DEVICE = "mps" if torch.backends.mps.is_available() else "cpu"
 
-print(f"Loading {MODEL_ID}")
-print(f"Device: {DEVICE}")
 
-t0 = time.perf_counter()
+def set_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
+
+print()
+print(f"Model:  {MODEL_ID}")
+print(f"Device: {DEVICE}")
+print()
+
+load_start = time.perf_counter()
 
 model = Qwen3TTSModel.from_pretrained(
     MODEL_ID,
@@ -51,15 +70,21 @@ model = Qwen3TTSModel.from_pretrained(
     attn_implementation="sdpa",
 )
 
-print(f"Loaded in {time.perf_counter() - t0:.2f}s\n")
+print(f"Loaded in {time.perf_counter() - load_start:.2f}s\n")
 
-for i, text in enumerate(LINES, start=1):
-    print(f"Generating candidate {i}...")
+
+for i, seed in enumerate(SEEDS, start=1):
+
+    set_seed(seed)
+
+    print("=" * 70)
+    print(f"FINALIST {i:02d} | seed {seed}")
+    print("=" * 70)
 
     start = time.perf_counter()
 
     wavs, sample_rate = model.generate_voice_design(
-        text=text,
+        text=TEXT,
         language="English",
         instruct=VOICE_INSTRUCT,
         do_sample=True,
@@ -68,18 +93,22 @@ for i, text in enumerate(LINES, start=1):
         top_k=50,
     )
 
+    elapsed = time.perf_counter() - start
+
     wav = np.asarray(wavs[0], dtype=np.float32)
 
-    out = OUT_DIR / f"julius_v3_candidate_{i:02d}.wav"
-    sf.write(out, wav, sample_rate)
+    output = OUT_DIR / f"julius_finalist_{i:02d}_seed_{seed}.wav"
+    sf.write(output, wav, sample_rate)
 
-    elapsed = time.perf_counter() - start
     duration = len(wav) / sample_rate
 
-    print(
-        f"  {out.name}\n"
-        f"  audio: {duration:.2f}s\n"
-        f"  generation: {elapsed:.2f}s\n"
-    )
+    print(f"Saved:      {output.name}")
+    print(f"Audio:      {duration:.2f}s")
+    print(f"Generation: {elapsed:.2f}s")
+    print()
 
-print(f"\nDone. Listen to:\n{OUT_DIR}")
+
+print("=" * 70)
+print("DONE")
+print("=" * 70)
+print(f"\nListen to:\n{OUT_DIR}\n")

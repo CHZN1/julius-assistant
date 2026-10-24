@@ -1,3 +1,4 @@
+"""Voice-selection experiment (generation script, not a unit test). Run with .venv-qwen-tts/bin/python scripts/voice_v4_finalists.py"""
 from pathlib import Path
 import random
 import time
@@ -45,7 +46,7 @@ SEEDS = [
     2203,
 ]
 
-OUT_DIR = Path(__file__).resolve().parent / "julius_v4_finalists"
+OUT_DIR = Path(__file__).resolve().parent.parent / "julius_v4_finalists"
 OUT_DIR.mkdir(exist_ok=True)
 
 DEVICE = "mps" if torch.backends.mps.is_available() else "cpu"
