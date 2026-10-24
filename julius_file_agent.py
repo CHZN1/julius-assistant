@@ -34,7 +34,7 @@ class FileAgent:
     def __init__(self, root=None, state_dir=None, allowed_roots=None):
         self.root = Path(root or Path.home()).resolve()
         self.allowed = tuple(Path(p).resolve() for p in ([self.root/'Documents', self.root/'Desktop', self.root/'Downloads'] if allowed_roots is None else allowed_roots))
-        self.state_dir = Path(state_dir or self.root/'Documents/fer2013-emotion-cnn/julius_memory').resolve()
+        self.state_dir = Path(state_dir or Path(__file__).resolve().parent/'julius_memory').resolve()
         self.state_path = self.state_dir/'file_agent_state.json'
         self.session = uuid.uuid4().hex
         self._mutex = threading.RLock()

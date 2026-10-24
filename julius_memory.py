@@ -3,7 +3,7 @@ import json, uuid
 from pathlib import Path
 from datetime import datetime, date
 
-MEM  = Path.home()/"Documents/fer2013-emotion-cnn/julius_memory"
+MEM  = Path(__file__).resolve().parent/"julius_memory"
 SESS = MEM/"sessions"
 
 def _init():

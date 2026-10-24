@@ -7,7 +7,7 @@ from pathlib import Path
 import os
 from julius_file_agent import FileAgent
 SAFE_ROOT=Path.home()
-STATE=Path(os.environ.get('JULIUS_STATE_DIR',os.environ.get('JULIUS_MEMORY_DIR',str(SAFE_ROOT/'Documents/fer2013-emotion-cnn/julius_memory')))).expanduser().resolve()
+STATE=Path(os.environ.get('JULIUS_STATE_DIR',os.environ.get('JULIUS_MEMORY_DIR',str(Path(__file__).resolve().parent/'julius_memory')))).expanduser().resolve()
 PLANS=STATE/'plans.json'  # Legacy state retained; never silently migrated/executed.
 LOG=STATE/'file_log.jsonl'
 _TURN={'n':0}
