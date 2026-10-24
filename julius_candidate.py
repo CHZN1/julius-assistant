@@ -375,6 +375,9 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
             for part in parts:
                 if globals().get('cancellation'):cancellation.check()
                 tok = part.message.content or ""
+                if tok and globals().get('_first_token_at') is None:
+                    import time
+                    globals()['_first_token_at'] = time.perf_counter()
                 full += tok
                 pend += tok
                 if allow_retry and spoken == 0 and STALL.search(full):
@@ -517,7 +520,7 @@ def _process(text, lang):
     started = time.perf_counter()
     globals()['_response_started']=started
     globals()['_first_audio_at']=None
-    globals()['_reasoning_seconds']=None
+    globals()['_reasoning_seconds']=None;globals()['_brain_first_token_seconds']=None
     globals()['_reasoning_release_seconds']=None
     if lang=='typed':globals()['_voice_finished_at']=None
     turn_error = None
@@ -552,10 +555,12 @@ def _process(text, lang):
             if tts.backend in ('qwen-clone', 'qwen-mlx'):
                 segments = []
                 reasoning_started=time.perf_counter()
+                globals()['_first_token_at']=None
                 try:
                     reply = ask_streaming(text, vline, speak_fn=segments.append, before_inference=tts.suspend)
                 finally:
                     globals()['_reasoning_seconds']=time.perf_counter()-reasoning_started
+                    globals()['_brain_first_token_seconds']=(globals()['_first_token_at']-reasoning_started) if globals().get('_first_token_at') is not None else None
                     release_started=time.perf_counter()
                     if not globals().get('keep_brain_loaded', lambda: False)():
                         close_backend()
@@ -591,7 +596,7 @@ def _process(text, lang):
             "end_of_speech_to_first_audio_seconds":globals().get('_first_audio_at')-globals().get('_voice_finished_at') if globals().get('_first_audio_at') is not None and globals().get('_voice_finished_at') is not None else None,
             "reasoning_generation_metrics":globals().get("generation_metrics",lambda:None)(),
             "reasoning_release_metrics":globals().get("release_metrics",lambda:None)(),
-            "reasoning_seconds":globals().get("_reasoning_seconds"),"reasoning_release_seconds":globals().get("_reasoning_release_seconds"),
+            "brain_first_token_seconds":globals().get("_brain_first_token_seconds"),"reasoning_seconds":globals().get("_reasoning_seconds"),"reasoning_release_seconds":globals().get("_reasoning_release_seconds"),
             "error":turn_error,"seconds":time.perf_counter()-started,"peak_rss_bytes":resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
             "dispatcher_tasks":list(jt.dispatcher().turn_tasks),
             "file_result":_file_session.last_result if routed is not None and jt.dispatcher().last_result and jt.dispatcher().last_result["agent"]=="files" else None,"vision":st,"tts":tts.backend,"backend":LLM_BACKEND,"model":LLM,
