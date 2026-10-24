@@ -12,7 +12,7 @@ from julius_tts import SpeechEngine
 os.environ.setdefault("JULIUS_TTS", "qwen-clone")
 if os.environ.get("JULIUS_BACKEND", "ollama") == "ollama":
     os.environ.setdefault("JULIUS_MODEL", "llama3.2:3b")
-from julius_backend import llm_chat, close_backend, LLM_BACKEND, LLM, KEEP_ALIVE, release_metrics, prepare_backend, generation_metrics
+from julius_backend import llm_chat, close_backend, keep_brain_loaded, LLM_BACKEND, LLM, KEEP_ALIVE, release_metrics, prepare_backend, generation_metrics
 from julius_intents import LiveIntentRouter
 import julius_memory as jm
 import julius_tools as jt
@@ -220,7 +220,7 @@ def speak_sentence(p):
         p = clean_for_speech(p)
         if not p: return
         # A previous failed reasoning request must not leave its model beside voice.
-        if tts.backend in ('qwen-clone','qwen-mlx') and globals().get('close_backend'):
+        if tts.backend in ('qwen-clone','qwen-mlx') and globals().get('close_backend') and not globals().get('keep_brain_loaded', lambda: False)():
             close_backend()
         s = SPEED
         if p.endswith("?"):   s = SPEED * 0.97
@@ -439,7 +439,7 @@ def transcribe(a):
         return '', '?', 1.0
     if tts.backend == 'qwen-clone' or (tts.backend == 'qwen-mlx' and os.environ.get('JULIUS_MLX_ASR_KEEP_VOICE') != '1'):
         tts.suspend()
-    if tts.backend in ('qwen-clone', 'qwen-mlx') and os.environ.get("JULIUS_ASR_RELEASE_LLM", "1") == "1":
+    if tts.backend in ('qwen-clone', 'qwen-mlx') and os.environ.get("JULIUS_ASR_RELEASE_LLM", "1") == "1" and not globals().get('keep_brain_loaded', lambda: False)():
         close_backend()
     resident_default = "0" if tts.backend in ('qwen-clone', 'qwen-mlx') else "1"
     with recognition_resources(os.environ.get("JULIUS_ASR_RESIDENT", resident_default) == "0"):
@@ -557,7 +557,8 @@ def _process(text, lang):
                 finally:
                     globals()['_reasoning_seconds']=time.perf_counter()-reasoning_started
                     release_started=time.perf_counter()
-                    close_backend()
+                    if not globals().get('keep_brain_loaded', lambda: False)():
+                        close_backend()
                     globals()['_reasoning_release_seconds']=time.perf_counter()-release_started
                 speak(reply)
             else:
@@ -697,7 +698,8 @@ with microphone_stream():
                         reply = ask_streaming("(no spoken input — check in on the user)",
                                               eyes.describe(st), nudge=n_emo,
                                               speak_fn=segments.append, before_inference=tts.suspend)
-                        close_backend()
+                        if not globals().get('keep_brain_loaded', lambda: False)():
+                            close_backend()
                         speak(reply)
                     else:
                         reply = ask_streaming("(no spoken input — check in on the user)",

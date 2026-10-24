@@ -5,6 +5,8 @@ import julius_tools as jt
 LLM_BACKEND = os.environ.get("JULIUS_BACKEND", "ollama")
 LLM = os.environ.get("JULIUS_MODEL", "qwen3:8b" if LLM_BACKEND == "ollama" else "mlx-community/Qwen3-8B-4bit")
 KEEP_ALIVE = "5m"
+KEEP_BRAIN_MIN_FREE = float(os.environ.get("JULIUS_KEEP_BRAIN_MIN_FREE", "35"))
+_FREE_CACHE = (0.0, 100.0)
 _BACKEND_USED = False
 _PROMPT_CACHE = None
 _MLX_MODEL = None
@@ -198,6 +200,32 @@ def prepare_backend():
         llm_chat(messages=conversation_messages([{'role':'user','content':'Reply only Ready.'}]),
                  options={'temperature':0.4,'num_predict':2})
     finally:close_backend()
+
+
+def _free_memory_percent():
+    """System-wide free memory percentage, cached for a few seconds (shells out to memory_pressure)."""
+    global _FREE_CACHE
+    now = time.monotonic()
+    if now - _FREE_CACHE[0] > 5:
+        import subprocess
+        try:
+            out = subprocess.check_output(["/usr/bin/memory_pressure", "-Q"], text=True, timeout=5)
+            _FREE_CACHE = (now, float(re.search(r"free percentage: (\d+)%", out).group(1)))
+        except Exception:
+            _FREE_CACHE = (now, 0.0)  # unknown pressure: release, as before
+    return _FREE_CACHE[1]
+
+
+def keep_brain_loaded():
+    """True when the Ollama brain may stay resident across ASR/voice phases.
+
+    Ollama's keep_alive (5m) then unloads it when idle. Idle/sleep and shutdown still call
+    close_backend() directly. Falls back to releasing on low free memory; the MLX brain
+    always releases because it lives in this process. JULIUS_KEEP_BRAIN=0 restores the old behaviour.
+    """
+    if LLM_BACKEND != "ollama" or os.environ.get("JULIUS_KEEP_BRAIN", "1") != "1":
+        return False
+    return _free_memory_percent() >= KEEP_BRAIN_MIN_FREE
 
 
 def generation_metrics():
