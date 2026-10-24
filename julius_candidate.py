@@ -12,7 +12,7 @@ from julius_tts import SpeechEngine
 os.environ.setdefault("JULIUS_TTS", "qwen-clone")
 if os.environ.get("JULIUS_BACKEND", "ollama") == "ollama":
     os.environ.setdefault("JULIUS_MODEL", "qwen3:4b-instruct-2507-q4_K_M")
-from julius_backend import llm_chat, close_backend, keep_brain_loaded, LLM_BACKEND, LLM, KEEP_ALIVE, release_metrics, prepare_backend, generation_metrics
+from julius_backend import llm_chat, close_backend, keep_brain_loaded, LLM_BACKEND, LLM, KEEP_ALIVE, release_metrics, prepare_backend, generation_metrics, _offline_chat
 from julius_intents import LiveIntentRouter
 import julius_memory as jm
 import julius_tools as jt
@@ -66,6 +66,11 @@ TOOL_HINT = re.compile(
     r"calculate|times|plus|minus|divided|multiply|squared|sqrt|percent|"
     r"search|look up|google|news|latest|recent|"
     r"file|files|folder|directory|list|read)\b", re.I)
+
+# Requests that probably need the planner (cloud brain only): several steps, research, organising files.
+ESCALATE_HINT = re.compile(
+    r"\b(plan|organi[sz]e|reorgani[sz]e|research|compare|summari[sz]e|analy[sz]e|figure out|step by step|"
+    r"walk me through|investigate|clean up|sort out|sub-?agents?|delegate|put together|and then|then also|everything)\b", re.I)
 
 CURRENT_TIME_QUERY = re.compile(
     r"\b(what(?:'s| is) (?:the )?(?:time|date|day)|"
@@ -187,6 +192,11 @@ eyes = create_vision(show_window=SHOW_WINDOW,
     camera_source=os.environ.get("JULIUS_CAMERA_SOURCE", 0),
     allowed_modules=["detection", "recognition"]).start()
 SYSTEM += vision_capability_prompt(eyes.enabled)
+if LLM_BACKEND == 'cloud':
+    SYSTEM += ("\n\nPLANNING\nFor work with several steps (planning, research needing several lookups, organising files, anything "
+               "needing more than one tool) call escalate_to_planner with the full task. Its result is your answer: say it in your own "
+               "voice, briefly. Use your other tools directly for one-step requests. Never claim a file was changed; changes need the "
+               "user's yes.")
 if not eyes.enabled:
     print("  [vision disabled — camera and perception models not loaded]", flush=True)
 if os.environ.get('JULIUS_MLX_BRAIN_PREPARE')=='1':
@@ -195,6 +205,16 @@ if os.environ.get('JULIUS_MLX_BRAIN_PREPARE')=='1':
 print("loading speech engine...", flush=True)
 tts = SpeechEngine()
 tts.cancel_event=cancellation.event
+
+# Cloud brain: Claude Haiku answers every turn, the planner (Sonnet) is reached through escalate_to_planner.
+cloud_brain = cloud_tracker = None
+if LLM_BACKEND == 'cloud':
+    import julius_cloud, julius_config
+    cloud_brain = julius_cloud.get_brain(offline=_offline_chat)
+    cloud_tracker = julius_cloud.get_tracker()
+    print(f"  [cloud brain: {cloud_brain.config['models']['haiku']} front end, {cloud_brain.config['models']['sonnet']} planner; "
+          f"API key {julius_config.describe_key()}; daily cap ${cloud_tracker.cap_usd:.2f}, spent ${cloud_tracker.today_total():.4f}; "
+          f"offline model {cloud_brain.config['offline']['model']}]", flush=True)
 
 _BAD = ("frustrat", "no progress", "lack of progress", "unable to", "can't ",
         "cannot ", "failed", "impatient", "confrontational", "issue with",
@@ -294,7 +314,8 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
         user_text = f"{user_text}\n\n[you can see: {vision_line}]"
 
     msgs = list(history) + [{"role": "user", "content": user_text}]
-    if not TOOL_HINT.search(user_text) and not nudge and not vision_line:
+    hinted = TOOL_HINT.search(user_text) or (globals().get('cloud_brain') is not None and globals().get('ESCALATE_HINT') is not None and ESCALATE_HINT.search(user_text))
+    if not hinted and not nudge and not vision_line:
         # Read/action requests retain full capability rules. Simple conversation
         # gets a focused prompt rather than the entire tool catalogue/persona.
         if globals().get('conversation_messages'):
@@ -327,7 +348,7 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
             prepared = True
 
     # tool phase — skipped when no tool could plausibly apply (~40% of turns)
-    if (not forced_current_time) and TOOL_HINT.search(user_text):
+    if (not forced_current_time) and hinted:
         for _ in range(2):
             prepare_inference()
             r = llm_chat(messages=msgs, tools=jt.select_schemas(user_text), think=False,
@@ -474,6 +495,9 @@ def transcribe_input(audio):
 
 
 _file_session = FileSession(jf.agent())
+if cloud_brain is not None:
+    import julius_orchestrator
+    julius_orchestrator.configure(file_session=_file_session, turn=lambda: TURN["n"])
 _utility_session = UtilitySession(jt.planner(), os.environ.get("JULIUS_TIMEZONE", "America/Los_Angeles"), AppleProvider(jt.planner()))
 
 def release_idle_models():
@@ -537,6 +561,15 @@ def _process(text, lang):
     TURN["n"] += 1
     jf.set_turn(TURN["n"])
     jt.dispatcher().begin_turn()
+    if globals().get('cloud_brain') is not None:
+        cloud_tracker.begin_turn()
+        notice = cloud_brain.cap_notice()
+        if notice:
+            print(f"  JULIUS: {notice}", flush=True)
+            try:
+                speak(notice)
+            except Exception as exc:
+                print(f"  [speech unavailable: {exc}]", flush=True)
 
     discussion=authority_discussion_reply(text)
     routed = (discussion or "I didn't catch the full thought. Could you say that again?") if discussion or incomplete_fragment(text) else handle_files(text)
@@ -557,7 +590,7 @@ def _process(text, lang):
         jm.log_turn(text, routed)
     else:
         try:
-            if tts.backend in ('qwen-clone', 'qwen-mlx'):
+            if tts.backend in ('qwen-clone', 'qwen-mlx') and not globals().get('cloud_brain'):
                 segments = []
                 reasoning_started=time.perf_counter()
                 globals()['_first_token_at']=None
@@ -589,6 +622,9 @@ def _process(text, lang):
         jm.log_turn(text, reply,
                     {"emotion": st.get("emotion"), "conf": st.get("conf")})
 
+    if globals().get('cloud_tracker') is not None:
+        print(cloud_tracker.status_line(), flush=True)
+
     if len(history) > 9:
         history[:] = [history[0]] + history[-8:]
 
@@ -601,7 +637,7 @@ def _process(text, lang):
             "end_of_speech_to_first_audio_seconds":globals().get('_first_audio_at')-globals().get('_voice_finished_at') if globals().get('_first_audio_at') is not None and globals().get('_voice_finished_at') is not None else None,
             "reasoning_generation_metrics":globals().get("generation_metrics",lambda:None)(),
             "reasoning_release_metrics":globals().get("release_metrics",lambda:None)(),
-            "brain_first_token_seconds":globals().get("_brain_first_token_seconds"),"reasoning_seconds":globals().get("_reasoning_seconds"),"reasoning_release_seconds":globals().get("_reasoning_release_seconds"),
+            "brain_first_token_seconds":globals().get("_brain_first_token_seconds"),"cost_by_tier_usd":(cloud_tracker.turn_costs() if globals().get("cloud_tracker") is not None else None),"cost_today_usd":(cloud_tracker.today_total() if globals().get("cloud_tracker") is not None else None),"reasoning_seconds":globals().get("_reasoning_seconds"),"reasoning_release_seconds":globals().get("_reasoning_release_seconds"),
             "error":turn_error,"seconds":time.perf_counter()-started,"peak_rss_bytes":resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
             "dispatcher_tasks":list(jt.dispatcher().turn_tasks),
             "file_result":_file_session.last_result if routed is not None and jt.dispatcher().last_result and jt.dispatcher().last_result["agent"]=="files" else None,"vision":st,"tts":tts.backend,"backend":LLM_BACKEND,"model":LLM,

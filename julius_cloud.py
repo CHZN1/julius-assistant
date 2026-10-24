@@ -98,6 +98,7 @@ class CloudBrain:
         self._slow = None
         self.model = config["models"]["haiku"]
         self.auth_bad = False
+        self.auth_pending = False  # the spoken auth message has not been delivered through a streamed reply yet
         self.offline_until = 0.0
         self.cap_announced_day = None
         self.status = {"mode": "cloud"}
@@ -156,6 +157,11 @@ class CloudBrain:
     def chat(self, messages, tools=None, stream=False, options=None):
         import anthropic
         if self.auth_bad:
+            if self.auth_pending:  # speak the failure exactly once, on the reply the user actually hears
+                if stream:
+                    self.auth_pending = False
+                    return iter([SimpleNamespace(message=SimpleNamespace(content=AUTH_MESSAGE))])
+                return SimpleNamespace(message=SimpleNamespace(content=AUTH_MESSAGE, tool_calls=None))
             return self._offline(messages, tools, stream, options, announce=False)
         if self._clock() < self.offline_until:
             return self._offline(messages, tools, stream, options, announce=False)
@@ -198,7 +204,7 @@ class CloudBrain:
                         if snapshot is not None and getattr(snapshot, "usage", None) is not None:
                             brain.tracker.record("haiku", snapshot.usage, note="stream")
             except (anthropic.AuthenticationError, MissingKey):
-                brain.auth_bad = True
+                brain.auth_bad, brain.auth_pending = True, False  # delivered right here
                 yield SimpleNamespace(message=SimpleNamespace(content=AUTH_MESSAGE))
             except (anthropic.APIConnectionError, anthropic.APITimeoutError, anthropic.RateLimitError, anthropic.InternalServerError):
                 if not first:
@@ -208,10 +214,15 @@ class CloudBrain:
         return parts()
 
     # ---------- failure paths ----------
-    def _say_auth(self, stream):
-        self.auth_bad = True
+    def mark_auth_bad(self):
+        self.auth_bad, self.auth_pending = True, True
         print("  [Anthropic API key missing or invalid; cloud brain disabled until restart]", flush=True)
-        if stream:
+
+    def _say_auth(self, stream):
+        if not self.auth_bad:
+            self.mark_auth_bad()
+        if stream:  # a streamed reply is what gets spoken, so this delivers the message
+            self.auth_pending = False
             return iter([SimpleNamespace(message=SimpleNamespace(content=AUTH_MESSAGE))])
         return SimpleNamespace(message=SimpleNamespace(content=AUTH_MESSAGE, tool_calls=None))
 

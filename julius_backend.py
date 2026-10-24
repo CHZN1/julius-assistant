@@ -3,7 +3,12 @@ import os, time, re, json as _json
 from types import SimpleNamespace
 import julius_tools as jt
 LLM_BACKEND = os.environ.get("JULIUS_BACKEND", "ollama")  # "ollama", "mlx" or "cloud" (Claude Haiku front end)
-LLM = os.environ.get("JULIUS_MODEL", "qwen3:4b-instruct-2507-q4_K_M" if LLM_BACKEND == "ollama" else "mlx-community/Qwen3-8B-4bit")
+if LLM_BACKEND == "cloud":
+    import julius_config as _cfg
+    if _cfg.load_config()["brain"]["mode"] == "local":  # julius.toml / JULIUS_BRAIN=local turns the cloud brain off
+        LLM_BACKEND = "ollama"
+        os.environ["JULIUS_MODEL"] = os.environ.get("JULIUS_LOCAL_MODEL", "qwen3:4b-instruct-2507-q4_K_M")
+LLM = os.environ.get("JULIUS_MODEL", {"ollama": "qwen3:4b-instruct-2507-q4_K_M", "cloud": "claude-haiku-5-5"}.get(LLM_BACKEND, "mlx-community/Qwen3-8B-4bit"))
 # Used for the turn when the primary Ollama model is missing or cannot be loaded; "" disables it.
 OLLAMA_FALLBACK = os.environ.get("JULIUS_FALLBACK_MODEL", "llama3.2:3b")
 _ACTIVE_OLLAMA = None

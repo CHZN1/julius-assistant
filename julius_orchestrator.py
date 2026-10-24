@@ -216,7 +216,7 @@ def run_escalation(args, dispatcher, brain=None):
     except SpendCap:
         message = "Planning stopped because today's spending limit was reached."
     except (anthropic.AuthenticationError, jc.MissingKey):
-        brain.auth_bad = True
+        brain.mark_auth_bad()
         message = jc.AUTH_MESSAGE
     except (anthropic.APIConnectionError, anthropic.APITimeoutError, anthropic.RateLimitError, anthropic.InternalServerError):
         message = "I couldn't reach the planner right now."

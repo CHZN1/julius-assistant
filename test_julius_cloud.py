@@ -139,4 +139,16 @@ class BackendWiringTests(unittest.TestCase):
   import julius_backend as be
   from unittest.mock import patch
   with patch.object(be,'LLM_BACKEND','cloud'):self.assertFalse(be.keep_brain_loaded())
+class AuthDeliveryTests(unittest.TestCase):
+ def says(self,gen):return ''.join(p.message.content for p in gen)
+ def test_tool_phase_auth_error_is_delivered_on_the_following_streamed_reply_then_offline(self):
+  local=lambda m,t,s,o:iter([SimpleNamespace(message=SimpleNamespace(content='local'))])
+  b=brain(FakeMessages(error=auth_error()),offline=local)
+  first=b.chat(MSGS,tools=jt.SCHEMAS);self.assertIsNone(first.message.tool_calls);self.assertTrue(b.auth_pending)
+  self.assertEqual(self.says(b.chat(MSGS,stream=True)),jc.AUTH_MESSAGE)            # spoken on the reply the user hears
+  self.assertFalse(b.auth_pending);self.assertEqual(self.says(b.chat(MSGS,stream=True)),'local')  # afterwards: announced offline model
+ def test_planner_auth_failure_is_spoken_by_the_next_streamed_reply(self):
+  import julius_orchestrator as orch
+  b=brain(FakeMessages(),offline=lambda *a:self.fail('silent fallback'));b.mark_auth_bad()
+  self.assertEqual(self.says(b.chat(MSGS,stream=True)),jc.AUTH_MESSAGE)
 if __name__=='__main__':unittest.main()

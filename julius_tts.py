@@ -47,7 +47,11 @@ class SpeechEngine:
         self.worker_metrics = {}
 
     def suspend(self):
-        """Release the isolated voice weights before loading the reasoning model."""
+        """Release the isolated voice weights before loading the reasoning model.
+
+        With JULIUS_KEEP_VOICE=1 (cloud brain: nothing else needs the RAM) the voice is never unloaded."""
+        if os.environ.get('JULIUS_KEEP_VOICE') == '1':
+            return
         if getattr(self, '_isolated_worker', False):
             event=getattr(self,'cancel_event',None)
             if (self.backend=='qwen-mlx' and os.environ.get('JULIUS_MLX_KEEP_WORKER')=='1'
