@@ -2,11 +2,12 @@
 import os, time, re, json as _json
 from types import SimpleNamespace
 import julius_tools as jt
-LLM_BACKEND = os.environ.get("JULIUS_BACKEND", "ollama")
+LLM_BACKEND = os.environ.get("JULIUS_BACKEND", "ollama")  # "ollama", "mlx" or "cloud" (Claude Haiku front end)
 LLM = os.environ.get("JULIUS_MODEL", "qwen3:4b-instruct-2507-q4_K_M" if LLM_BACKEND == "ollama" else "mlx-community/Qwen3-8B-4bit")
 # Used for the turn when the primary Ollama model is missing or cannot be loaded; "" disables it.
 OLLAMA_FALLBACK = os.environ.get("JULIUS_FALLBACK_MODEL", "llama3.2:3b")
 _ACTIVE_OLLAMA = None
+_OFFLINE_LOADED = None
 KEEP_ALIVE = "5m"
 KEEP_BRAIN_MIN_FREE = float(os.environ.get("JULIUS_KEEP_BRAIN_MIN_FREE", "35"))
 _FREE_CACHE = (0.0, 100.0)
@@ -168,6 +169,28 @@ def _ollama_chat(**kwargs):
     return parts()
 
 
+def _offline_chat(messages, tools, stream, options):
+    """Local fallback for the cloud brain: the offline model is loaded only now and released when the API is back."""
+    import ollama, julius_config
+    global _OFFLINE_LOADED
+    model = julius_config.load_config()["offline"]["model"]
+    _OFFLINE_LOADED = model
+    local_tools = [t for t in (tools or []) if t["function"]["name"] != "escalate_to_planner"] or None
+    return ollama.chat(model=model, messages=messages, tools=local_tools, think=False, stream=stream,
+                       keep_alive="2m", options={"num_ctx": 4096, **(options or {})})
+
+
+def release_offline():
+    """Unload the offline model (called when the cloud answers again and on shutdown)."""
+    global _OFFLINE_LOADED
+    if _OFFLINE_LOADED:
+        import ollama
+        try:
+            ollama.generate(model=_OFFLINE_LOADED, prompt="", keep_alive=0)
+        finally:
+            _OFFLINE_LOADED = None
+
+
 def llm_chat(*, messages, tools=None, think=False, stream=False,
              keep_alive=KEEP_ALIVE, options=None):
     """MLX-backed drop-in adapter for the subset of ollama.chat Julius uses.
@@ -180,6 +203,9 @@ def llm_chat(*, messages, tools=None, think=False, stream=False,
     global _BACKEND_USED
     _BACKEND_USED = True
     _GENERATION_METRICS.clear()
+    if LLM_BACKEND == "cloud":
+        import julius_cloud
+        return julius_cloud.get_brain(offline=_offline_chat).chat(messages, tools=tools, stream=stream, options=options)
     if LLM_BACKEND == "ollama":
         import ollama
         defaults={"num_ctx":4096}
@@ -287,6 +313,10 @@ def release_metrics():
 def close_backend():
     """Release model weights and caches before another model phase starts."""
     global _BACKEND_USED, _MLX_MODEL, _MLX_TOKENIZER, _PROMPT_CACHE, _ACTIVE_OLLAMA
+    if LLM_BACKEND == "cloud":
+        release_offline()  # the cloud brain holds no weights; only a loaded offline fallback needs unloading
+        _BACKEND_USED = False
+        return
     if _BACKEND_USED and LLM_BACKEND == "ollama":
         import ollama
         ollama.generate(model=_ACTIVE_OLLAMA or LLM, prompt="", keep_alive=0)
