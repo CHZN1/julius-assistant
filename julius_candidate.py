@@ -471,6 +471,16 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
     return re.sub(r"<think>.*?</think>", "", out, flags=re.DOTALL).strip()
 
 
+_saved_utterances = [0]
+
+def save_utterance(audio):
+    """JULIUS_SAVE_AUDIO_DIR: keep each captured utterance (16 kHz mono) so recognition and endpointing can be re-checked offline."""
+    import soundfile as _sf
+    folder = Path(os.environ['JULIUS_SAVE_AUDIO_DIR']); folder.mkdir(parents=True, exist_ok=True)
+    _saved_utterances[0] += 1
+    _sf.write(folder / f"utt_{_saved_utterances[0]:03d}.wav", audio.astype('float32'), 16000)
+
+
 def transcribe(a):
     import time
     from julius_listening import has_voice_activity
@@ -831,6 +841,7 @@ with microphone_stream():
                     # Endpoint silence must not turn a one-frame noise click
                     # into an apparently long utterance. Preserve short answers.
                     if dur < MIN_SPEECH or longest_voiced_run < 2:continue
+                    if os.environ.get('JULIUS_SAVE_AUDIO_DIR'):save_utterance(audio)
                     text, lang, nsp = transcribe_input(audio)
                     if not text or nsp > 0.6:
                         q.clear()

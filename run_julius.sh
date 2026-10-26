@@ -8,6 +8,7 @@ case "${JULIUS_PROFILE:-cloud}" in
   cloud) PROFILE_BACKEND=cloud; PROFILE_MODEL=claude-haiku-5-5; PROFILE_VOICE=qwen-mlx
     export JULIUS_KEEP_VOICE="${JULIUS_KEEP_VOICE:-1}"        # no local brain: the voice stays loaded between turns
     export JULIUS_MLX_KEEP_WORKER="${JULIUS_MLX_KEEP_WORKER:-1}" JULIUS_MLX_ASR_KEEP_VOICE="${JULIUS_MLX_ASR_KEEP_VOICE:-1}"
+    export JULIUS_SILENCE_SECONDS="${JULIUS_SILENCE_SECONDS:-0.8}"   # was 1.2: keeps pauses up to 0.7 s inside a sentence (diagnostics/bench_endpoint.py)
     ;;
   cloud-torch) PROFILE_BACKEND=cloud; PROFILE_MODEL=claude-haiku-5-5; PROFILE_VOICE=qwen-clone   # slower Torch voice, kept as a fallback
     export JULIUS_KEEP_VOICE="${JULIUS_KEEP_VOICE:-1}"
