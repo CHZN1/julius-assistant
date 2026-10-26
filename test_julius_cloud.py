@@ -174,4 +174,9 @@ class AuthDeliveryTests(unittest.TestCase):
   import julius_orchestrator as orch
   b=brain(FakeMessages(),offline=lambda *a:self.fail('silent fallback'));b.mark_auth_bad()
   self.assertEqual(self.says(b.chat(MSGS,stream=True)),jc.AUTH_MESSAGE)
+class ReplyLengthCapTests(unittest.TestCase):
+ def test_the_local_160_token_cap_is_not_applied_to_cloud_replies(self):
+  api=FakeMessages(stream=FakeStream(['ok'],usage()));b=brain(api)
+  ''.join(p.message.content for p in b.chat(MSGS,stream=True,options={'num_predict':160}))
+  self.assertEqual(api.calls[0]['max_tokens'],jc.TIERS['haiku']['max_tokens']);self.assertGreater(api.calls[0]['max_tokens'],160)
 if __name__=='__main__':unittest.main()

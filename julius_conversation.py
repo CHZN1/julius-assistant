@@ -28,8 +28,8 @@ def conversation_messages(messages,user_context='',vision_enabled=False):
             'Do not add a redundant example or closing offer.')
     system+='\nIn Julius, vision means camera perception, not screen brightness.'+vision_capability_prompt(vision_enabled)
     if os.environ.get('JULIUS_BACKEND')=='cloud':
-        from julius_speech_text import SPOKEN_STYLE_PROMPT
-        system+=SPOKEN_STYLE_PROMPT
+        from julius_speech_text import SPOKEN_STYLE_PROMPT, BREVITY_PROMPT
+        system+=SPOKEN_STYLE_PROMPT+BREVITY_PROMPT
     if user_context.strip():system+='\nUser-provided background:\n'+user_context
     return [{'role':'system','content':system}]+[dict(m) for m in messages if m.get('role')!='system']
 

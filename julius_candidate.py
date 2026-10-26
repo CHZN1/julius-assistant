@@ -14,7 +14,7 @@ if os.environ.get("JULIUS_BACKEND", "ollama") == "ollama":
     os.environ.setdefault("JULIUS_MODEL", "qwen3:4b-instruct-2507-q4_K_M")
 from julius_backend import llm_chat, close_backend, keep_brain_loaded, LLM_BACKEND, LLM, KEEP_ALIVE, release_metrics, prepare_backend, generation_metrics, _offline_chat
 from julius_intents import LiveIntentRouter
-from julius_speech_text import normalize_for_speech, speakable, SPOKEN_STYLE_PROMPT, TOOL_POLICY_PROMPT
+from julius_speech_text import normalize_for_speech, speakable, SPOKEN_STYLE_PROMPT, TOOL_POLICY_PROMPT, BREVITY_PROMPT, EXACT_REQUEST
 import julius_memory as jm
 import julius_tools as jt
 import julius_files as jf
@@ -192,7 +192,7 @@ eyes = create_vision(show_window=SHOW_WINDOW,
 SYSTEM += vision_capability_prompt(eyes.enabled)
 if LLM_BACKEND == 'cloud':
     import julius_cloud
-    SYSTEM += julius_cloud.PLANNING_PROMPT + SPOKEN_STYLE_PROMPT + TOOL_POLICY_PROMPT
+    SYSTEM += julius_cloud.PLANNING_PROMPT + SPOKEN_STYLE_PROMPT + TOOL_POLICY_PROMPT + BREVITY_PROMPT
 if not eyes.enabled:
     print("  [vision disabled — camera and perception models not loaded]", flush=True)
 if os.environ.get('JULIUS_MLX_BRAIN_PREPARE')=='1':
@@ -385,7 +385,7 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
                 msgs.append({"role": "tool", "name": fn, "content": out})
             if len(calls) == 1 and globals().get('speakable') is not None:
                 # One simple lookup (weather, time, calculator, price): a ready-to-speak sentence, no second model call.
-                ready = speakable(fn, out, args)
+                ready = speakable(fn, out, args, exact=bool(globals().get('EXACT_REQUEST') and EXACT_REQUEST.search(user_text)))
                 if ready:
                     print(f"\r  JULIUS: {ready}", flush=True)
                     if speak_fn:

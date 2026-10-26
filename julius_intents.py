@@ -1,7 +1,7 @@
 """Conservative routing for live requests, retaining tool context across follow-ups."""
 import re
 from julius_listening import normalize_request
-from julius_speech_text import speakable
+from julius_speech_text import speakable, EXACT_REQUEST
 
 CRYPTO_NAMES = {'bitcoin': 'BTC', 'ethereum': 'ETH', 'ether': 'ETH', 'solana': 'SOL'}
 
@@ -12,6 +12,7 @@ class LiveIntentRouter:
 
     def resolve(self, text):
         self.relative_only = False
+        self.exact = bool(EXACT_REQUEST.search(text))
         t = re.sub(r'\s*\[you can see:.*', '', normalize_request(text), flags=re.S).strip().rstrip('?.!')
         t_and = re.sub(r'\s*\[you can see:.*', '', normalize_request(text, keep_and=True), flags=re.S).strip().rstrip('?.!')  # follow-ups that start with "and"
         low = t.lower()
@@ -90,7 +91,7 @@ class LiveIntentRouter:
     def spoken_result(self, fn, out, args=None):
         if fn == 'get_datetime' and self.relative_only and ' — ' in out:
             return out.split(' — ', 1)[1].capitalize()
-        ready = speakable(fn, out, args)  # ready-to-speak sentence for weather, forecast, time, calculator, price
+        ready = speakable(fn, out, args, exact=getattr(self, 'exact', False))  # ready-to-speak sentence for weather, forecast, time, calculator, price
         if ready:
             return ready
         if fn == 'get_quote' and '. 52-week range' in out:

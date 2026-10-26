@@ -14,6 +14,12 @@ TOOL_POLICY_PROMPT = ("\n\nWHEN TO USE TOOLS\nAnswer stable knowledge directly w
                       "chit-chat. Use a tool only for live data (weather, forecasts, prices, scores, the time, news, files) or for exact math. "
                       "Never call a tool for something you already know.")
 
+BREVITY_PROMPT = ("\n\nREPLY LENGTH\nDefault replies are one to three sentences. For an explanation, give the core idea in two or three sentences, "
+                  "then ask \"Want more detail?\" and stop. Give a longer answer only when the user asks for more detail, steps or a full "
+                  "explanation. Round prices for speech (for example \"about 2,305 dollars\") unless the user asks for the exact price. "
+                  "This replaces any earlier length guidance.")
+EXACT_REQUEST = re.compile(r"\b(?:exact(?:ly)?|precise(?:ly)?|to the cent|down to the cent)\b", re.I)
+
 ONES = "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen".split()
 TENS = "_ _ twenty thirty forty fifty sixty seventy eighty ninety".split()
 MONTHS = "January February March April May June July August September October November December".split()
@@ -153,7 +159,7 @@ def _calculate(out):
     return "That's " + out.split(" = ", 1)[1].strip() + "."
 
 
-def _quote(out):
+def _quote(out, exact=False):
     m = re.match(r"(?P<name>.+?) \((?P<sym>[^)]+)\): (?P<price>[\d,]+(?:\.\d+)?) (?P<cur>[A-Za-z]+)(?:, (?P<dir>up|down) (?P<chg>[\d,.]+) \((?P<pct>[\d.]+)%\) versus previous close)?", out.strip())
     if not m:
         return None
@@ -161,14 +167,17 @@ def _quote(out):
     name = re.sub(r"\s+USD$", "", g["name"]).strip()
     if g["cur"].upper() == "USD":
         whole, _, frac = g["price"].partition(".")
-        price = f"{whole} dollars" + (f" and {frac.ljust(2, '0')[:2]} cents" if frac and int(frac) else "")
+        if not exact and float(g["price"].replace(",", "")) >= 100:  # "about 2,305 dollars" unless the exact price was asked for
+            price = f"about {round(float(g['price'].replace(',', ''))):,} dollars"
+        else:
+            price = f"{whole} dollars" + (f" and {frac.ljust(2, '0')[:2]} cents" if frac and int(frac) else "")
     else:
         price = f"{g['price']} {g['cur']}"
     move = f", {g['dir']} {g['pct']} percent from the previous close" if g["dir"] else ""
     return f"{name} is {price}{move}. Quotes may be delayed."
 
 
-def speakable(fn, out, args=None):
+def speakable(fn, out, args=None, exact=False):
     """A ready-to-speak sentence for weather, forecast, time, calculator and price results; None when not applicable."""
     try:
         if fn == "get_weather":
@@ -180,7 +189,7 @@ def speakable(fn, out, args=None):
         if fn == "calculate":
             return _calculate(out)
         if fn == "get_quote":
-            return _quote(out)
+            return _quote(out, exact)
     except (ValueError, IndexError):
         return None
     return None

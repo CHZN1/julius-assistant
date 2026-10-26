@@ -185,7 +185,7 @@ class CloudBrain:
         if self._clock() < self.offline_until or self.tracker.offline_required():
             return self._offline(messages, tools, stream, options, announce=False)
         try:
-            kwargs = self.request(messages, tools, max_tokens=int((options or {}).get("num_predict", 0)) or None)
+            kwargs = self.request(messages, tools)  # length is steered by the prompt (brief by default, longer when asked); the local 160-token cap would cut a requested long answer mid-sentence
             if stream:
                 return self._stream(kwargs, messages, tools, options)
             response = self.client().messages.create(**kwargs)

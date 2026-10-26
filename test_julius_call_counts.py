@@ -3,14 +3,14 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 import julius_tools as jt
-from julius_speech_text import speakable
+from julius_speech_text import speakable, EXACT_REQUEST
 from test_julius_candidate import load_candidate_turn
 
 def tool_call(*calls):return SimpleNamespace(message=SimpleNamespace(content='',tool_calls=[SimpleNamespace(function=SimpleNamespace(name=n,arguments=a)) for n,a in calls]))
 def text(t):return SimpleNamespace(message=SimpleNamespace(content=t,tool_calls=None))
 def turn(prompt,responses,cloud=True,out='tool output',carry=False):
     """Run ask_streaming with scripted non-streaming responses; returns (model calls, spoken, result)."""
-    ns=load_candidate_turn();ns['speakable']=speakable;ns['cloud_brain']=object() if cloud else None;ns['_tool_carry_next']=carry
+    ns=load_candidate_turn();ns['speakable']=speakable;ns['EXACT_REQUEST']=EXACT_REQUEST;ns['cloud_brain']=object() if cloud else None;ns['_tool_carry_next']=carry
     calls=[];spoken=[];queue=list(responses)
     def llm(**kw):
         calls.append(bool(kw.get('stream')))

@@ -4,7 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 import julius_tools as jt
-from julius_speech_text import normalize_for_speech as n, speakable, SPOKEN_STYLE_PROMPT, TOOL_POLICY_PROMPT
+from julius_speech_text import normalize_for_speech as n, speakable, SPOKEN_STYLE_PROMPT, TOOL_POLICY_PROMPT, EXACT_REQUEST
 from test_julius_candidate import load_candidate_turn
 
 class NormalizeTests(unittest.TestCase):
@@ -49,7 +49,20 @@ class SpeakableTests(unittest.TestCase):
         self.assertEqual(speakable('get_datetime','Paris: Monday, October 26, 9:34 PM (Europe/Paris) — 8 hours ahead of your time'),"It's Monday, October 26, 9:34 PM in Paris, 8 hours ahead of your time.")
         self.assertEqual(speakable('calculate','17% of 2480 = 421.6'),"That's 421.6.")
         quote=speakable('get_quote','Ethereum USD (ETH-USD): 2,309.82 USD, down 17.05 (0.73%) versus previous close. 52-week range 1,400.00 to 4,100.00 USD. As of 2026-10-26 20:34 UTC. Source: Yahoo Finance; quotes may be delayed.')
-        self.assertEqual(quote,'Ethereum is 2,309 dollars and 82 cents, down 0.73 percent from the previous close. Quotes may be delayed.')
+        self.assertEqual(quote,'Ethereum is about 2,310 dollars, down 0.73 percent from the previous close. Quotes may be delayed.')
+    def test_prices_are_rounded_for_speech_unless_the_exact_price_is_asked_for(self):
+        eth='Ethereum USD (ETH-USD): 2,304.98 USD, down 21.00 (0.94%) versus previous close.'
+        self.assertIn('about 2,305 dollars',speakable('get_quote',eth));self.assertNotIn('cents',speakable('get_quote',eth))
+        self.assertIn('2,304 dollars and 98 cents',speakable('get_quote',eth,exact=True))
+        self.assertIn('42 dollars and 30 cents',speakable('get_quote','Acme (ACME): 42.30 USD, up 1.00 (2.42%) versus previous close.'))
+        from julius_speech_text import EXACT_REQUEST
+        for text in ['what is the exact price of ETH','price of ETH to the cent','precisely what is ETH at']:self.assertTrue(EXACT_REQUEST.search(text),text)
+        self.assertFalse(EXACT_REQUEST.search("what's ETH at right now"))
+    def test_router_rounds_a_price_and_gives_the_exact_one_when_asked(self):
+        from julius_intents import LiveIntentRouter
+        r=LiveIntentRouter();r.resolve("what's ETH at right now");q='Ethereum USD (ETH-USD): 2,304.98 USD, down 21.00 (0.94%) versus previous close.'
+        self.assertIn('about 2,305',r.spoken_result('get_quote',q,{'symbol':'ETH'}))
+        r.resolve('what is the exact price of ETH');self.assertIn('98 cents',r.spoken_result('get_quote',q,{'symbol':'ETH'}))
     def test_spoken_form_has_no_symbols_after_normalizing(self):
         for fn,out,args in [('get_weather','Springfield: 76°F, clear, feels like 74. High 77, low 50.',None),('get_quote','Tesla (TSLA): 241.50 USD, up 3.10 (1.30%) versus previous close.',None),('get_datetime','Paris: Monday, October 26, 9:34 PM (Europe/Paris)',None)]:
             said=n(speakable(fn,out,args));self.assertIsNotNone(said);self.assertFalse(re.search(r'[°%$:]|\d\.\d',said),said)
@@ -59,7 +72,7 @@ class OneRoundTripTests(unittest.TestCase):
     def no_call(self):return SimpleNamespace(message=SimpleNamespace(content='',tool_calls=None))
     def tool_call(self,name,**args):return SimpleNamespace(message=SimpleNamespace(content='',tool_calls=[SimpleNamespace(function=SimpleNamespace(name=name,arguments=args))]))
     def run_turn(self,text,tool_phase,cloud,out='x'):
-        ns=load_candidate_turn();ns['speakable']=speakable;ns['cloud_brain']=object() if cloud else None;calls=[];spoken=[]
+        ns=load_candidate_turn();ns['speakable']=speakable;ns['EXACT_REQUEST']=EXACT_REQUEST;ns['cloud_brain']=object() if cloud else None;calls=[];spoken=[]
         def llm(**kw):
             calls.append(kw)
             if kw.get('stream'):return iter([SimpleNamespace(message=SimpleNamespace(content='Second call answer.'))])
@@ -74,6 +87,12 @@ class OneRoundTripTests(unittest.TestCase):
         weather='Springfield: 76°F, clear, feels like 76. High 77, low 50.'
         result,spoken,calls=self.run_turn('Is it cold outside in Springfield?',self.tool_call('get_weather',location='Springfield'),cloud=True,out=weather)
         self.assertEqual(len(calls),1);self.assertFalse(calls[0].get('stream'));self.assertEqual(spoken,[result]);self.assertTrue(result.startswith("It's 76 degrees"))
+    def test_a_model_price_lookup_is_rounded_unless_the_exact_price_is_asked_for(self):
+        eth='Ethereum USD (ETH-USD): 2,304.98 USD, down 21.00 (0.94%) versus previous close.'
+        result,spoken,calls=self.run_turn('what is ETH trading at right now?',self.tool_call('get_quote',symbol='ETH'),cloud=True,out=eth)
+        self.assertIn('about 2,305 dollars',result)
+        result,spoken,calls=self.run_turn('what is the exact price of ETH right now?',self.tool_call('get_quote',symbol='ETH'),cloud=True,out=eth)
+        self.assertIn('2,304 dollars and 98 cents',result)
     def test_the_same_holds_for_a_local_brain(self):
         result,spoken,calls=self.run_turn('Is it cold outside in Springfield?',self.tool_call('get_weather',location='Springfield'),cloud=False,out='Springfield: 76°F, clear, feels like 76. High 77, low 50.')
         self.assertEqual(len(calls),1)
@@ -100,9 +119,13 @@ class PolicyPromptTests(unittest.TestCase):
     def test_prompts_state_the_spoken_style_and_the_tool_policy(self):
         self.assertIn('spoken aloud',SPOKEN_STYLE_PROMPT);self.assertIn('77 degrees',SPOKEN_STYLE_PROMPT);self.assertIn('no symbols, lists, markdown',SPOKEN_STYLE_PROMPT)
         for phrase in ('stable knowledge','explanations, definitions, general facts','live data','exact math','no tool'):self.assertIn(phrase,TOOL_POLICY_PROMPT)
+        from julius_speech_text import BREVITY_PROMPT
+        for phrase in ('one to three sentences','core idea in two or three sentences','Want more detail?','only when the user asks','about 2,305 dollars','exact price'):self.assertIn(phrase,BREVITY_PROMPT)
     def test_cloud_system_prompt_includes_both_and_local_prompts_do_not(self):
-        src=Path('julius_candidate.py').read_text();self.assertIn('SYSTEM += julius_cloud.PLANNING_PROMPT + SPOKEN_STYLE_PROMPT + TOOL_POLICY_PROMPT',src)
+        src=Path('julius_candidate.py').read_text();self.assertIn('SYSTEM += julius_cloud.PLANNING_PROMPT + SPOKEN_STYLE_PROMPT + TOOL_POLICY_PROMPT + BREVITY_PROMPT',src)
         from julius_conversation import conversation_messages
-        with patch.dict(os.environ,{'JULIUS_BACKEND':'cloud'}):self.assertIn('spoken aloud',conversation_messages([{'role':'user','content':'hi'}])[0]['content'])
-        with patch.dict(os.environ,{'JULIUS_BACKEND':'ollama'}):self.assertNotIn('spoken aloud',conversation_messages([{'role':'user','content':'hi'}])[0]['content'])
+        with patch.dict(os.environ,{'JULIUS_BACKEND':'cloud'}):
+            said=conversation_messages([{'role':'user','content':'hi'}])[0]['content'];self.assertIn('spoken aloud',said);self.assertIn('Want more detail?',said)
+        with patch.dict(os.environ,{'JULIUS_BACKEND':'ollama'}):
+            said=conversation_messages([{'role':'user','content':'hi'}])[0]['content'];self.assertNotIn('spoken aloud',said);self.assertNotIn('Want more detail?',said)
 if __name__=='__main__':unittest.main()
