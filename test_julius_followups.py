@@ -31,6 +31,9 @@ class RouterFollowUpTests(unittest.TestCase):
         r=LiveIntentRouter();r.record('get_quote',{'symbol':'BTC'},'out');self.assertIsNone(r.resolve('what about tomorrow?'))
     def test_no_follow_up_without_a_previous_lookup(self):
         self.assertIsNone(LiveIntentRouter().resolve('and in Shelbyville?'));self.assertIsNone(LiveIntentRouter().resolve('what about tomorrow?'))
+    def test_a_leading_and_does_not_defeat_the_calculator_shortcut(self):
+        self.assertEqual(LiveIntentRouter().resolve("And what's 17% of 2,480?"),('calculate',{'expression':'17/100*2480'}))
+        self.assertEqual(LiveIntentRouter().resolve("And what is 6 times 7?"),('calculate',{'expression':'6*7'}))
     def test_calculator_shortcut_survives_courtesy_and_wake_prefix(self):
         for text in ["Thanks, Julius. What's 17% of 2480?","Thanks, Julius. What's 17% of 2,480?","Julius, what's 17 percent of 2480?"]:
             self.assertEqual(LiveIntentRouter().resolve(text),('calculate',{'expression':'17/100*2480'}),text)

@@ -71,7 +71,7 @@ class LiveIntentRouter:
                 self.relative_only = True
                 return fn, args.copy()
         from julius_spoken_math import arithmetic_expression
-        expression=arithmetic_expression(low)
+        expression=arithmetic_expression(re.sub(r'^and\s+', '', low))  # "And what's 17% of 2,480?"
         if expression is not None:
             return 'calculate', {'expression':expression}
         if re.search(r'\bbitcoin\b.*\b(?:trading|price|worth)\b', low):
