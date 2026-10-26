@@ -294,6 +294,8 @@ def _print_tool(fn, out):
 
 def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_inference=None):
     from julius_conversation import voice_capability_reply
+    # A turn that used a tool carries tools into the next one, so follow-ups ("and in Shelbyville?") always have them.
+    tool_carry = bool(globals().pop('_tool_carry_next', False))
     capability=voice_capability_reply(user_text)
     if capability and not nudge:
         intent_router.last=None
@@ -312,7 +314,7 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
         user_text = f"{user_text}\n\n[you can see: {vision_line}]"
 
     msgs = list(history) + [{"role": "user", "content": user_text}]
-    hinted = TOOL_HINT.search(user_text) or (globals().get('cloud_brain') is not None and globals().get('ESCALATE_HINT') is not None and ESCALATE_HINT.search(user_text))
+    hinted = tool_carry or TOOL_HINT.search(user_text) or (globals().get('cloud_brain') is not None and globals().get('ESCALATE_HINT') is not None and ESCALATE_HINT.search(user_text))
     if not hinted and not nudge and not vision_line:
         # Read/action requests retain full capability rules. Simple conversation
         # gets a focused prompt rather than the entire tool catalogue/persona.
@@ -330,6 +332,7 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
         print(f"\r  [tool: {fn}({args})]", flush=True)
         _print_tool(fn, out)
         intent_router.record(fn, args, out)
+        globals()['_tool_carry_next'] = True
         # Speak the actual result: no extra inference can invent live values.
         answer = intent_router.spoken_result(fn, out, args)
         print(f"  JULIUS: {answer}", flush=True)
@@ -361,6 +364,7 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
                                         for c in calls]})
             for c in calls:
                 fn, args = c.function.name, dict(c.function.arguments)
+                globals()['_tool_carry_next'] = True
                 print(f"\r  [tool: {fn}({args})]          ", flush=True)
                 out = jt.call(fn, args)
                 _print_tool(fn, out)
@@ -433,6 +437,7 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
                      options={"temperature": 0.3, "num_predict": 200})
         for c in (r.message.tool_calls or []):
             fn, args = c.function.name, dict(c.function.arguments)
+            globals()['_tool_carry_next'] = True
             print(f"  [tool: {fn}({args})]", flush=True)
             res = jt.call(fn, args)
             _print_tool(fn, res)
@@ -504,7 +509,11 @@ def release_idle_models():
         tts.suspend()
         close_backend()
         with recognition_resources():pass
-        print('  [idle model weights released]',flush=True)
+        import os as _os
+        if _os.environ.get('JULIUS_KEEP_VOICE') == '1' and globals().get('LLM_BACKEND') == 'cloud':
+            print('  [idle: speech recognition released; the voice stays loaded]',flush=True)
+        else:
+            print('  [idle model weights released]',flush=True)
         return True
     except Exception as exc:
         print(f'  [idle release failed: {type(exc).__name__}; release will retry before the next model phase]',flush=True)

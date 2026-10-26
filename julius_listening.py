@@ -17,6 +17,17 @@ class CaptureClock:
 WAKE_PREFIX=re.compile(r'^\s*(?:(?:hey|okay|ok)[\s,]+)?(?:julius|juliet)\b[\s,.:!?-]*',re.I)
 def has_wake(text):return bool(WAKE_PREFIX.match(text))
 def strip_wake(text):return WAKE_PREFIX.sub('',text,count=1).strip()
+FILLER=re.compile(r'^\s*(?:thanks|thank you|okay|ok|alright|well|so|hey|hi|yeah|yep)\b[\s,.!:;-]*',re.I)
+def normalize_request(text):
+    """Drop leading courtesy words and a wake word ("Thanks, Julius. What's ...") so routing sees the request itself."""
+    current=text
+    for _ in range(3):
+        step=FILLER.sub('',current,count=1) if FILLER.match(current) else current
+        step=strip_leading_wake(step)
+        if step==current or not step.strip():break
+        current=step
+    if not current.strip() or (has_wake(current) and not strip_wake(current)):return text  # only courtesy/wake words: leave as spoken
+    return current
 def strip_leading_wake(text):
     """Drop a leading wake word from a request spoken while already awake; a bare wake word is left as is."""
     return strip_wake(text) if has_wake(text) and strip_wake(text) else text

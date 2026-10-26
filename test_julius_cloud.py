@@ -61,15 +61,16 @@ class RequestTests(unittest.TestCase):
   self.assertEqual(kw['cache_control'],{'type':'ephemeral'});self.assertEqual(kw['system'][0]['cache_control'],{'type':'ephemeral'})
   self.assertEqual(kw['tools'][-1]['cache_control'],{'type':'ephemeral'});self.assertEqual(kw['output_config'],{'effort':'low'})
   self.assertEqual(kw['thinking'],{'type':'disabled'})
- def test_tools_are_selective_per_turn_and_always_include_escalation(self):
+ def test_cloud_always_gets_the_full_tool_list_plus_escalation_whatever_the_turn_selected(self):
   b=brain(FakeMessages());names=lambda kw:[t['name'] for t in kw['tools']]
-  weather=names(b.request(MSGS,jt.select_schemas('weather')));self.assertEqual(weather,['get_weather','get_forecast','escalate_to_planner'])
-  self.assertEqual(names(b.request(MSGS,jt.select_schemas('bitcoin'))),['get_quote','escalate_to_planner'])
-  self.assertLess(len(names(b.request(MSGS,jt.select_schemas('weather')))),len(jt.SCHEMAS))
- def test_escalation_tool_is_strict_so_arguments_are_always_valid(self):
-  tools=brain(FakeMessages()).request(MSGS,jt.select_schemas('weather'))['tools'];esc=[t for t in tools if t['name']=='escalate_to_planner'][0]
-  self.assertTrue(esc['strict']);self.assertFalse(esc['input_schema']['additionalProperties']);self.assertNotIn('strict',tools[0])
- def test_each_tool_subset_is_cache_marked_on_its_last_tool(self):
+  full=[s['function']['name'] for s in jt.SCHEMAS]+['escalate_to_planner']
+  for text in ('weather','bitcoin','Do the thing'):self.assertEqual(names(b.request(MSGS,jt.select_schemas(text))),full)
+  self.assertNotIn('tools',b.request(MSGS,None))
+ def test_the_offline_fallback_still_receives_the_callers_trimmed_list(self):
+  seen=[];api=FakeMessages(error=conn_error())
+  b=brain(api,offline=lambda m,t,s,o:seen.append([x['function']['name'] for x in t]) or SimpleNamespace(message=SimpleNamespace(content='local',tool_calls=None)))
+  b.chat(MSGS,tools=jt.select_schemas('weather'));self.assertEqual(seen,[['get_weather','get_forecast']])
+ def test_the_last_tool_carries_the_cache_marker(self):
   kw=brain(FakeMessages()).request(MSGS,jt.select_schemas('weather'));self.assertEqual(kw['tools'][-1]['cache_control'],{'type':'ephemeral'});self.assertNotIn('cache_control',kw['tools'][0])
  def test_follow_up_after_tools_reuses_the_same_tool_list_for_a_cache_hit(self):
   b=brain(FakeMessages());first=b.request(MSGS,jt.select_schemas('weather'))

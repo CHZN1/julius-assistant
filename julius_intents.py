@@ -1,5 +1,8 @@
 """Conservative routing for live requests, retaining tool context across follow-ups."""
 import re
+from julius_listening import normalize_request
+
+CRYPTO_NAMES = {'bitcoin': 'BTC', 'ethereum': 'ETH', 'ether': 'ETH', 'solana': 'SOL'}
 
 class LiveIntentRouter:
     def __init__(self):
@@ -8,7 +11,7 @@ class LiveIntentRouter:
 
     def resolve(self, text):
         self.relative_only = False
-        t = re.sub(r'\s*\[you can see:.*', '', text, flags=re.S).strip().rstrip('?.!')
+        t = re.sub(r'\s*\[you can see:.*', '', normalize_request(text), flags=re.S).strip().rstrip('?.!')
         low = t.lower()
         # Compound requests (plans, comparisons, several lookups in one sentence) belong to the brain, not a single-tool shortcut.
         if re.search(r'\b(?:plan|trip|itinerary|compare|organi[sz]e|research|step by step|and then)\b', low) or (
@@ -48,11 +51,20 @@ class LiveIntentRouter:
         if self.last:
             fn, args, out = self.last
             if re.fullmatch(r'(?:what|how) about (.+)', t, re.I):
-                target = re.fullmatch(r'(?:what|how) about (.+)', t, re.I).group(1)
+                target = re.sub(r'^(?:in|for)\s+', '', re.fullmatch(r'(?:what|how) about (.+)', t, re.I).group(1), flags=re.I)
                 if fn in ('get_weather', 'get_forecast') and re.fullmatch(r'tomorrow(?: in .+)?', target, re.I):
                     return 'get_forecast', {'location': location or args.get('location', 'Springfield, Illinois'), 'days': 2}
                 if fn in ('get_datetime', 'get_weather', 'get_forecast'):
                     return fn, dict(args, location=target)
+            # "and in Shelbyville?" / "and for Tokyo?" repeat the last lookup somewhere else.
+            place = re.fullmatch(r'(?:and )?(?:what about |how about )?(?:in|for) (.+)', t, re.I)
+            if place and fn in ('get_datetime', 'get_weather', 'get_forecast'):
+                return fn, dict(args, location=place.group(1).strip())
+            # "and ETH?" / "what about Tesla?" repeats the last price lookup for another symbol.
+            other = re.fullmatch(r'(?:and |what about |how about )(?:and )?(?:for )?([A-Za-z^.=-]{1,12})', t, re.I)
+            if other and fn == 'get_quote' and other.group(1).lower() not in {'tomorrow', 'today', 'yesterday', 'that', 'this', 'it'}:
+                name = other.group(1)
+                return 'get_quote', {'symbol': CRYPTO_NAMES.get(name.lower(), name.upper())}
             if fn in ('get_weather', 'get_forecast') and re.fullmatch(r'is that for .+', t, re.I):
                 return fn, dict(args, location=re.fullmatch(r'is that for (.+)', t, re.I).group(1))
             if fn == 'get_datetime' and re.search(r'how many hours (?:ahead|behind)', low):

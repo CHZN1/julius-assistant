@@ -140,13 +140,16 @@ class CloudBrain:
         return None
 
     def tool_schemas(self, schemas):
-        """The selected tools for this turn plus escalate_to_planner unless the cap is reached.
+        """The full tool list (plus escalate_to_planner unless the cap is reached) whenever tools are offered.
 
-        Selective tools keep the prompt small; each distinct subset is cached on its own (5-minute TTL).
+        Trimming schemas was a local-model speed fix. Here one stable list is cached once and shared by every turn
+        and follow-up, which costs less than rewriting per-subset caches. The offline fallback still gets the
+        caller's trimmed list.
         """
         if schemas is None:
             return None
-        chosen = [s for s in schemas if s["function"]["name"] != "escalate_to_planner"]
+        import julius_tools as jt
+        chosen = list(jt.SCHEMAS)
         if not self.tracker.cap_reached():
             chosen.append(ESCALATE_SCHEMA)
         self._last_tools = chosen
