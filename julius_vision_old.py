@@ -5,7 +5,7 @@ from tensorflow import keras
 from insightface.app import FaceAnalysis
 from PIL import Image, ImageDraw, ImageFont
 
-PROJ = Path.home()/"Documents/fer2013-emotion-cnn"
+PROJ = Path(__file__).resolve().parent
 EMO_MODEL = next(PROJ.rglob("FERPlus_soft_96.keras"))
 FACE_DB   = PROJ/"artifacts/face_db.npz"
 

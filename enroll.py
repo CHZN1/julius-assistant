@@ -6,7 +6,7 @@ from insightface.app import FaceAnalysis
 
 pillow_heif.register_heif_opener()
 
-PROJ  = Path.home()/"Documents/fer2013-emotion-cnn"
+PROJ  = Path(__file__).resolve().parent
 FACES = PROJ/"faces"
 DB    = PROJ/"artifacts/face_db.npz"
 

@@ -6,7 +6,7 @@ from torchvision import transforms
 from facenet_pytorch import InceptionResnetV1
 from insightface.app import FaceAnalysis
 
-PROJ = Path.home()/"Documents/fer2013-emotion-cnn"
+PROJ = Path(__file__).resolve().parent
 ART  = PROJ/"artifacts"
 DEV  = "mps" if torch.backends.mps.is_available() else "cpu"
 

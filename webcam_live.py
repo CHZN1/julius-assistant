@@ -3,7 +3,7 @@ from collections import deque
 from pathlib import Path
 from tensorflow import keras
 
-PROJ = Path.home()/"Documents/fer2013-emotion-cnn"
+PROJ = Path(__file__).resolve().parent
 _hits = list(PROJ.rglob("FERPlus_soft_96.keras"))
 assert _hits, f"model not found under {PROJ}"
 MODEL = _hits[0]
