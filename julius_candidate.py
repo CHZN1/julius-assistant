@@ -348,7 +348,7 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
 
     # tool phase — skipped when no tool could plausibly apply (~40% of turns)
     if (not forced_current_time) and hinted:
-        for _ in range(2):
+        for _ in range(1):  # one tool round: a turn that needs the model summary is exactly two calls (tool call, then the spoken answer)
             prepare_inference()
             r = llm_chat(messages=msgs, tools=jt.select_schemas(user_text), think=False,
                          options={"temperature": 0.0, "num_predict": 256})
