@@ -26,3 +26,16 @@ class AudioActivityTests(unittest.TestCase):
         from julius_listening import has_voice_activity
         answer=np.zeros(16000);answer[0:3200]=.03*np.sin(np.arange(3200)*.1)
         self.assertTrue(has_voice_activity(answer))
+
+class LeadingWakeWhileAwakeTests(unittest.TestCase):
+    def test_leading_wake_word_is_dropped_so_follow_ups_still_route(self):
+        from julius_listening import strip_leading_wake
+        from julius_intents import LiveIntentRouter
+        self.assertEqual(strip_leading_wake("Julius, what about tomorrow?"),'what about tomorrow?')
+        self.assertEqual(strip_leading_wake("Hey Julius, what's 17 percent of 2480?"),"what's 17 percent of 2480?")
+        router=LiveIntentRouter();router.record('get_weather',{'location':'Springfield, Illinois'},'out')
+        self.assertEqual(router.resolve(strip_leading_wake("Julius, what about tomorrow?"))[0],'get_forecast')
+    def test_bare_wake_word_and_ordinary_speech_are_unchanged(self):
+        from julius_listening import strip_leading_wake
+        self.assertEqual(strip_leading_wake('Julius?'),'Julius?');self.assertEqual(strip_leading_wake('what about tomorrow?'),'what about tomorrow?')
+        self.assertEqual(strip_leading_wake('Thanks, Julius. okay'),'Thanks, Julius. okay')

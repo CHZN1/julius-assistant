@@ -17,6 +17,9 @@ class CaptureClock:
 WAKE_PREFIX=re.compile(r'^\s*(?:(?:hey|okay|ok)[\s,]+)?(?:julius|juliet)\b[\s,.:!?-]*',re.I)
 def has_wake(text):return bool(WAKE_PREFIX.match(text))
 def strip_wake(text):return WAKE_PREFIX.sub('',text,count=1).strip()
+def strip_leading_wake(text):
+    """Drop a leading wake word from a request spoken while already awake; a bare wake word is left as is."""
+    return strip_wake(text) if has_wake(text) and strip_wake(text) else text
 def incomplete_fragment(text):
     return re.sub(r'[^\w\s]','',text.lower()).strip() in {'you','the','and','but','because','so i','i was','can you','could you'}
 def listening_control(text):

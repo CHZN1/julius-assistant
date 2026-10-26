@@ -21,7 +21,7 @@ from julius_vision_mode import create_vision, vision_capability_prompt
 from julius_file_session import FileSession
 from julius_utility_session import UtilitySession
 from julius_apple import AppleProvider
-from julius_listening import has_wake, strip_wake, listening_control,incomplete_fragment,CaptureClock
+from julius_listening import has_wake, strip_wake, strip_leading_wake, listening_control,incomplete_fragment,CaptureClock
 from julius_audio_output import ready_output
 from julius_microphone_gate import MicrophoneGate
 from julius_conversation import conversation_messages, authority_discussion_reply
@@ -816,6 +816,8 @@ with microphone_stream():
                         if not has_wake(text): continue
                         text = strip_wake(text)
                         print("  [awake]")
+                    else:
+                        text = strip_leading_wake(text)  # "Julius, what about tomorrow?" while awake must still reach the follow-up router
                     control = listening_control(text)
                     if control:
                         awake_until = 0.0 if control == 'sleep' else time.time() + SESSION_SEC
