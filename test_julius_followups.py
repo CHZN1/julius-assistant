@@ -31,6 +31,12 @@ class RouterFollowUpTests(unittest.TestCase):
         r=LiveIntentRouter();r.record('get_quote',{'symbol':'BTC'},'out');self.assertIsNone(r.resolve('what about tomorrow?'))
     def test_no_follow_up_without_a_previous_lookup(self):
         self.assertIsNone(LiveIntentRouter().resolve('and in Shelbyville?'));self.assertIsNone(LiveIntentRouter().resolve('what about tomorrow?'))
+    def test_and_what_about_tomorrow_and_trailing_filler_words_still_route(self):
+        for text in ['And what about tomorrow?','Julius, and what about tomorrow?','And what about tomorrow please?']:
+            self.assertEqual(weather_router().resolve(text),('get_forecast',{'location':'Springfield, Illinois','days':2}),text)
+        for text in ["And what's 17% of 2,480 again?","What's 17% of 2480, please?","Julius, what's 17% of 2480 for me?"]:
+            self.assertEqual(LiveIntentRouter().resolve(text),('calculate',{'expression':'17/100*2480'}),text)
+        self.assertEqual(LiveIntentRouter().resolve("And what's 17% of 2,480 again"),('calculate',{'expression':'17/100*2480'}))
     def test_a_leading_and_does_not_defeat_the_calculator_shortcut(self):
         self.assertEqual(LiveIntentRouter().resolve("And what's 17% of 2,480?"),('calculate',{'expression':'17/100*2480'}))
         self.assertEqual(LiveIntentRouter().resolve("And what is 6 times 7?"),('calculate',{'expression':'6*7'}))

@@ -12,6 +12,7 @@ class LiveIntentRouter:
     def resolve(self, text):
         self.relative_only = False
         t = re.sub(r'\s*\[you can see:.*', '', normalize_request(text), flags=re.S).strip().rstrip('?.!')
+        t = re.sub(r'[\s,]+(?:again|please|for me)$', '', t, flags=re.I)  # "... of 2,480 again?"
         low = t.lower()
         # Compound requests (plans, comparisons, several lookups in one sentence) belong to the brain, not a single-tool shortcut.
         if re.search(r'\b(?:plan|trip|itinerary|compare|organi[sz]e|research|step by step|and then)\b', low) or (
@@ -50,8 +51,9 @@ class LiveIntentRouter:
             return 'get_quote', {'symbol': quote.group(1).upper()}
         if self.last:
             fn, args, out = self.last
-            if re.fullmatch(r'(?:what|how) about (.+)', t, re.I):
-                target = re.sub(r'^(?:in|for)\s+', '', re.fullmatch(r'(?:what|how) about (.+)', t, re.I).group(1), flags=re.I)
+            about = re.sub(r'^and\s+(?=(?:what|how) about\b)', '', t, flags=re.I)  # "And what about tomorrow?"
+            if re.fullmatch(r'(?:what|how) about (.+)', about, re.I):
+                target = re.sub(r'^(?:in|for)\s+', '', re.fullmatch(r'(?:what|how) about (.+)', about, re.I).group(1), flags=re.I)
                 if fn in ('get_weather', 'get_forecast') and re.fullmatch(r'tomorrow(?: in .+)?', target, re.I):
                     return 'get_forecast', {'location': location or args.get('location', 'Springfield, Illinois'), 'days': 2}
                 if fn in ('get_datetime', 'get_weather', 'get_forecast'):
