@@ -32,6 +32,13 @@ class CallCountTests(unittest.TestCase):
         for name,args,out in [('get_weather',{'location':'Springfield'},WEATHER),('get_quote',{'symbol':'ETH'},'Ethereum USD (ETH-USD): 2,309.82 USD, down 17.05 (0.73%) versus previous close.'),('calculate',{'expression':'2+2'},'2+2 = 4')]:
             calls,spoken,result=turn('Is it cold outside in Springfield?',[tool_call((name,args))],out=out)
             self.assertEqual(calls,[False],name);self.assertEqual(spoken,[result])
+    def test_an_identical_tool_call_repeated_in_one_turn_runs_once_and_stays_one_model_call(self):
+        eth='Ethereum USD (ETH-USD): 2,308.57 USD, down 18.35 (0.79%) versus previous close.'
+        ns=load_candidate_turn();ns['speakable']=speakable;ns['EXACT_REQUEST']=EXACT_REQUEST;ns['cloud_brain']=object();calls=[];spoken=[]
+        ns['llm_chat']=lambda **kw:calls.append(bool(kw.get('stream'))) or tool_call(('get_quote',{'symbol':'ETH'}),('get_quote',{'symbol':'ETH'}))
+        with patch.object(jt,'call',return_value=eth) as call:
+            jt.dispatcher().last_result={'ok':True};result=ns['ask_streaming']("And what's the current price of ETH?",'',speak_fn=spoken.append)
+        self.assertEqual(call.call_count,1);self.assertEqual(calls,[False]);self.assertEqual(spoken,[result]);self.assertIn('about 2,309 dollars',result)
     def test_a_lookup_that_needs_the_model_summary_is_exactly_two_calls(self):
         calls,spoken,result=turn('List the files in my Downloads folder',[tool_call(('list_files',{'directory':'Downloads'}))],out='a.txt\nb.txt')
         self.assertEqual(calls,[False,True]);self.assertEqual(result,'Spoken summary.')

@@ -46,7 +46,7 @@ def microphone_stream():
 TURN    = {"n": 0}
 
 SR, CHUNK    = 16000, 1024
-ASR          = "mlx-community/whisper-large-v3-turbo"
+ASR          = os.environ.get("JULIUS_ASR_MODEL", "mlx-community/whisper-large-v3-turbo")  # e.g. mlx-community/whisper-small.en-mlx (4x faster, see diagnostics/asr_model_benchmark_output.txt)
 intent_router = LiveIntentRouter()
 VOICE, SPEED = "am_adam", 1.05
 WAKE         = ["julius", "juliet", "hey julius"]
@@ -354,6 +354,10 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
                          options={"temperature": 0.0, "num_predict": 256})
             m = r.message
             calls = m.tool_calls or []
+            unique = {}
+            for c in calls:  # the model sometimes repeats an identical call in one turn; run each distinct call once
+                unique.setdefault((c.function.name, repr(sorted(dict(c.function.arguments).items()))), c)
+            calls = list(unique.values())
             if not calls:
                 text = (m.content or "").strip()
                 if text and globals().get('cloud_brain') is not None and not STALL.search(text):
