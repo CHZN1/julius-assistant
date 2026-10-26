@@ -1,6 +1,7 @@
 """Conservative routing for live requests, retaining tool context across follow-ups."""
 import re
 from julius_listening import normalize_request
+from julius_speech_text import speakable
 
 CRYPTO_NAMES = {'bitcoin': 'BTC', 'ethereum': 'ETH', 'ether': 'ETH', 'solana': 'SOL'}
 
@@ -12,11 +13,12 @@ class LiveIntentRouter:
     def resolve(self, text):
         self.relative_only = False
         t = re.sub(r'\s*\[you can see:.*', '', normalize_request(text), flags=re.S).strip().rstrip('?.!')
-        t = re.sub(r'[\s,]+(?:again|please|for me)$', '', t, flags=re.I)  # "... of 2,480 again?"
+        t_and = re.sub(r'\s*\[you can see:.*', '', normalize_request(text, keep_and=True), flags=re.S).strip().rstrip('?.!')  # follow-ups that start with "and"
         low = t.lower()
         # Compound requests (plans, comparisons, several lookups in one sentence) belong to the brain, not a single-tool shortcut.
         if re.search(r'\b(?:plan|trip|itinerary|compare|organi[sz]e|research|step by step|and then)\b', low) or (
-                re.search(r'\b(?:weather|forecast)\b', low) and re.search(r'\b(?:what time|current time|what day|date)\b', low)):
+                re.search(r'\b(?:weather|forecast)\b', low) and re.search(r'\b(?:what time|current time|what day|date)\b', low)) or (
+                re.search(r'\b(?:weather|forecast|time)\b', low) and re.search(r'\b(?:in|for)\s+[^,]+?\s+and\s+\w', low)):  # "weather in Springfield and Tokyo"
             self.last = None
             return None
         loc = re.search(r'\bin\s+(.+)$', t, re.I) or re.search(r'\bfor\s+(.+)$', t, re.I)
@@ -63,7 +65,7 @@ class LiveIntentRouter:
             if place and fn in ('get_datetime', 'get_weather', 'get_forecast'):
                 return fn, dict(args, location=place.group(1).strip())
             # "and ETH?" / "what about Tesla?" repeats the last price lookup for another symbol.
-            other = re.fullmatch(r'(?:and |what about |how about )(?:and )?(?:for )?([A-Za-z^.=-]{1,12})', t, re.I)
+            other = re.fullmatch(r'(?:and |what about |how about )(?:and )?(?:for )?([A-Za-z^.=-]{1,12})', t_and, re.I)
             if other and fn == 'get_quote' and other.group(1).lower() not in {'tomorrow', 'today', 'yesterday', 'that', 'this', 'it'}:
                 name = other.group(1)
                 return 'get_quote', {'symbol': CRYPTO_NAMES.get(name.lower(), name.upper())}
@@ -73,7 +75,7 @@ class LiveIntentRouter:
                 self.relative_only = True
                 return fn, args.copy()
         from julius_spoken_math import arithmetic_expression
-        expression=arithmetic_expression(re.sub(r'^and\s+', '', low))  # "And what's 17% of 2,480?"
+        expression=arithmetic_expression(low)
         if expression is not None:
             return 'calculate', {'expression':expression}
         if re.search(r'\bbitcoin\b.*\b(?:trading|price|worth)\b', low):
@@ -88,6 +90,9 @@ class LiveIntentRouter:
     def spoken_result(self, fn, out, args=None):
         if fn == 'get_datetime' and self.relative_only and ' — ' in out:
             return out.split(' — ', 1)[1].capitalize()
+        ready = speakable(fn, out, args)  # ready-to-speak sentence for weather, forecast, time, calculator, price
+        if ready:
+            return ready
         if fn == 'get_quote' and '. 52-week range' in out:
             return out.split('. 52-week range', 1)[0] + '.'
         if fn == 'read_document':

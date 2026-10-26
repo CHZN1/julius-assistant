@@ -14,6 +14,7 @@ if os.environ.get("JULIUS_BACKEND", "ollama") == "ollama":
     os.environ.setdefault("JULIUS_MODEL", "qwen3:4b-instruct-2507-q4_K_M")
 from julius_backend import llm_chat, close_backend, keep_brain_loaded, LLM_BACKEND, LLM, KEEP_ALIVE, release_metrics, prepare_backend, generation_metrics, _offline_chat
 from julius_intents import LiveIntentRouter
+from julius_speech_text import normalize_for_speech, speakable, SPOKEN_STYLE_PROMPT, TOOL_POLICY_PROMPT
 import julius_memory as jm
 import julius_tools as jt
 import julius_files as jf
@@ -175,11 +176,8 @@ FIXES = {
 }
 
 def clean_for_speech(t):
-    t = re.sub(r"https?://\S+", "", t)
-    t = re.sub(r"[\U0001F000-\U0001FAFF\U00002600-\U000027BF\u2190-\u21FF"
-               r"\u2B00-\u2BFF\uFE0F]", "", t)
-    t = re.sub(r"^\s*[\*\-\d]+[\.\)]?\s+", "", t, flags=re.MULTILINE)
-    t = re.sub(r"[*_#`~\[\]]", "", t)
+    t = normalize_for_speech(t)  # markdown/URLs/emoji out; degrees, percent, money, times, dates, decimals as words
+    t = re.sub(r"[#\[\]~]", "", t)
     for p, r in FIXES.items():
         t = re.sub(p, r, t, flags=re.IGNORECASE)
     return re.sub(r"\s+", " ", t).strip()
@@ -194,7 +192,7 @@ eyes = create_vision(show_window=SHOW_WINDOW,
 SYSTEM += vision_capability_prompt(eyes.enabled)
 if LLM_BACKEND == 'cloud':
     import julius_cloud
-    SYSTEM += julius_cloud.PLANNING_PROMPT
+    SYSTEM += julius_cloud.PLANNING_PROMPT + SPOKEN_STYLE_PROMPT + TOOL_POLICY_PROMPT
 if not eyes.enabled:
     print("  [vision disabled — camera and perception models not loaded]", flush=True)
 if os.environ.get('JULIUS_MLX_BRAIN_PREPARE')=='1':
@@ -357,6 +355,15 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
             m = r.message
             calls = m.tool_calls or []
             if not calls:
+                text = (m.content or "").strip()
+                if text and globals().get('cloud_brain') is not None and not STALL.search(text):
+                    # Stable knowledge or chit-chat: the answer is already here, no second model call.
+                    sentences = [x.strip() for x in re.split(r'(?<=[.!?…])\s+', text) if len(x.strip()) > 2]
+                    print("\r  JULIUS: " + " ".join(sentences), flush=True)
+                    if speak_fn:
+                        for sentence in sentences:
+                            speak_fn(sentence)
+                    return text
                 break
             msgs.append({"role": "assistant", "content": m.content or "",
                          "tool_calls": [{"function": {"name": c.function.name,
@@ -376,6 +383,14 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
                     long_tool_result = True
                 print("  ...thinking", end="", flush=True)
                 msgs.append({"role": "tool", "name": fn, "content": out})
+            if len(calls) == 1 and globals().get('speakable') is not None:
+                # One simple lookup (weather, time, calculator, price): a ready-to-speak sentence, no second model call.
+                ready = speakable(fn, out, args)
+                if ready:
+                    print(f"\r  JULIUS: {ready}", flush=True)
+                    if speak_fn:
+                        speak_fn(ready)
+                    return ready
 
         if long_tool_result:
             msgs.append({

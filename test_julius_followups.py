@@ -13,7 +13,8 @@ class NormalizeTests(unittest.TestCase):
     def test_wake_word_and_courtesy_openers_are_dropped(self):
         self.assertEqual(normalize_request("Thanks, Julius. What's 17% of 2480?"),"What's 17% of 2480?")
         self.assertEqual(normalize_request('Julius, what about tomorrow?'),'what about tomorrow?')
-        self.assertEqual(normalize_request('Okay, hey Julius, and in Shelbyville?'),'and in Shelbyville?')
+        self.assertEqual(normalize_request('Okay, hey Julius, and in Shelbyville?'),'in Shelbyville?')
+        self.assertEqual(normalize_request('Okay, hey Julius, and in Shelbyville?',keep_and=True),'and in Shelbyville?')
     def test_bare_courtesy_and_wake_words_are_left_alone(self):
         for text in ['Thanks.','Julius?','Okay, Julius','what about tomorrow?']:self.assertEqual(normalize_request(text),text)
 class RouterFollowUpTests(unittest.TestCase):

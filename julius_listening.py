@@ -17,17 +17,25 @@ class CaptureClock:
 WAKE_PREFIX=re.compile(r'^\s*(?:(?:hey|okay|ok)[\s,]+)?(?:julius|juliet)\b[\s,.:!?-]*',re.I)
 def has_wake(text):return bool(WAKE_PREFIX.match(text))
 def strip_wake(text):return WAKE_PREFIX.sub('',text,count=1).strip()
-FILLER=re.compile(r'^\s*(?:thanks|thank you|okay|ok|alright|well|so|hey|hi|yeah|yep)\b[\s,.!:;-]*',re.I)
-def normalize_request(text):
-    """Drop leading courtesy words and a wake word ("Thanks, Julius. What's ...") so routing sees the request itself."""
+FILLER=re.compile(r'^\s*(?:thanks|thank you|okay|ok|alright|well|so|and|hey|hi|yeah|yep|um|uh|please)\b[\s,.!:;-]*',re.I)
+FILLER_KEEP_AND=re.compile(r'^\s*(?:thanks|thank you|okay|ok|alright|well|so|hey|hi|yeah|yep|um|uh|please)\b[\s,.!:;-]*',re.I)
+TRAILING=re.compile(r'[\s,]+(?:again|please|for me|real quick|quickly|thanks|thank you)$',re.I)
+def normalize_request(text,keep_and=False):
+    """Drop leading courtesy/filler words and a wake word, and trailing "again/please/for me/real quick", so routing sees the request.
+
+    keep_and=True leaves a leading "and" in place for follow-ups that need it ("and ETH?").
+    """
+    filler=FILLER_KEEP_AND if keep_and else FILLER
     current=text
-    for _ in range(3):
-        step=FILLER.sub('',current,count=1) if FILLER.match(current) else current
+    for _ in range(4):
+        step=filler.sub('',current,count=1) if filler.match(current) else current
         step=strip_leading_wake(step)
         if step==current or not step.strip():break
         current=step
     if not current.strip() or (has_wake(current) and not strip_wake(current)):return text  # only courtesy/wake words: leave as spoken
-    return current
+    core,punct=re.match(r'^(.*?)([?.!\s]*)$',current,re.S).groups()
+    while TRAILING.search(core):core=TRAILING.sub('',core,count=1)
+    return core+punct
 def strip_leading_wake(text):
     """Drop a leading wake word from a request spoken while already awake; a bare wake word is left as is."""
     return strip_wake(text) if has_wake(text) and strip_wake(text) else text
