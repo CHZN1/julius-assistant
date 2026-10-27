@@ -201,6 +201,11 @@ if os.environ.get('JULIUS_MLX_BRAIN_PREPARE')=='1':
 print("loading speech engine...", flush=True)
 tts = SpeechEngine()
 tts.cancel_event=cancellation.event
+speech_player = None
+if tts.backend == 'qwen-mlx':  # one persistent output stream, prefill and underflow logging for the streamed MLX voice
+    from julius_audio_player import SpeechPlayer
+    speech_player = SpeechPlayer(sd, prefill_chunks=int(os.environ.get('JULIUS_AUDIO_PREFILL_CHUNKS', '1')),
+                                 latency=float(os.environ.get('JULIUS_AUDIO_LATENCY', '0.4')))
 
 # Cloud brain: Claude Haiku answers every turn, the planner (Sonnet) is reached through escalate_to_planner.
 cloud_brain = cloud_tracker = None
@@ -243,7 +248,12 @@ def speak_sentence(p):
         elif p.endswith("!"): s = SPEED * 1.06
         elif len(p) < 25:     s = SPEED * 1.04
         audio = tts.synthesize(p, speed=s)
-        if tts.backend == 'qwen-mlx' and not _validation_no_devices:
+        if tts.backend == 'qwen-mlx' and not _validation_no_devices and globals().get('speech_player') is not None:
+            try:
+                speech_player.play(audio, cancel_check=(cancellation.check if globals().get('cancellation') else None), on_start=note_audio)
+            finally:
+                audio.close()
+        elif tts.backend == 'qwen-mlx' and not _validation_no_devices:
             # A single output stream carries all chunks without repeated device starts.
             try:
                 first, rate = next(audio)
@@ -667,6 +677,9 @@ def _process(text, lang):
         jm.log_turn(text, reply,
                     {"emotion": st.get("emotion"), "conf": st.get("conf")})
 
+    underflows = globals()['speech_player'].pop_events() if globals().get('speech_player') is not None else []
+    if underflows:
+        print(f"  [audio underflows this turn: {len(underflows)}]", flush=True)
     if globals().get('cloud_tracker') is not None:
         print(cloud_tracker.status_line(), flush=True)
 
@@ -682,7 +695,7 @@ def _process(text, lang):
             "end_of_speech_to_first_audio_seconds":globals().get('_first_audio_at')-globals().get('_voice_finished_at') if globals().get('_first_audio_at') is not None and globals().get('_voice_finished_at') is not None else None,
             "reasoning_generation_metrics":globals().get("generation_metrics",lambda:None)(),
             "reasoning_release_metrics":globals().get("release_metrics",lambda:None)(),
-            "brain_first_token_seconds":globals().get("_brain_first_token_seconds"),"cost_by_tier_usd":(cloud_tracker.turn_costs() if globals().get("cloud_tracker") is not None else None),"cost_today_usd":(cloud_tracker.today_total() if globals().get("cloud_tracker") is not None else None),"reasoning_seconds":globals().get("_reasoning_seconds"),"reasoning_release_seconds":globals().get("_reasoning_release_seconds"),
+            "brain_first_token_seconds":globals().get("_brain_first_token_seconds"),"audio_underflows":len(underflows),"audio_underflow_events":underflows,"cost_by_tier_usd":(cloud_tracker.turn_costs() if globals().get("cloud_tracker") is not None else None),"cost_today_usd":(cloud_tracker.today_total() if globals().get("cloud_tracker") is not None else None),"reasoning_seconds":globals().get("_reasoning_seconds"),"reasoning_release_seconds":globals().get("_reasoning_release_seconds"),
             "error":turn_error,"seconds":time.perf_counter()-started,"peak_rss_bytes":resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
             "dispatcher_tasks":list(jt.dispatcher().turn_tasks),
             "file_result":_file_session.last_result if routed is not None and jt.dispatcher().last_result and jt.dispatcher().last_result["agent"]=="files" else None,"vision":st,"tts":tts.backend,"backend":LLM_BACKEND,"model":LLM,
@@ -880,6 +893,7 @@ with microphone_stream():
     except KeyboardInterrupt:
         print("\n  wrapping up...")
         eyes.stop()
+        if globals().get('speech_player') is not None:speech_player.close()
         tts.close()
         turns = [h for h in history if h["role"] in ("user", "assistant")]
         if len(turns) >= 4 and not _scripted:

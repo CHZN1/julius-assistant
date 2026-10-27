@@ -68,3 +68,20 @@ class ContinuousPlaybackTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):speak('Hello.')
 
 if __name__=='__main__':unittest.main()
+
+
+class PlayerRouteTests(unittest.TestCase):
+    def test_speak_sentence_uses_the_persistent_player_when_present_and_notes_first_audio(self):
+        from julius_audio_player import SpeechPlayer
+        tree=ast.parse(Path('julius_candidate.py').read_text())
+        fn=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='speak_sentence')
+        engine=Mock();engine.backend='qwen-mlx'
+        def generate():
+            yield np.zeros(2400,dtype=np.float32),24000;yield np.ones(2400,dtype=np.float32),24000
+        engine.synthesize.return_value=generate()
+        stream=Mock();stream.write.return_value=False;sd=Mock();sd.OutputStream.return_value=stream
+        player=SpeechPlayer(sd,idle_seconds=60,log=lambda *a,**k:None)
+        scope={'tts':engine,'sd':sd,'SPEED':1.05,'clean_for_speech':lambda x:x,'_validation_no_devices':False,'speech_player':player,'_response_started':1.0,'_first_audio_at':None}
+        exec(compile(ast.Module(body=[fn],type_ignores=[]),'speech','exec'),scope)
+        scope['speak_sentence']('Hello.')
+        sd.OutputStream.assert_called_once();self.assertEqual(stream.write.call_count,3);self.assertIsNotNone(scope['_first_audio_at']);player.close()
