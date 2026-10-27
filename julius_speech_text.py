@@ -35,6 +35,18 @@ ABBREVIATIONS = [
 ]
 
 
+# Speech-recognition names Whisper spells wrongly on every model tried (diagnostics/asr_real): fixed after transcription, not by prompting the model.
+TRANSCRIPT_FIXES = [(re.compile(r"\b(?:prize|price)[ -]?pic(?:k|ks|s)\b", re.I), "AcmeCorp"),
+                    (re.compile(r"\bN\.\s?H\.\s?L\.?", re.I), "NHL"), (re.compile(r"\bN\.\s?F\.\s?L\.?", re.I), "NFL")]
+
+
+def fix_transcript(text):
+    """Correct known product names and acronyms in recognised text (AcmeCorp, NHL, NFL)."""
+    for pattern, replacement in TRANSCRIPT_FIXES:
+        text = pattern.sub(replacement, text)
+    return text
+
+
 def number_words(n):
     """0-99 in words (used for clock times)."""
     if n < 20:

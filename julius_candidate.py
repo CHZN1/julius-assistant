@@ -14,7 +14,7 @@ if os.environ.get("JULIUS_BACKEND", "ollama") == "ollama":
     os.environ.setdefault("JULIUS_MODEL", "qwen3:4b-instruct-2507-q4_K_M")
 from julius_backend import llm_chat, close_backend, keep_brain_loaded, LLM_BACKEND, LLM, KEEP_ALIVE, release_metrics, prepare_backend, generation_metrics, _offline_chat
 from julius_intents import LiveIntentRouter
-from julius_speech_text import normalize_for_speech, speakable, SPOKEN_STYLE_PROMPT, TOOL_POLICY_PROMPT, BREVITY_PROMPT, EXACT_REQUEST
+from julius_speech_text import normalize_for_speech, speakable, fix_transcript, SPOKEN_STYLE_PROMPT, TOOL_POLICY_PROMPT, BREVITY_PROMPT, EXACT_REQUEST
 import julius_memory as jm
 import julius_tools as jt
 import julius_files as jf
@@ -46,7 +46,11 @@ def microphone_stream():
 TURN    = {"n": 0}
 
 SR, CHUNK    = 16000, 1024
-ASR          = os.environ.get("JULIUS_ASR_MODEL", "mlx-community/whisper-large-v3-turbo")  # e.g. mlx-community/whisper-small.en-mlx (4x faster, see diagnostics/asr_model_benchmark_output.txt)
+# Speech recognition: small.en is the default (0 meaningful errors on 20 of your recorded phrases, 0.27 s each; diagnostics/asr_real/results.json).
+# Select another with JULIUS_ASR_MODEL=distil-large-v3 | large-v3-turbo, or any mlx-whisper repo id.
+ASR_MODELS   = {"small.en": "mlx-community/whisper-small.en-mlx", "distil-large-v3": "mlx-community/distil-whisper-large-v3",
+                "large-v3-turbo": "mlx-community/whisper-large-v3-turbo"}
+ASR          = ASR_MODELS.get(os.environ.get("JULIUS_ASR_MODEL", "small.en"), os.environ.get("JULIUS_ASR_MODEL", "small.en"))
 intent_router = LiveIntentRouter()
 VOICE, SPEED = "am_adam", 1.05
 WAKE         = ["julius", "juliet", "hey julius"]
@@ -518,7 +522,10 @@ def transcribe(a):
     globals()['_last_asr_confidence']={'no_speech_probability':nsp,
         'segment_log_probabilities':[segment.get('avg_logprob') for segment in r.get('segments',[])],
         'segment_temperatures':[segment.get('temperature') for segment in r.get('segments',[])]}
-    return r["text"].strip(), r.get("language", "?"), nsp
+    text = r["text"].strip()
+    if globals().get("fix_transcript"):
+        text = fix_transcript(text)  # AcmeCorp, NHL, NFL
+    return text, r.get("language", "?"), nsp
 
 
 def transcribe_input(audio):

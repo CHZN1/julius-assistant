@@ -35,4 +35,18 @@ class EscalationHintTests(unittest.TestCase):
         for text in ['Organize my downloads by file type','Plan my week around the game','Research the best way to learn Rust and then summarize it','Compare these two models for me']:
             self.assertTrue(hint.search(text),text)
         for text in ['How are you doing?','What is overfitting?','Tell me a joke']:self.assertFalse(hint.search(text),text)
+class AsrModelChoiceTests(unittest.TestCase):
+    def asr_for(self,value):
+        import ast
+        src=ast.parse(Path('julius_candidate.py').read_text());ns={'os':os}
+        for node in src.body:
+            if isinstance(node,ast.Assign) and any(isinstance(t,ast.Name) and t.id in ('ASR_MODELS','ASR') for t in node.targets):
+                exec(compile(ast.Module(body=[node],type_ignores=[]),'<c>','exec'),ns)
+        return ns['ASR']
+    def test_small_en_is_the_default_and_the_others_stay_selectable(self):
+        with patch.dict(os.environ,{},clear=False):
+            os.environ.pop('JULIUS_ASR_MODEL',None);self.assertEqual(self.asr_for(None),'mlx-community/whisper-small.en-mlx')
+        for alias,repo in [('distil-large-v3','mlx-community/distil-whisper-large-v3'),('large-v3-turbo','mlx-community/whisper-large-v3-turbo'),('small.en','mlx-community/whisper-small.en-mlx')]:
+            with patch.dict(os.environ,{'JULIUS_ASR_MODEL':alias}):self.assertEqual(self.asr_for(alias),repo)
+        with patch.dict(os.environ,{'JULIUS_ASR_MODEL':'someone/whisper-custom'}):self.assertEqual(self.asr_for('x'),'someone/whisper-custom')
 if __name__=='__main__':unittest.main()

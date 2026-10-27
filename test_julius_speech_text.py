@@ -37,6 +37,17 @@ class NormalizeTests(unittest.TestCase):
                 exec(compile(ast.Module(body=[node],type_ignores=[]),'<c>','exec'),ns)
         clean=ns['clean_for_speech']
         self.assertEqual(clean("It's 77°F and clear."),"It's 77 degrees and clear.");self.assertIn('A.I.',clean('The AI said 17% 🎉'));self.assertIn('17 percent',clean('The AI said 17% 🎉'))
+class TranscriptFixTests(unittest.TestCase):
+    def test_known_names_and_acronyms_are_repaired(self):
+        from julius_speech_text import fix_transcript as fix
+        self.assertEqual(fix("What's the best prize pick slip for tonight?"),"What's the best AcmeCorp slip for tonight?")
+        self.assertEqual(fix('I checked the price picks line and the Prize Picks app'),'I checked the AcmeCorp line and the AcmeCorp app')
+        self.assertEqual(fix('Who won the N.H.L. game and the N. F. L. game?'),'Who won the NHL game and the NFL game?')
+    def test_ordinary_text_is_untouched(self):
+        from julius_speech_text import fix_transcript as fix
+        for text in ['Explain overfitting simply.','What is the price of Bitcoin?','Pick a prize for the winner.',"What's 17% of 2,480?"]:self.assertEqual(fix(text),text)
+    def test_runtime_applies_the_fix_to_every_transcription(self):
+        self.assertIn('text = fix_transcript(text)',Path('julius_candidate.py').read_text())
 class SpeakableTests(unittest.TestCase):
     def test_weather(self):
         self.assertEqual(speakable('get_weather','Springfield: 76°F, clear, feels like 76. High 77, low 50.'),"It's 76 degrees and clear in Springfield, with a high of 77 and a low of 50.")
