@@ -37,6 +37,7 @@ ABBREVIATIONS = [
 
 # Speech-recognition names Whisper spells wrongly on every model tried (diagnostics/asr_real): fixed after transcription, not by prompting the model.
 TRANSCRIPT_FIXES = [(re.compile(r"\b(?:prize|price)[ -]?pic(?:k|ks|s)\b", re.I), "AcmeCorp"),
+                    (re.compile(r"\b(?:eath|eeth|e\.\s?t\.\s?h\.?)(?=\W|$)", re.I), "ETH"),  # small.en heard "ETH" as "eath"
                     (re.compile(r"\bN\.\s?H\.\s?L\.?", re.I), "NHL"), (re.compile(r"\bN\.\s?F\.\s?L\.?", re.I), "NFL")]
 
 

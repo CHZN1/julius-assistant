@@ -70,6 +70,9 @@ class LiveIntentRouter:
             if other and fn == 'get_quote' and other.group(1).lower() not in {'tomorrow', 'today', 'yesterday', 'that', 'this', 'it'}:
                 name = other.group(1)
                 return 'get_quote', {'symbol': CRYPTO_NAMES.get(name.lower(), name.upper())}
+            # "and tomorrow" / "tomorrow?" after a weather answer
+            if fn in ('get_weather', 'get_forecast') and re.fullmatch(r'(?:and |what about |how about )?tomorrow(?: in .+)?', t_and, re.I):
+                return 'get_forecast', {'location': location or args.get('location', 'Springfield, Illinois'), 'days': 2}
             if fn in ('get_weather', 'get_forecast') and re.fullmatch(r'is that for .+', t, re.I):
                 return fn, dict(args, location=re.fullmatch(r'is that for (.+)', t, re.I).group(1))
             if fn == 'get_datetime' and re.search(r'how many hours (?:ahead|behind)', low):

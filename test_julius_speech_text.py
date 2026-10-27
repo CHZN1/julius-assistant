@@ -43,9 +43,10 @@ class TranscriptFixTests(unittest.TestCase):
         self.assertEqual(fix("What's the best prize pick slip for tonight?"),"What's the best AcmeCorp slip for tonight?")
         self.assertEqual(fix('I checked the price picks line and the Prize Picks app'),'I checked the AcmeCorp line and the AcmeCorp app')
         self.assertEqual(fix('Who won the N.H.L. game and the N. F. L. game?'),'Who won the NHL game and the NFL game?')
+        self.assertEqual(fix("What's their eath at right now?"),"What's their ETH at right now?");self.assertEqual(fix('the E.T.H. price'),'the ETH price')
     def test_ordinary_text_is_untouched(self):
         from julius_speech_text import fix_transcript as fix
-        for text in ['Explain overfitting simply.','What is the price of Bitcoin?','Pick a prize for the winner.',"What's 17% of 2,480?"]:self.assertEqual(fix(text),text)
+        for text in ['Explain overfitting simply.','What is the price of Bitcoin?','Pick a prize for the winner.',"What's 17% of 2,480?",'Both teeth hurt, and Beth left','Seth and Heath came']:self.assertEqual(fix(text),text)
     def test_runtime_applies_the_fix_to_every_transcription(self):
         self.assertIn('text = fix_transcript(text)',Path('julius_candidate.py').read_text())
 class SpeakableTests(unittest.TestCase):

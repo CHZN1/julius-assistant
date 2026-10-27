@@ -21,6 +21,11 @@ class RouterFollowUpTests(unittest.TestCase):
     def test_what_about_tomorrow_after_weather_with_and_without_the_prefix(self):
         for text in ['what about tomorrow?','Julius, what about tomorrow?','Hey Julius, what about tomorrow','Thanks, Julius. What about tomorrow?']:
             self.assertEqual(weather_router().resolve(text),('get_forecast',{'location':'Springfield, Illinois','days':2}),text)
+    def test_bare_tomorrow_after_weather_routes_to_the_forecast(self):
+        for text in ['and tomorrow','tomorrow?','Julius, and tomorrow','how about tomorrow','and tomorrow in Shelbyville']:
+            want=('get_forecast',{'location':'Shelbyville' if text.endswith('Shelbyville') else 'Springfield, Illinois','days':2})
+            self.assertEqual(weather_router().resolve(text),want,text)
+        self.assertIsNone(LiveIntentRouter().resolve('and tomorrow'))
     def test_and_in_another_place_repeats_the_last_lookup_there(self):
         for text in ['and in Shelbyville?','Julius, and in Shelbyville?','what about in Shelbyville?','and for Shelbyville']:
             self.assertEqual(weather_router().resolve(text),('get_weather',{'location':'Shelbyville'}),text)
