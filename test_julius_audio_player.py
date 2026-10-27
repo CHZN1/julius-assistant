@@ -23,7 +23,7 @@ def chunks(n,rate=24000,size=7680,pulled=None):
         if pulled is not None:pulled.append(i)
         yield np.full(size,0.1,dtype=np.float32),rate
 def player(sd,**kw):
-    kw.setdefault('idle_seconds',60);logged=[];p=SpeechPlayer(sd,log=lambda m,**k:logged.append(m),**kw);p.logged=logged;return p
+    kw.setdefault('idle_seconds',60);kw.setdefault('sleep',lambda s:None);logged=[];p=SpeechPlayer(sd,log=lambda m,**k:logged.append(m),**kw);p.logged=logged;return p
 class PlayerTests(unittest.TestCase):
     def test_playback_starts_only_after_one_extra_chunk_has_arrived(self):
         sd=FakeSD();p=player(sd);pulled=[]
@@ -48,6 +48,33 @@ class PlayerTests(unittest.TestCase):
         sd=FakeSD(underflow_at={3});p=player(sd);stats=p.play(chunks(6))
         self.assertEqual(stats['underflows'],1);events=p.pop_events();self.assertEqual(events[0]['chunk'],3);self.assertEqual(p.pop_events(),[])
         self.assertTrue(any('audio underflow at chunk 3' in m for m in p.logged));self.assertEqual(p.total_underflows,1);p.close()
+    def test_play_returns_only_after_the_queued_audio_has_been_heard(self):
+        # 3 chunks of 0.32 s written instantly: the microphone gate must not reopen until about 0.96 s + tail have played
+        sd=FakeSD();now=[100.0];slept=[]
+        p=player(sd,clock=lambda:now[0],sleep=lambda s:slept.append(s));p.play(chunks(3))
+        self.assertAlmostEqual(slept[0],3*7680/24000+0.02+0.05,places=3);p.close()
+    def test_time_already_spent_playing_is_not_waited_twice(self):
+        sd=FakeSD();now=[100.0];slept=[]
+        def gen():
+            for i in range(3):
+                now[0]+=0.3;yield np.zeros(7680,dtype=np.float32),24000   # each chunk takes 0.3 s to arrive, as in real generation
+        p=player(sd,clock=lambda:now[0],sleep=lambda s:slept.append(s));p.play(gen())
+        # playback began after the second chunk (t=100.6); by the third chunk's arrival (100.9) 0.3 s had played of 0.98 s queued
+        self.assertAlmostEqual(slept[0],3*7680/24000+0.02-0.3+0.05,places=3);p.close()
+    def test_nothing_is_waited_when_the_audio_has_already_finished(self):
+        sd=FakeSD();now=[100.0];slept=[]
+        def gen():
+            yield np.zeros(2400,dtype=np.float32),24000;now[0]+=5.0;yield np.zeros(2400,dtype=np.float32),24000
+        p=player(sd,prefill_chunks=0,clock=lambda:now[0],sleep=lambda s:slept.append(s));p.play(gen());self.assertEqual(slept,[]);p.close()
+    def test_an_underflow_adds_a_safety_margin_to_the_drain(self):
+        sd=FakeSD(underflow_at={2});now=[100.0];slept=[]
+        p=player(sd,clock=lambda:now[0],sleep=lambda s:slept.append(s));p.play(chunks(3))
+        self.assertAlmostEqual(slept[0],3*7680/24000+0.02+0.05+0.15,places=3);p.close()
+    def test_cancelling_does_not_wait_for_the_drain(self):
+        sd=FakeSD();slept=[];p=player(sd,sleep=lambda s:slept.append(s))
+        def cancel():raise KeyboardInterrupt
+        with self.assertRaises(KeyboardInterrupt):p.play(chunks(6),cancel_check=cancel)
+        self.assertEqual(slept,[])
     def test_on_start_runs_right_before_the_first_audio_is_written(self):
         sd=FakeSD();p=player(sd);seen=[]
         p.play(chunks(3),on_start=lambda:seen.append(len(sd.streams[0].writes)));self.assertEqual(seen,[0]);p.close()

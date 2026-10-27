@@ -10,9 +10,10 @@ import numpy as np
 
 
 class SpeechPlayer:
-    def __init__(self, sd, prefill_chunks=1, latency=0.4, idle_seconds=1.5, max_prefill=4, tail_seconds=0.02, clock=time.perf_counter, log=print):
+    def __init__(self, sd, prefill_chunks=1, latency=0.4, idle_seconds=1.5, max_prefill=4, tail_seconds=0.02, clock=time.perf_counter, log=print, sleep=time.sleep, drain_margin=0.05):
         self.sd, self.base_prefill, self.latency, self.idle_seconds, self.max_prefill = sd, prefill_chunks, latency, idle_seconds, max_prefill
         self.tail_seconds, self.clock, self.log = tail_seconds, clock, log
+        self.sleep, self.drain_margin = sleep, drain_margin
         self.prefill_chunks = prefill_chunks
         self.stream = None
         self.rate = None
@@ -75,10 +76,10 @@ class SpeechPlayer:
             stream = self._open(rate)
             if on_start is not None:
                 on_start()  # first audio is about to be written
-            started, sentence_underflows, written = self.clock(), 0, 0
+            started, sentence_underflows, written, seconds_written = self.clock(), 0, 0, 0.0
             try:
                 def put(audio, sample_rate, index):
-                    nonlocal sentence_underflows, written
+                    nonlocal sentence_underflows, written, seconds_written
                     if sample_rate != rate:
                         raise RuntimeError("Speech sample rate changed")
                     flagged = stream.write(np.ascontiguousarray(audio, dtype=np.float32).reshape(-1, 1))
@@ -88,6 +89,7 @@ class SpeechPlayer:
                         self.events.append(event)
                         self.log(f"  [audio underflow at chunk {index}, {event['at_seconds']} s into the sentence]", flush=True)
                     written += 1
+                    seconds_written += len(audio) / sample_rate
                 for index, (audio, sample_rate) in enumerate(held):
                     put(audio, sample_rate, index)
                 for audio, sample_rate in it:
@@ -95,6 +97,12 @@ class SpeechPlayer:
                         cancel_check()
                     put(audio, sample_rate, written)
                 stream.write(np.zeros((int(self.tail_seconds * rate), 1), dtype=np.float32))  # clean end: the stream stays open on silence
+                seconds_written += self.tail_seconds
+                # write() returns once audio is queued, not once it has been heard. Wait for the queue to play out so the microphone
+                # gate does not reopen while Julius is still speaking (it would transcribe its own voice).
+                remaining = started + seconds_written - self.clock() + self.drain_margin + (0.15 if sentence_underflows else 0.0)
+                if remaining > 0:
+                    self.sleep(remaining)
             except BaseException:
                 self._close_stream(abort=True)  # cancelled or failed: stop now, reopen on the next sentence
                 raise
