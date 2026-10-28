@@ -326,7 +326,9 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
         user_text = f"{user_text}\n\n[you can see: {vision_line}]"
 
     msgs = list(history) + [{"role": "user", "content": user_text}]
-    hinted = tool_carry or TOOL_HINT.search(user_text) or (globals().get('cloud_brain') is not None and globals().get('ESCALATE_HINT') is not None and ESCALATE_HINT.search(user_text))
+    # The cloud brain gets the full tool list on every turn: keyword hints can miss a garbled or oblique request
+    # ("what's their eath at right now?"), and a text-only turn costs the same single call. Local models keep the hints.
+    hinted = tool_carry or TOOL_HINT.search(user_text) or globals().get('cloud_brain') is not None
     if not hinted and not nudge and not vision_line:
         # Read/action requests retain full capability rules. Simple conversation
         # gets a focused prompt rather than the entire tool catalogue/persona.

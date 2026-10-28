@@ -26,8 +26,15 @@ class CallCountTests(unittest.TestCase):
     def test_router_shortcut_makes_no_model_call(self):
         calls,spoken,_=turn("What's 17% of 2480?",[]);self.assertEqual(calls,[])
         calls,_,_=turn("What's the weather in Springfield?",[],out=WEATHER);self.assertEqual(calls,[])
-    def test_plain_chat_is_one_streamed_call(self):
-        calls,spoken,_=turn('How are you doing today?',[]);self.assertEqual(calls,[True]);self.assertEqual(spoken,['Spoken summary.'])
+    def test_plain_chat_is_one_streamed_call_locally_and_one_tool_enabled_call_in_the_cloud(self):
+        calls,spoken,_=turn('How are you doing today?',[],cloud=False);self.assertEqual(calls,[True]);self.assertEqual(spoken,['Spoken summary.'])
+        calls,spoken,_=turn('How are you doing today?',[text('Doing well, thanks.')]);self.assertEqual(calls,[False]);self.assertEqual(spoken,['Doing well, thanks.'])
+    def test_cloud_offers_the_price_tool_on_a_price_question_with_no_price_keywords(self):
+        for phrase in ("What's their eath at right now?","how's it looking over there","and what about that one"):
+            ns=load_candidate_turn();ns['cloud_brain']=object();seen=[]
+            ns['llm_chat']=lambda **kw:seen.append(kw.get('tools')) or text('Ethereum is around 2,300 dollars.')
+            ns['ask_streaming'](phrase,'',speak_fn=lambda t:None)
+            names={t['function']['name'] for t in seen[0]};self.assertIn('get_quote',names,phrase)
     def test_simple_lookup_through_the_model_is_one_call_and_a_ready_sentence(self):
         for name,args,out in [('get_weather',{'location':'Springfield'},WEATHER),('get_quote',{'symbol':'ETH'},'Ethereum USD (ETH-USD): 2,309.82 USD, down 17.05 (0.73%) versus previous close.'),('calculate',{'expression':'2+2'},'2+2 = 4')]:
             calls,spoken,result=turn('Is it cold outside in Springfield?',[tool_call((name,args))],out=out)
