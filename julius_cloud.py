@@ -218,6 +218,11 @@ class CloudBrain:
                         for text in stream.text_stream:
                             first = False
                             yield SimpleNamespace(message=SimpleNamespace(content=text))
+                        final = stream.get_final_message()  # a tool_use block arrives only once the reply is complete
+                        tool_calls = [SimpleNamespace(function=SimpleNamespace(name=b.name, arguments=dict(b.input)))
+                                      for b in final.content if getattr(b, "type", "") == "tool_use"]
+                        if tool_calls:
+                            yield SimpleNamespace(message=SimpleNamespace(content="", tool_calls=tool_calls))
                     finally:
                         snapshot = getattr(stream, "current_message_snapshot", None)
                         if snapshot is not None and getattr(snapshot, "usage", None) is not None:

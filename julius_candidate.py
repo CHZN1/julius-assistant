@@ -362,28 +362,72 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
             if before_inference: before_inference()
             prepared = True
 
+    stream_calls = []
+    stalled = False
+    def _stream(messages, allow_retry=True, tools=None):
+        prepare_inference()
+        print("\r  JULIUS: ", end="", flush=True)
+        full, pend, spoken = "", "", 0
+        stream_calls.clear()
+        kw = {"tools": tools} if tools is not None else {}
+        parts=llm_chat(messages=messages, think=False, stream=True, **kw,
+                             options={"temperature": 0.4, "num_predict": 160})
+        try:
+            for part in parts:
+                if globals().get('cancellation'):cancellation.check()
+                stream_calls.extend(getattr(part.message, 'tool_calls', None) or [])
+                tok = part.message.content or ""
+                if tok and globals().get('_first_token_at') is None:
+                    import time
+                    globals()['_first_token_at'] = time.perf_counter()
+                full += tok
+                pend += tok
+                if allow_retry and spoken == 0 and not stream_calls and STALL.search(full):
+                    return None                      # abort before anything is spoken
+                while True:
+                    mt = re.search(r'[.!?…\n](\s|$)', pend)
+                    if not mt:
+                        break
+                    sent, pend = pend[:mt.end()].strip(), pend[mt.end():]
+                    if len(sent) > 2:
+                        spoken += 1
+                        print(sent, end=" ", flush=True)     # print BEFORE speaking
+                        if speak_fn and (not long_tool_result or spoken <= 2):
+                            speak_fn(sent)
+        finally:
+            closer=getattr(parts,'close',None)
+            if callable(closer):closer()
+        if pend.strip():
+            print(pend.strip(), end="", flush=True)
+            if speak_fn and (not long_tool_result or spoken < 2):
+                speak_fn(pend.strip())
+        print("\n", flush=True)
+        return full
+
     # tool phase — skipped when no tool could plausibly apply (~40% of turns)
     if (not forced_current_time) and hinted:
         for _ in range(1):  # one tool round: a turn that needs the model summary is exactly two calls (tool call, then the spoken answer)
             prepare_inference()
-            r = llm_chat(messages=msgs, tools=jt.select_schemas(user_text), think=False,
-                         options={"temperature": 0.0, "num_predict": 256})
-            m = r.message
+            if globals().get('cloud_brain') is not None:
+                # Stream the reply with tools attached: text reaches TTS sentence by sentence, and a tool_use block ends it.
+                text = _stream(msgs, tools=jt.select_schemas(user_text))
+                if text is None:
+                    stalled = True
+                    break
+                from types import SimpleNamespace
+                m = SimpleNamespace(content=text, tool_calls=list(stream_calls))
+                if not m.tool_calls:
+                    return text
+            else:
+                r = llm_chat(messages=msgs, tools=jt.select_schemas(user_text), think=False,
+                             options={"temperature": 0.0, "num_predict": 256})
+                m = r.message
             calls = m.tool_calls or []
             unique = {}
             for c in calls:  # the model sometimes repeats an identical call in one turn; run each distinct call once
                 unique.setdefault((c.function.name, repr(sorted(dict(c.function.arguments).items()))), c)
             calls = list(unique.values())
             if not calls:
-                text = (m.content or "").strip()
-                if text and globals().get('cloud_brain') is not None and not STALL.search(text):
-                    # Stable knowledge or chit-chat: the answer is already here, no second model call.
-                    sentences = [x.strip() for x in re.split(r'(?<=[.!?…])\s+', text) if len(x.strip()) > 2]
-                    print("\r  JULIUS: " + " ".join(sentences), flush=True)
-                    if speak_fn:
-                        for sentence in sentences:
-                            speak_fn(sentence)
-                    return text
                 break
             msgs.append({"role": "assistant", "content": m.content or "",
                          "tool_calls": [{"function": {"name": c.function.name,
@@ -423,44 +467,7 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
                 ),
             })
 
-    def _stream(messages, allow_retry=True):
-        prepare_inference()
-        print("\r  JULIUS: ", end="", flush=True)
-        full, pend, spoken = "", "", 0
-        parts=llm_chat(messages=messages, think=False, stream=True,
-                             options={"temperature": 0.4, "num_predict": 160})
-        try:
-            for part in parts:
-                if globals().get('cancellation'):cancellation.check()
-                tok = part.message.content or ""
-                if tok and globals().get('_first_token_at') is None:
-                    import time
-                    globals()['_first_token_at'] = time.perf_counter()
-                full += tok
-                pend += tok
-                if allow_retry and spoken == 0 and STALL.search(full):
-                    return None                      # abort before anything is spoken
-                while True:
-                    mt = re.search(r'[.!?…\n](\s|$)', pend)
-                    if not mt:
-                        break
-                    sent, pend = pend[:mt.end()].strip(), pend[mt.end():]
-                    if len(sent) > 2:
-                        spoken += 1
-                        print(sent, end=" ", flush=True)     # print BEFORE speaking
-                        if speak_fn and (not long_tool_result or spoken <= 2):
-                            speak_fn(sent)
-        finally:
-            closer=getattr(parts,'close',None)
-            if callable(closer):closer()
-        if pend.strip():
-            print(pend.strip(), end="", flush=True)
-            if speak_fn and (not long_tool_result or spoken < 2):
-                speak_fn(pend.strip())
-        print("\n", flush=True)
-        return full
-
-    out = _stream(msgs)
+    out = None if stalled else _stream(msgs)
 
     if out is None:
         print("\r  [stall detected — forcing tool use]        ", flush=True)

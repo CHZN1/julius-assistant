@@ -80,6 +80,7 @@ class SpeakableTests(unittest.TestCase):
             said=n(speakable(fn,out,args));self.assertIsNotNone(said);self.assertFalse(re.search(r'[°%$:]|\d\.\d',said),said)
     def test_other_tools_and_unparseable_output_fall_back_to_the_model(self):
         for fn,out in [('list_files','a\nb'),('read_file','text'),('get_weather',"Couldn't find Nowhere."),('get_quote','No data for XYZ.'),('calculate','not an equation')]:self.assertIsNone(speakable(fn,out),fn)
+from test_julius_call_counts import as_parts
 class OneRoundTripTests(unittest.TestCase):
     def no_call(self):return SimpleNamespace(message=SimpleNamespace(content='',tool_calls=None))
     def tool_call(self,name,**args):return SimpleNamespace(message=SimpleNamespace(content='',tool_calls=[SimpleNamespace(function=SimpleNamespace(name=name,arguments=args))]))
@@ -87,9 +88,9 @@ class OneRoundTripTests(unittest.TestCase):
         ns=load_candidate_turn();ns['speakable']=speakable;ns['EXACT_REQUEST']=EXACT_REQUEST;ns['cloud_brain']=object() if cloud else None;calls=[];spoken=[]
         def llm(**kw):
             calls.append(kw)
-            if kw.get('stream'):return iter([SimpleNamespace(message=SimpleNamespace(content='Second call answer.'))])
-            if isinstance(tool_phase,list):return tool_phase.pop(0) if len(tool_phase)>1 else tool_phase[0]
-            return tool_phase
+            if kw.get('stream') and 'tools' not in kw:return iter([SimpleNamespace(message=SimpleNamespace(content='Second call answer.'))])
+            r=(tool_phase.pop(0) if len(tool_phase)>1 else tool_phase[0]) if isinstance(tool_phase,list) else tool_phase
+            return as_parts(r) if kw.get('stream') else r
         ns['llm_chat']=llm
         with patch.object(jt,'call',return_value=out):
             jt.dispatcher().last_result={'ok':True}
@@ -98,7 +99,7 @@ class OneRoundTripTests(unittest.TestCase):
     def test_a_simple_tool_is_one_model_call_and_a_ready_sentence(self):
         weather='Springfield: 76°F, clear, feels like 76. High 77, low 50.'
         result,spoken,calls=self.run_turn('Is it cold outside in Springfield?',self.tool_call('get_weather',location='Springfield'),cloud=True,out=weather)
-        self.assertEqual(len(calls),1);self.assertFalse(calls[0].get('stream'));self.assertEqual(spoken,[result]);self.assertTrue(result.startswith("It's 76 degrees"))
+        self.assertEqual(len(calls),1);self.assertTrue(calls[0].get('stream'));self.assertEqual(spoken,[result]);self.assertTrue(result.startswith("It's 76 degrees"))
     def test_a_model_price_lookup_is_rounded_unless_the_exact_price_is_asked_for(self):
         eth='Ethereum USD (ETH-USD): 2,304.98 USD, down 21.00 (0.94%) versus previous close.'
         result,spoken,calls=self.run_turn('what is ETH trading at right now?',self.tool_call('get_quote',symbol='ETH'),cloud=True,out=eth)
@@ -110,14 +111,14 @@ class OneRoundTripTests(unittest.TestCase):
         self.assertEqual(len(calls),1)
     def test_tools_whose_output_needs_interpreting_keep_the_two_call_path(self):
         result,spoken,calls=self.run_turn('List the files in my Downloads folder',[self.tool_call('list_files',directory='Downloads'),self.no_call()],cloud=True,out='a.txt\nb.txt')
-        self.assertTrue(any(c.get('stream') for c in calls));self.assertEqual(result,'Second call answer.')
+        self.assertEqual(len(calls),2);self.assertEqual(result,'Second call answer.')
     def test_several_tool_calls_in_one_turn_still_get_a_model_summary(self):
         two=SimpleNamespace(message=SimpleNamespace(content='',tool_calls=[SimpleNamespace(function=SimpleNamespace(name='get_weather',arguments={'location':'A'})),SimpleNamespace(function=SimpleNamespace(name='get_weather',arguments={'location':'B'}))]))
         result,spoken,calls=self.run_turn('What is the weather in A and B?',[two,self.no_call()],cloud=True,out='Springfield: 76°F, clear, feels like 76. High 77, low 50.')
-        self.assertTrue(any(c.get('stream') for c in calls))
+        self.assertEqual(len(calls),2)
     def test_no_tool_text_answer_is_spoken_sentence_by_sentence_with_one_call(self):
         ns=load_candidate_turn();ns['cloud_brain']=object();ns['_tool_carry_next']=True;spoken=[];calls=[]
-        ns['llm_chat']=lambda **kw:calls.append(kw) or SimpleNamespace(message=SimpleNamespace(content='Overfitting is when a model memorizes its training data. It then fails on new data.',tool_calls=None))
+        ns['llm_chat']=lambda **kw:calls.append(kw) or as_parts(SimpleNamespace(message=SimpleNamespace(content='Overfitting is when a model memorizes its training data. It then fails on new data.',tool_calls=None)))
         result=ns['ask_streaming']('explain overfitting simply','',speak_fn=spoken.append)
         self.assertEqual(len(calls),1);self.assertEqual(spoken,['Overfitting is when a model memorizes its training data.','It then fails on new data.'])
     def test_local_brain_keeps_its_streamed_second_call_for_text_answers(self):

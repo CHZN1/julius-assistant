@@ -16,6 +16,7 @@ class FakeStream:
     def __init__(self,texts,u,boom=None):self.texts,self.u,self.boom=texts,u,boom;self.current_message_snapshot=SimpleNamespace(usage=u)
     def __enter__(self):return self
     def __exit__(self,*a):return False
+    def get_final_message(self):return SimpleNamespace(content=[block('text',text=''.join(self.texts))]+list(getattr(self,'tool_blocks',[])))
     @property
     def text_stream(self):
         if self.boom:raise self.boom
@@ -98,6 +99,13 @@ class ResponseTests(unittest.TestCase):
  def test_closing_a_stream_early_still_records_usage(self):
   b=brain(FakeMessages(stream=FakeStream(['a','b','c'],usage())));gen=b.chat(MSGS,stream=True);next(gen);gen.close()
   self.assertGreater(b.tracker.today_total(),0)
+
+class StreamedToolUseTests(unittest.TestCase):
+ def test_a_tool_use_block_is_yielded_as_a_final_tool_calls_part(self):
+  fs=FakeStream(['Checking. '],usage());fs.tool_blocks=[block('tool_use',name='get_quote',input={'symbol':'ETH'})]
+  parts=list(brain(FakeMessages(stream=fs)).chat(MSGS,stream=True))
+  self.assertEqual(parts[0].message.content,'Checking. ');call=parts[-1].message.tool_calls[0].function
+  self.assertEqual((call.name,call.arguments),('get_quote',{'symbol':'ETH'}))
 
 class FailureTests(unittest.TestCase):
  def test_auth_error_is_spoken_not_hidden_and_disables_cloud(self):
