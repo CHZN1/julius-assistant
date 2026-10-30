@@ -297,6 +297,35 @@ def read_document(path, query=None):
 REGISTRY['read_document']=read_document
 SCHEMAS.append(_utility_schema('read_document','Extract bounded PDF/DOCX/UTF-8 text with page/paragraph/line citations, or search an exact phrase. No OCR; report partial extraction and unsupported formats honestly. File scope is Documents/Desktop/Downloads.',{'path':'string','query':'string'},['path']))
 
+_reminders = None
+
+def reminders():
+    global _reminders
+    if _reminders is None:
+        import os, julius_orchestrator
+        from julius_apple import AppleProvider
+        from julius_reminders import ReminderService
+        from julius_utility_session import UtilitySession
+        session = UtilitySession(planner(), os.environ.get("JULIUS_TIMEZONE", "America/Los_Angeles"), AppleProvider(planner()))
+        _reminders = ReminderService(session, lambda: julius_orchestrator._STATE["user_text"])
+    return _reminders
+
+def set_reminder(title, when):
+    return reminders().set(title, when)
+
+def list_reminders():
+    return reminders().list()
+
+def cancel_reminder(title):
+    return reminders().cancel(title)
+
+REGISTRY.update(set_reminder=set_reminder, list_reminders=list_reminders, cancel_reminder=cancel_reminder)
+SCHEMAS += [
+    _utility_schema('set_reminder', "Set a reminder when the person asks to be reminded. 'title' is what to remind them of, e.g. 'call mom'. 'when' is their own time phrase: 'at 3:45 PM', 'tomorrow morning', 'in 20 minutes', 'friday at 9am'. The result is a sentence to speak back.", {'title': 'string', 'when': 'string'}, ['title', 'when']),
+    _utility_schema('list_reminders', 'List active reminders with their times.', {}, []),
+    _utility_schema('cancel_reminder', "Cancel an active reminder by its title when the person asks to cancel or delete it.", {'title': 'string'}, ['title']),
+]
+
 _dispatcher = None
 
 def dispatcher():
@@ -331,7 +360,7 @@ _SCHEMA_GROUPS = (
     (r"\bread\b|\bopen\b|contents|\bfile\b", ("read_file",)),
     (r"\bfind\b|where|locate|named|search for", ("find_files",)),
     (r"document|\bpdf\b|\bdocx?\b", ("read_document", "read_file")),
-    (r"remind|\btasks?\b|calendar|\bevents?\b|to-?do|schedule", ("list_planner_items",)),
+    (r"remind|\btimer\b|\balarm\b|\btasks?\b|calendar|\bevents?\b|to-?do|schedule", ("list_planner_items", "set_reminder", "list_reminders", "cancel_reminder")),
 )
 
 

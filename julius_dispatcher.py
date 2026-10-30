@@ -11,7 +11,7 @@ import time
 import uuid
 
 OWNERS = {
-    'read_document':'documents', 'list_planner_items':'planning', 'convert_units':'calculator', 'date_calculate':'time',
+    'read_document':'documents', 'list_planner_items':'planning', 'set_reminder':'reminders', 'list_reminders':'reminders', 'cancel_reminder':'reminders', 'convert_units':'calculator', 'date_calculate':'time',
     'get_datetime': 'time', 'get_weather': 'weather', 'get_forecast': 'weather',
     'get_scores': 'sports', 'get_quote': 'markets', 'calculate': 'calculator',
     'web_search': 'research', 'get_news': 'news',

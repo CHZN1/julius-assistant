@@ -203,6 +203,8 @@ def speakable(fn, out, args=None, exact=False):
             return _calculate(out)
         if fn == "get_quote":
             return _quote(out, exact)
+        if fn in ("set_reminder", "cancel_reminder"):
+            return out.split("\n")[0] if out.startswith("Okay") else None  # already a spoken confirmation
     except (ValueError, IndexError):
         return None
     return None
