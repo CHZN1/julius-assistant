@@ -8,10 +8,9 @@ import atexit
 from collections import deque
 from types import SimpleNamespace
 from julius_tts import SpeechEngine
-# Direct script launch uses the same tested voice-first defaults as the launcher.
-os.environ.setdefault("JULIUS_TTS", "qwen-clone")
-if os.environ.get("JULIUS_BACKEND", "ollama") == "ollama":
-    os.environ.setdefault("JULIUS_MODEL", "qwen3:4b-instruct-2507-q4_K_M")
+# Direct script launch uses the same cloud-profile defaults as run_julius.sh.
+from julius_profile import apply_cloud_defaults
+apply_cloud_defaults()
 from julius_backend import llm_chat, close_backend, keep_brain_loaded, LLM_BACKEND, LLM, KEEP_ALIVE, release_metrics, prepare_backend, generation_metrics, _offline_chat
 from julius_intents import LiveIntentRouter
 from julius_speech_text import normalize_for_speech, speakable, fix_transcript, SPOKEN_STYLE_PROMPT, TOOL_POLICY_PROMPT, BREVITY_PROMPT, EXACT_REQUEST

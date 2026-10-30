@@ -13,10 +13,11 @@ class FallbackTests(unittest.TestCase):
   for p in self.patches:p.start()
   self.addCleanup(lambda:[p.stop() for p in reversed(self.patches)])
  def chat(self,**kw):return backend.llm_chat(messages=[{'role':'user','content':'hi'}],**kw)
- def test_default_model_is_qwen3_4b_instruct_with_llama_fallback(self):
+ def test_explicit_ollama_backend_defaults_to_qwen3_4b_instruct_with_llama_fallback(self):
   import importlib,os
   with patch.dict(os.environ,{},clear=False):
-   for k in ('JULIUS_MODEL','JULIUS_BACKEND','JULIUS_FALLBACK_MODEL'):os.environ.pop(k,None)
+   for k in ('JULIUS_MODEL','JULIUS_FALLBACK_MODEL'):os.environ.pop(k,None)
+   os.environ['JULIUS_BACKEND']='ollama'  # the unset default is the cloud profile (test_julius_default_profile)
    fresh=importlib.reload(backend)
    try:
     self.assertEqual(fresh.LLM,'qwen3:4b-instruct-2507-q4_K_M');self.assertEqual(fresh.OLLAMA_FALLBACK,'llama3.2:3b')

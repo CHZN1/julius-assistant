@@ -2,7 +2,7 @@
 import os, time, re, json as _json
 from types import SimpleNamespace
 import julius_tools as jt
-LLM_BACKEND = os.environ.get("JULIUS_BACKEND", "ollama")  # "ollama", "mlx" or "cloud" (Claude Haiku front end)
+LLM_BACKEND = os.environ.get("JULIUS_BACKEND", "cloud")  # "ollama", "mlx" or "cloud" (Claude Haiku front end)
 if LLM_BACKEND == "cloud":
     import julius_config as _cfg
     if _cfg.load_config()["brain"]["mode"] == "local":  # julius.toml / JULIUS_BRAIN=local turns the cloud brain off
