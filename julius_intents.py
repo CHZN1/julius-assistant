@@ -5,6 +5,13 @@ from julius_speech_text import speakable, EXACT_REQUEST
 
 CRYPTO_NAMES = {'bitcoin': 'BTC', 'ethereum': 'ETH', 'ether': 'ETH', 'solana': 'SOL'}
 
+REGIONS = set(x.lower() for x in (
+    'Alabama Alaska Arizona Arkansas California Colorado Connecticut Delaware Florida Georgia Hawaii Idaho Illinois Indiana Iowa Kansas Kentucky '
+    'Louisiana Maine Maryland Massachusetts Michigan Minnesota Mississippi Missouri Montana Nebraska Nevada Ohio Oklahoma Oregon Pennsylvania '
+    'Tennessee Texas Utah Vermont Virginia Washington Wisconsin Wyoming CA NY TX FL WA OR AZ NV UT CO IL MA NJ PA OH MI GA NC SC VA '
+    'Japan France Germany Italy Spain Canada Mexico England UK USA China India Brazil Australia Ireland Scotland Korea').split()
+    ) | {'new york', 'new jersey', 'new hampshire', 'new mexico', 'north carolina', 'south carolina', 'north dakota', 'south dakota', 'rhode island', 'west virginia', 'south korea'}
+
 class LiveIntentRouter:
     def __init__(self):
         self.last = None
@@ -22,13 +29,36 @@ class LiveIntentRouter:
                 re.search(r'\b(?:weather|forecast|time)\b', low) and re.search(r'\b(?:in|for)\s+[^,]+?\s+and\s+\w', low)):  # "weather in Springfield and Tokyo"
             self.last = None
             return None
+        # High precision only: two different asks in one request go to the brain.
+        topics = sum(bool(re.search(x, low)) for x in (r'\b(?:weather|forecast)\b', r'\b(?:what time|current time|what day|date|the time)\b',
+                     r'\b(?:price|worth|trading|quote|stock)\b|\bbitcoin\b', r'\b(?:news|headlines)\b', r'\b(?:scores?|results)\b'))
+        if topics > 1:
+            self.last = None
+            return None
         loc = re.search(r'\bin\s+(.+)$', t, re.I) or re.search(r'\bfor\s+(.+)$', t, re.I)
         location = loc.group(1).strip() if loc else None
         if location and location.lower() in {'today', 'tomorrow', 'this week', 'right now', 'the week'}:
             location = None
         if location:
             location = re.sub(r'\s+(?:for\s+)?(?:today|tomorrow|right now|this week)$', '', location, flags=re.I)
+        # One place only: "City" or "City, State"; lists, "and"/"or" or extra clauses are not a single location.
+        if location and (not re.fullmatch(r"[A-Za-z][A-Za-z.' -]{1,40}(?:, ?[A-Za-z][A-Za-z.' -]{1,30})?", location)
+                         or re.search(r'\b(?:and|or|plus|then)\b', location, re.I)):
+            self.last = None
+            return None
+        if location and ',' in location and location.split(',')[1].strip().lower() not in REGIONS:  # "Shelbyville, Springfield" is two places
+            self.last = None
+            return None
         if re.search(r'\b(?:what time|current time|what day|current date|today.s date|what(?:.s| is) (?:the )?date)\b', low):
+            # Dates: only today, tomorrow or yesterday; a named date, weekday or "next Friday" is not a clock lookup.
+            if re.search(r'\b(?:what day|date)\b', low):
+                m = re.fullmatch(r"what(?: is|.s)? (?:the )?(?:current |today.s )?date(?: (today|tomorrow|yesterday))?|what day (?:is it|is today|it is)(?: (today|tomorrow|yesterday))?|what day (is tomorrow|was yesterday|is today)", low)
+                if not m:
+                    self.last = None
+                    return None
+                word = next((w for w in ('tomorrow', 'yesterday') if w in low), None)
+                if word and not location:
+                    return 'get_datetime', {'offset_days': 1 if word == 'tomorrow' else -1}
             return 'get_datetime', {'location': location} if location else {}
         if re.search(r'\b(?:weather|forecast)\b', low) and not re.match(r'^(?:explain|why|teach|what is (?:weather|a forecast)|i |we )', low):
             fn = 'get_forecast' if re.search(r'forecast|tomorrow|week', low) else 'get_weather'

@@ -1,7 +1,7 @@
 """Tools Julius can call. Each returns a short string he reads aloud."""
 import json, requests, subprocess
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 
 SAFE_ROOT = Path.home()
 
@@ -16,9 +16,11 @@ def calculate(expression, **_):
 
 from zoneinfo import ZoneInfo
 
-def get_datetime(location=None, **_):
-    """Local time, or time in another place if location is given."""
+def get_datetime(location=None, offset_days=0, **_):
+    """Local time, or time in another place if location is given. offset_days=1/-1 gives tomorrow's/yesterday's date (local only)."""
     n = datetime.now().astimezone()
+    if offset_days and not location:
+        return (n + timedelta(days=int(offset_days))).strftime("%A, %B %d %Y ") + "(" + str(n.tzinfo) + ")"
     if not location:
         return n.strftime("%A, %B %d %Y, %-I:%M %p ") + str(n.tzinfo)
     g = requests.get("https://geocoding-api.open-meteo.com/v1/search",
@@ -190,7 +192,8 @@ SCHEMAS = [
         "description":"Current date and time. Give a location for time elsewhere, "
                     "otherwise returns local time. Omit location for local time; never use a placeholder.",
         "parameters":{"type":"object","properties":{
-        "location":{"type":"string","description":"City, e.g. 'Tokyo'"}},
+        "location":{"type":"string","description":"City, e.g. 'Tokyo'"},
+        "offset_days":{"type":"integer","description":"Local date only: 1 for tomorrow, -1 for yesterday. For any other date use date_calculate."}},
         "required":[]}}},
     {"type":"function","function":{"name":"get_weather",
         "description":"Current weather and today's high/low. Omit location to use Springfield, Illinois.",

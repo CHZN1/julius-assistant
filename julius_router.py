@@ -1,6 +1,7 @@
 """Bounded deterministic file routing; ambiguity never becomes a broad move."""
 import difflib, os, re
 from pathlib import Path
+PLANNING_RE=re.compile(r'\b(?:organi[sz]e|sort|tidy|clean(?:\s|-)?up|declutter|categori[sz]e|group)\b',re.I)
 MOVE_RE=re.compile(r'\b(move|organize|organise|tidy|archive|put|sort|copy)\b',re.I)
 FILEWORD=re.compile(r'\b(file|files|csvs?|notebooks?|pdfs?|images?|docs?|scripts?|everything|photos?|pictures?|documents?)\b',re.I)
 UNDO=re.compile(r'^\s*(?:please\s+)?(?:undo(?:\s+(?:that|the last (?:move|copy|change)|last))?|revert the last (?:move|change)|put (?:them|it) back)\s*[.!]?\s*$',re.I)
@@ -147,6 +148,7 @@ def route(text,root,pending=False,has_last=False):
     if pending and CANCEL.fullmatch(text):return ('cancel',None)
     if has_last and RESUME.fullmatch(text):return ('resume',None)
     if pending and APPROVE.fullmatch(text):return ('approve',None)
+    if PLANNING_RE.search(text):return None  # organize/sort/clean-up need a plan; the Sonnet planner takes them
     simple=parse_simple_request(text,root)
     if simple:return simple
     args=parse(text,root)
