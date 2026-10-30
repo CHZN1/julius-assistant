@@ -48,3 +48,19 @@ class EvalToolingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FileEvalTests(unittest.TestCase):
+    def test_file_eval_scenarios_pass_in_a_sandbox(self):
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).parent / "evals"))
+        import file_eval
+        for sid, name, fn in file_eval.SCENARIOS:
+            env = file_eval.Env()
+            try:
+                ok, detail = fn(env)
+            finally:
+                import shutil
+                shutil.rmtree(env.dir, ignore_errors=True)
+            self.assertTrue(ok, f"{sid} {name}: {detail}")

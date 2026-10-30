@@ -111,18 +111,23 @@ def parse(text,root):
             elif not re.search(r'\b(all|everything)\b',selection,re.I):return {'clarification':'Which files should I select? Name a file, file type, or say all files.'}
     return {'action':'copy' if re.search(r'\bcopy\b',selection,re.I) else 'move','pattern':pattern,'source':source,'destination':destination,'recursive':bool(re.search(r'\b(recursively|subfolders|subdirectories)\b',text,re.I))}
 
+def _in_folder(phrase):
+    """'notes.txt in Downloads' -> 'Downloads/notes.txt' so a folder named after the file reaches the right place."""
+    located=re.fullmatch(r'(.+?)\s+(?:in|inside|from)\s+(?:my |the )?(downloads|desktop|documents)(?:\s+(?:folder|directory))?',phrase.strip(),re.I)
+    return f'{located.group(2).capitalize()}/{located.group(1).strip()}' if located else phrase
+
 def parse_simple_request(text,root):
     body=re.sub(r'^(?:(?:please|can you|could you|would you)\s+)+','',text.strip(),flags=re.I)
     rename=re.fullmatch(r'rename\s+(?:the file\s+|file\s+)?(.+?)\s+to\s+(.+)',body,re.I)
     if rename:
-        old,new=(_clean_folder(x) for x in rename.groups())
+        old,new=(_clean_folder(x) for x in rename.groups());old=_in_folder(old)
         if any(c in old+new for c in '*?['):return ('clarify',{'clarification':'Rename one exact file at a time. Please give its current and new filename.'})
         return ('rename',{'path':old,'destination':new})
     create=re.fullmatch(r'(?:create|write)\s+(?:a (?:text )?file\s+|file\s+)?"([^"\n]+)"\s+(?:containing|with text|with the text)\s+"([^"\n]*)"[.!]?',body,re.I)
     if create:return ('create',{'destination':create.group(1),'content':create.group(2)})
     read=re.fullmatch(r'read\s+(?:the file\s+|file\s+)?(.+)',body,re.I)
     if read and (re.search(r'\.[a-z0-9]{1,8}\b',read.group(1),re.I) or read.group(1).startswith('"')):
-        return ('read',{'path':_clean_folder(read.group(1))})
+        return ('read',{'path':_in_folder(_clean_folder(read.group(1)))})
     listing=re.fullmatch(r'(?:list|show)\s+(?:me\s+)?(?:the\s+)?(?:files|folders|contents)(?:\s+(?:in|inside|of)\s+(.+))?[.!]?',body,re.I)
     if listing:
         folder=match_dir(listing.group(1),root) if listing.group(1) else 'Documents'

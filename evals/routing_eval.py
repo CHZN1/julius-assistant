@@ -154,7 +154,7 @@ def main():
                "varying_cases": sum(1 for r in out if r["varies"]), "runs_per_brain_case": a.runs if not a.no_brain else 0, "brain_mean_seconds": round(sum(r["seconds"] for r in brain_rows) / len(brain_rows), 2) if brain_rows else None, "total_usd": round(sum(r["usd"] for r in out), 4),
                "confusion": {f"{r['expected_path']}->{r['actual_path']}": 0 for r in out}}
     for r in out: summary["confusion"][f"{r['expected_path']}->{r['actual_path']}"] += 1
-    path, previous = common.write_results("partial_routing" if a.only else "routing", out, summary)
+    path, previous = common.write_results("partial_routing" if (a.only or a.no_brain) else "routing", out, summary)
     broke, fixed, vs = common.regressions(out, previous)
     summary["regressions_vs_previous"] = {"previous": vs, "newly_failing": broke, "newly_passing": fixed}
     path.with_suffix(".summary.json").write_text(json.dumps(summary, indent=1))
