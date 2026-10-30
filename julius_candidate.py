@@ -108,11 +108,16 @@ a tool reports an error, no results, missing data or unsupported capability.
 Preserve quote timestamps, delayed-price caveats, and scheduled/live/final game
 status. News search returns headlines/snippets, not verified full articles.
 Only the human file controller can authorize file changes after a preview.
-Local planner tools can list items. Human commands create reminders/tasks or
-preview calendar events. Reminders announce only while Julius is running;
+Local planner tools can list items. When the user asks to be reminded, call set_reminder
+with the title and his own time phrase (do not convert it); list_reminders and
+cancel_reminder handle the rest, and you read the tool's confirmation back.
+Human commands create tasks or preview calendar events. Reminders announce only while Julius is running;
 missed reminders are delivered on resume. Do not claim OS background alarms or
 an external calendar connection unless the configured Apple provider confirms the save. Local-only calendar events have no automatic alarm. Apple notification delivery depends on account sync, notification settings and Focus.
 Unit/date tools provide exact unit definitions and explicit time zones.
+When a request needs several independent lookups (weather in one place and a
+price, say), call all the tools in the same reply; they run together. Then give
+one short spoken answer covering every part.
 
 HOW YOU SPEAK
 You are heard, not read. Write the way people actually talk:
@@ -435,19 +440,28 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
                                          "arguments": dict(c.function.arguments)}}
                                         for c in calls]})
             for c in calls:
+                print(f"\r  [tool: {c.function.name}({dict(c.function.arguments)})]          ", flush=True)
+            globals()['_tool_carry_next'] = True
+            # Several tool_use blocks in one reply run concurrently (parallel-safe lookups) and are composed into one spoken answer.
+            batch = jt.call_many([(c.function.name, dict(c.function.arguments)) for c in calls]) if len(calls) > 1 else None
+            if batch is None:
+                c = calls[0]
+                out = jt.call(c.function.name, dict(c.function.arguments))
+                batch = [(out, jt.dispatcher().last_result['ok'])]
+            if not any(ok for _, ok in batch):
+                out = batch[0][0]
+                _print_tool(calls[0].function.name, out)
+                if speak_fn: speak_fn(out)
+                return out
+            for c, (out, ok) in zip(calls, batch):
                 fn, args = c.function.name, dict(c.function.arguments)
-                globals()['_tool_carry_next'] = True
-                print(f"\r  [tool: {fn}({args})]          ", flush=True)
-                out = jt.call(fn, args)
                 _print_tool(fn, out)
-                if not jt.dispatcher().last_result['ok']:
-                    if speak_fn: speak_fn(out)
-                    return out
-                intent_router.record(fn, args, out)
+                if ok:
+                    intent_router.record(fn, args, out)
                 if out.count("\n") > 3:
                     long_tool_result = True
-                print("  ...thinking", end="", flush=True)
                 msgs.append({"role": "tool", "name": fn, "content": out})
+            print("  ...thinking", end="", flush=True)
             if len(calls) == 1 and globals().get('speakable') is not None:
                 # One simple lookup (weather, time, calculator, price): a ready-to-speak sentence, no second model call.
                 ready = speakable(fn, out, args, exact=bool(globals().get('EXACT_REQUEST') and EXACT_REQUEST.search(user_text)))

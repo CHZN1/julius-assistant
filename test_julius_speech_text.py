@@ -114,8 +114,9 @@ class OneRoundTripTests(unittest.TestCase):
         self.assertEqual(len(calls),2);self.assertEqual(result,'Second call answer.')
     def test_several_tool_calls_in_one_turn_still_get_a_model_summary(self):
         two=SimpleNamespace(message=SimpleNamespace(content='',tool_calls=[SimpleNamespace(function=SimpleNamespace(name='get_weather',arguments={'location':'A'})),SimpleNamespace(function=SimpleNamespace(name='get_weather',arguments={'location':'B'}))]))
-        result,spoken,calls=self.run_turn('What is the weather in A and B?',[two,self.no_call()],cloud=True,out='Springfield: 76°F, clear, feels like 76. High 77, low 50.')
-        self.assertEqual(len(calls),2)
+        with patch.object(jt,'call_many',side_effect=lambda cs:[('Springfield: 76°F, clear, feels like 76. High 77, low 50.',True) for _ in cs]) as many:
+            result,spoken,calls=self.run_turn('What is the weather in A and B?',[two,self.no_call()],cloud=True,out='Springfield: 76°F, clear, feels like 76. High 77, low 50.')
+        self.assertEqual(len(calls),2);many.assert_called_once()  # both lookups ran as one concurrent batch, then one composed answer
     def test_no_tool_text_answer_is_spoken_sentence_by_sentence_with_one_call(self):
         ns=load_candidate_turn();ns['cloud_brain']=object();ns['_tool_carry_next']=True;spoken=[];calls=[]
         ns['llm_chat']=lambda **kw:calls.append(kw) or as_parts(SimpleNamespace(message=SimpleNamespace(content='Overfitting is when a model memorizes its training data. It then fails on new data.',tool_calls=None)))

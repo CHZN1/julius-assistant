@@ -342,6 +342,18 @@ def call(name, args):
         return julius_orchestrator.run_escalation(args, service)
     return service.render(service.dispatch(name, args))
 
+def call_many(calls):
+    """Run [(name, args), ...]; returns [(rendered_text, ok), ...] in order. Parallel-safe lookups run concurrently."""
+    service = dispatcher()
+    if any(n == "escalate_to_planner" for n, _ in calls):
+        results = []
+        for name, args in calls:
+            text = call(name, args)
+            results.append((text, service.last_result["ok"] if service.last_result else True))
+        return results
+    tasks = service.dispatch_many(calls)
+    return [(service.render(t), t["ok"]) for t in tasks]
+
 
 # Tool schemas cost ~1.2k prompt tokens. Offer the model only the tools a request could use;
 # unmatched requests keep the full catalogue, so this never removes a capability.

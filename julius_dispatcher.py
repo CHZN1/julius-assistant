@@ -18,6 +18,9 @@ OWNERS = {
     'list_files': 'files', 'read_file': 'files', 'find_files': 'files',
 }
 
+# Read-only network lookups with no shared state may run side by side; files, planning, reminders and documents stay one at a time.
+PARALLEL_SAFE = {'time', 'weather', 'sports', 'markets', 'calculator', 'news', 'research'}
+
 class Dispatcher:
     def __init__(self, registry, schemas, file_agent=None, history_limit=64):
         self.registry = registry
@@ -25,6 +28,7 @@ class Dispatcher:
         self.file_agent = file_agent
         self.history = deque(maxlen=history_limit)
         self._lock = threading.Lock()
+        self._state_lock = threading.Lock()
         self.last_result = None
         self.turn_tasks = deque(maxlen=8)
         self._calls = 0
@@ -39,9 +43,10 @@ class Dispatcher:
 
     def _remember(self, task):
         metadata = {k: task[k] for k in ('id','agent','tool','started_at','status','code','seconds')}
-        self.history.append(metadata)
-        self.turn_tasks.append(metadata)
-        self.last_result = task
+        with self._state_lock:
+            self.history.append(metadata)
+            self.turn_tasks.append(metadata)
+            self.last_result = task
 
     def _validate(self, name, args):
         if name not in OWNERS or name not in self.registry:
@@ -84,9 +89,11 @@ class Dispatcher:
             self._validate(name, args)
             if self._turn_budget_active and self._calls >= self.turn_call_limit:
                 raise ValueError('Utility limit reached for this turn; please narrow the request.')
-            self._calls += 1
-            # One active utility avoids racing confirmations or adding model residency.
-            if not self._lock.acquire(blocking=False):
+            with self._state_lock:
+                self._calls += 1
+            # One active utility avoids racing confirmations or adding model residency; parallel-safe lookups skip the lock.
+            exclusive = task['agent'] not in PARALLEL_SAFE
+            if exclusive and not self._lock.acquire(blocking=False):
                 task.update(code='busy', message='Another utility is still working. Please try again when it finishes.')
             else:
                 try:
@@ -107,7 +114,8 @@ class Dispatcher:
                         task.update(ok=not failed, code='unavailable' if failed else 'completed', message=message)
                     task['status'] = 'completed' if task['ok'] else 'failed'
                 finally:
-                    self._lock.release()
+                    if exclusive:
+                        self._lock.release()
         except Exception as exc:
             task.update(code='timeout' if 'timeout' in type(exc).__name__.lower() else 'error',
                         message=f"{name} failed: {type(exc).__name__}: {exc}")
@@ -162,6 +170,14 @@ class Dispatcher:
             return out
         finally:
             self._lock.release()
+
+    def dispatch_many(self, calls):
+        """Run several (name, args) calls: concurrently when every one is parallel-safe, else one after another. Tasks keep call order."""
+        if len(calls) > 1 and all(OWNERS.get(n) in PARALLEL_SAFE for n, _ in calls):
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=min(len(calls), 6)) as pool:
+                return list(pool.map(lambda c: self.dispatch(*c), calls))
+        return [self.dispatch(n, a) for n, a in calls]
 
     def render(self, task):
         if task['agent'] == 'files' and task['data']:

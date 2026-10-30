@@ -40,10 +40,12 @@ class DispatcherTests(unittest.TestCase):
         entered,release=threading.Event(),threading.Event()
         def slow():
             entered.set();release.wait(2);return 'done'
-        self.registry['get_weather']=slow
-        thread=threading.Thread(target=lambda:self.d.dispatch('get_weather'));thread.start()
+        self.registry['list_planner_items']=slow  # planning is a serialized utility; weather/time/calculator lookups run in parallel
+        thread=threading.Thread(target=lambda:self.d.dispatch('list_planner_items'));thread.start()
         self.assertTrue(entered.wait(1))
-        try:self.assertEqual(self.d.dispatch('calculate',{'expression':'2+2'})['code'],'busy')
+        try:
+            self.assertEqual(self.d.dispatch('read_document',{'path':'x.pdf'})['code'],'busy')
+            self.assertEqual(self.d.dispatch('calculate',{'expression':'2+2'})['message'],'2+2 = 4')
         finally:release.set();thread.join(2)
         self.assertEqual(self.d.dispatch('calculate',{'expression':'2+2'})['message'],'2+2 = 4')
     def test_file_failures_preserve_structured_code(self):
