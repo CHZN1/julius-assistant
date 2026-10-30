@@ -82,18 +82,16 @@ def get_forecast(location="Springfield, Illinois", days=5, **_):
     return f"{r['name']} forecast:\n" + "\n".join(lines)
 
 def get_scores(league="mlb", day="today", **_):
-    """Scores for today or yesterday. day: 'today' | 'yesterday'"""
-    from datetime import timedelta
+    """Scores for a day or a short span. day: today, yesterday, last night, a weekday (Sunday), a date (2026-10-25, Oct 25) or last week."""
+    from julius_score_days import resolve_days
     paths = {"mlb":"baseball/mlb","nba":"basketball/nba","nfl":"football/nfl",
              "nhl":"hockey/nhl","wnba":"basketball/wnba"}
     p = paths.get(league.lower())
     if not p: return f"Don't have scores for {league}."
     url = f"https://site.api.espn.com/apis/site/v2/sports/{p}/scoreboard"
-    if str(day).lower() not in {'today', 'yesterday'}:
-        raise ValueError('Scores support today or yesterday only.')
-    params = {"dates": datetime.now().strftime("%Y%m%d")}
-    if str(day).lower() == "yesterday":
-        params["dates"] = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
+    first, last, day = resolve_days(day)
+    stamp = first.strftime("%Y%m%d") if first == last else f"{first.strftime('%Y%m%d')}-{last.strftime('%Y%m%d')}"
+    params = {"dates": stamp, "limit": 100}
     j = requests.get(url, params=params, timeout=10).json()
     out = []
     for e in j.get("events", []):
@@ -114,6 +112,8 @@ def get_scores(league="mlb", day="today", **_):
             w, l = ((hn,hs),(an,as_)) if hs > as_ else ((an,as_),(hn,hs))
             out.append(f"{state}: {w[0]} {'beat' if state=='FINAL' else 'leads'} "
                        f"{l[0]} {w[1]}-{l[1]}")
+    if len(out) > 25:
+        out = out[:25] + [f"…and {len(out) - 25} more games."]
     scores = (f"{league.upper()} ({day}) — {len(out)} games:\n" + "\n".join(out)) if out \
            else f"No {league.upper()} games {day}."
     from datetime import timezone
@@ -224,13 +224,12 @@ SCHEMAS = [
         "parameters":{"type":"object","properties":{
         "path":{"type":"string"}},"required":["path"]}}},
       {"type":"function","function":{"name":"get_scores",
-        "description":"Scores for games happening TODAY or YESTERDAY only. Do NOT use "
-                    "for historical results, past seasons, championships, or any "
-                    "question about a specific year — answer those from your own "
-                    "knowledge without a tool.",
+        "description":"Game scores and schedules for one day or a short span: today, yesterday, last night, "
+                    "a weekday like Sunday (the most recent one), a date, or last week. Not for player stats, box scores, "
+                    "past seasons or championships — answer those from your own knowledge.",
         "parameters":{"type":"object","properties":{
         "league":{"type":"string","description":"one of: mlb, nba, nfl, nhl, wnba"},
-        "day":{"type":"string","description":"'today' or 'yesterday'"}},
+        "day":{"type":"string","description":"'today', 'yesterday', 'last night', 'Sunday', 'last week' or a date such as '2026-10-25'"}},
         "required":["league"]}}},
     {"type":"function","function":{"name":"calculate",
         "description":"Calculate bounded arithmetic with +, -, *, /, **, parentheses, sqrt, abs, pi and e. For percentages write 'X% of Y' (for example '17.5% of 2480'); a bare % is modulo. Algebra and calculus are not supported.",

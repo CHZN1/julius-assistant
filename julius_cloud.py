@@ -34,13 +34,10 @@ PLANNING_PROMPT = ("\n\nPLANNING\nYou have a planner: escalate_to_planner. Use i
 
 ESCALATE_SCHEMA = {"type": "function", "function": {
     "name": "escalate_to_planner",
-    "description": ("Hand a task that needs thinking, not just fetching, to the planner (a stronger model that can run sub-agents, look "
-                    "several things up and propose file reorganisations). ALWAYS use it for: plans and itineraries; comparing options or "
-                    "recommending one (including 'compare the weather in two cities' and 'which is better'); research; briefings built from "
-                    "several sources; and bulk file work (organising, sorting, moving, renaming or cleaning up many files). Never use it for a "
-                    "single fact or tool call, or for independent lookups that just need reading out (call those tools together instead). "
-                    "Describe the task fully in your own words. The result is what you should say aloud."),
-    "parameters": {"type": "object", "properties": {"task": {"type": "string", "description": "The full task, with every detail the planner needs"}},
+    "description": ("Hand a task that needs thinking, not just fetching, to the planner (a stronger model with sub-agents). "
+                    "Use for plans, comparisons and recommendations, research, briefings and bulk file work, as described in PLANNING. "
+                    "Never for one fact, one tool call, or independent lookups. Describe the task fully; the result is what you say aloud."),
+                    "parameters": {"type": "object", "properties": {"task": {"type": "string", "description": "The full task, with every detail the planner needs"}},
                    "required": ["task"], "additionalProperties": False}}}
 
 

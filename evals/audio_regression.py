@@ -86,14 +86,41 @@ def classify(turn):
         return {"path": "tool" if brain else "shortcut", "tool": label, "ok": not failed}
     return {"path": "direct" if brain else "shortcut", "tool": "", "ok": not turn.get("error")}
 
+def repeat_stats(runs, items, rows):
+    """Median first audio and mean cost per turn by the path actually taken, plus Haiku cache use, over every pipeline run."""
+    if not runs: return {}
+    med = lambda xs: sorted(xs)[len(xs) // 2] if xs else None
+    per = {}
+    for turns, *_ in runs:
+        for turn in turns:
+            c = classify(turn)
+            first = turn.get("processing_to_first_audio_seconds")
+            per.setdefault(c["path"], []).append((first, sum((turn.get("cost_by_tier_usd") or {}).values())))
+    by_actual = {p: {"n": len(v), "first_audio_median_s": None if not [f for f, _ in v if f is not None] else round(med([f for f, _ in v if f is not None]), 2),
+                     "cost_mean_usd": round(sum(c for _, c in v) / len(v), 5)} for p, v in per.items()}
+    read = write = fresh = calls = 0
+    for _, _, _, work in runs:
+        f = work / "costs.jsonl"
+        for line in (f.read_text().splitlines() if f.exists() else []):
+            r = json.loads(line)
+            if r.get("tier") == "haiku":
+                read += r["cache_read"]; write += r["cache_write"]; fresh += r["input"]; calls += 1
+    total_turns = sum(len(t) for t, *_ in runs)
+    per_run_cost = [sum(sum((t.get("cost_by_tier_usd") or {}).values()) for t in turns) / max(1, len(turns)) for turns, *_ in runs]
+    return {"repeats": len(runs), "by_actual_path": by_actual, "cost_per_turn_median_usd": round(med(per_run_cost), 5),
+            "haiku_calls": calls, "haiku_cache_hit_pct": round(100 * read / max(1, read + write + fresh), 1),
+            "haiku_cache_write_tokens_per_call": round(write / max(1, calls)), "haiku_cache_read_tokens_per_call": round(read / max(1, calls)), "haiku_uncached_tokens_per_call": round(fresh / max(1, calls))}
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--dir", default=str(ROOT / "diagnostics" / "asr_real")); ap.add_argument("--no-pipeline", action="store_true", help="ASR scoring only (free)")
+    ap.add_argument("--repeats", type=int, default=1, help="run the headless pipeline this many times; latency and cost are medians over the runs")
     a = ap.parse_args()
     asr = run_asr(Path(a.dir))
     items = [{"id": c["id"], "kind": "typed", "reference": c["text"], "transcript": c["text"], "asr_s": 0.0, "expect": c["expect"], "n": None} for c in CASES["typed"]]
     items += [{"id": f"p{x['n']:02d}", "kind": "recorded", "reference": x["reference"], "transcript": x["transcript"], "asr_s": x["asr_s"], "expect": CASES["recorded"][str(x["n"])]["expect"], "n": x["n"]} for x in asr]
-    turns, code, seconds, work = ([], None, 0, None) if a.no_pipeline else run_pipeline([i["transcript"] for i in items])
+    runs = [] if a.no_pipeline else [run_pipeline([i["transcript"] for i in items]) for _ in range(max(1, a.repeats))]
+    turns, code, seconds, work = runs[-1] if runs else ([], None, 0, None)
     rows = []
     for k, item in enumerate(items):
         turn = turns[k] if k < len(turns) else None
@@ -126,6 +153,7 @@ def main():
                "cost_per_turn_mean_usd": round(sum(r["usd"] for r in pipe) / max(1, len(pipe)), 5), "total_usd": round(sum(r["usd"] for r in pipe), 4),
                "by_path": {p: {"n": sum(1 for r in pipe if r["expected_path"] == p), "first_audio_median_s": (lambda xs: xs[len(xs) // 2] if xs else None)(sorted(r["first_audio_s"] for r in pipe if r["expected_path"] == p and r["first_audio_s"] is not None)),
                                "cost_mean_usd": round(sum(r["usd"] for r in pipe if r["expected_path"] == p) / max(1, sum(1 for r in pipe if r["expected_path"] == p)), 5)} for p in ("shortcut", "direct", "tool", "escalate")}}
+    summary.update(repeat_stats(runs, items, rows))
     path, previous = common.write_results("audio", rows, summary)
     broke, fixed, vs = common.regressions(rows, previous)
     summary["regressions_vs_previous"] = {"previous": vs, "newly_failing": broke, "newly_passing": fixed}

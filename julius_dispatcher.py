@@ -72,8 +72,8 @@ class Dispatcher:
         if name == 'get_scores':
             if args.get('league', 'mlb').lower() not in {'mlb','nba','nfl','nhl','wnba'}:
                 raise ValueError('That sports league is not supported yet.')
-            if args.get('day', 'today').lower() not in {'today', 'yesterday'}:
-                raise ValueError('Scores currently support today or yesterday only.')
+            from julius_score_days import resolve_days
+            resolve_days(args.get('day', 'today'))  # raises a speakable ValueError when the day can't be read
         if name == 'get_quote':
             import re
             if not re.fullmatch(r'[A-Za-z0-9^.=-]{1,24}', args['symbol']):
