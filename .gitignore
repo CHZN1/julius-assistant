@@ -51,3 +51,8 @@ logs/
 *.pickle
 *.keras
 *.onnx
+
+# Migrated from the old fer2013-emotion-cnn folder: never commit
+artifacts/
+legacy/
+*.wav
