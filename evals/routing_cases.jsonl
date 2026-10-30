@@ -41,7 +41,7 @@
 {"id": "r041", "cat": "files", "text": "Tidy up my desktop.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
 {"id": "r042", "cat": "utility", "text": "Remind me in 10 minutes to stretch.", "expect": {"path": "shortcut", "tool": "utility", "ok": true}}
 {"id": "r043", "cat": "utility", "text": "Set a timer for 5 minutes.", "expect": {"path": "shortcut", "tool": "utility", "ok": true}}
-{"id": "r044", "cat": "utility", "text": "Hey Julius, remind me to call my mom at 3:45 PM.", "expect": {"path": "shortcut", "tool": "utility", "ok": true}}
+{"id": "r044", "cat": "utility", "text": "Hey Julius, remind me to call my mom at 3:45 PM.", "expect": {"path": "tool", "tool_in": ["set_reminder"]}}
 {"id": "r045", "cat": "utility", "text": "Remind me tomorrow at 9 am to send the invoice.", "expect": {"path": "shortcut", "tool": "utility", "ok": true}}
 {"id": "r046", "cat": "utility", "text": "Add a task buy printer paper", "expect": {"path": "shortcut", "tool": "utility", "ok": true}}
 {"id": "r047", "cat": "utility", "text": "List my reminders", "expect": {"path": "shortcut", "tool": "utility", "ok": true}}
@@ -68,7 +68,7 @@
 {"id": "r068", "cat": "tool", "text": "What files are in my Desktop folder?", "expect": {"path": "tool", "tool_in": ["list_files"]}}
 {"id": "r069", "cat": "tool", "text": "Show me what's in my todo.txt file.", "expect": {"path": "tool", "tool_in": ["read_file", "find_files"]}}
 {"id": "r070", "cat": "tool", "text": "Summarize the report in my Downloads called annual_report.pdf.", "expect": {"path": "tool", "tool_in": ["read_document", "find_files"]}}
-{"id": "r071", "cat": "tool", "text": "What's on my reminders list this week?", "expect": {"path": "tool", "tool": "list_planner_items"}}
+{"id": "r071", "cat": "tool", "text": "What's on my reminders list this week?", "expect": {"path": "tool", "tool_in": ["list_planner_items", "list_reminders"]}}
 {"id": "r072", "cat": "parallel", "text": "What's the weather in Springfield and the time in Tokyo?", "expect": {"path": "tool", "tools_all": ["get_weather", "get_datetime"]}}
 {"id": "r073", "cat": "direct", "text": "Hey Julius, how's it going?", "expect": {"path": "direct"}}
 {"id": "r074", "cat": "direct", "text": "Hey there.", "expect": {"path": "direct"}}

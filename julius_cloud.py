@@ -26,7 +26,7 @@ TIERS = {
 PLANNING_PROMPT = ("\n\nPLANNING\nYou have a planner: escalate_to_planner. Use it when the answer needs thinking across several facts, not just fetching them. "
                    "Escalate for: (1) a plan, itinerary or schedule, e.g. 'plan a trip', 'plan a party'; (2) comparing options or making a "
                    "recommendation, even when each fact is a single lookup, e.g. 'compare the weather in two cities', 'which is cheaper', 'should I "
-                   "buy X or Y'; (3) research, e.g. 'look into the best X'; (4) a briefing or summary assembled from several sources; (5) any change "
+                   "buy X or Y'; (3) open-ended research, e.g. 'look into the best X' (but 'search the web for X' is one web_search call, not research); a request that says plan or itinerary always escalates, even when it mentions the weather or the time; (4) a briefing or summary assembled from several sources; (5) any change "
                    "to many files at once: moving, sorting, renaming, organising or cleaning up. Do NOT escalate a single fact, and do not escalate "
                    "several independent lookups that only need reading out, e.g. 'the weather in A and the time in B': call every tool for those in the "
                    "same reply and answer in one go. The planner can only propose file changes; nothing happens until the user says yes, so never "

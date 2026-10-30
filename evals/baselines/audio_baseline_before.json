@@ -1,0 +1,47 @@
+{
+ "suite": "audio_regression",
+ "date": "2026-10-29 22:47",
+ "recorded_phrases": 20,
+ "typed_prompts": 9,
+ "mean_wer": 0.08,
+ "phrases_with_missed_terms": 3,
+ "mean_asr_s": 0.244,
+ "pipeline_ran": true,
+ "pipeline_exit_code": 0,
+ "pipeline_seconds": 303.6,
+ "routing_path_ok_pct": 75.9,
+ "routing_tool_ok_pct": 75.9,
+ "turn_ok_pct": 69.0,
+ "first_audio_median_s": 1.61,
+ "first_audio_max_s": 10.1,
+ "est_end_of_speech_to_first_audio_mean_s": 3.034,
+ "cost_per_turn_mean_usd": 0.00042,
+ "total_usd": 0.0123,
+ "by_path": {
+  "shortcut": {
+   "n": 10,
+   "first_audio_median_s": 1.59,
+   "cost_mean_usd": 2e-05
+  },
+  "direct": {
+   "n": 7,
+   "first_audio_median_s": 1.56,
+   "cost_mean_usd": 0.00011
+  },
+  "tool": {
+   "n": 7,
+   "first_audio_median_s": 2.13,
+   "cost_mean_usd": 0.00015
+  },
+  "escalate": {
+   "n": 5,
+   "first_audio_median_s": 6.47,
+   "cost_mean_usd": 0.00204
+  }
+ },
+ "regressions_vs_previous": {
+  "previous": "no previous run",
+  "newly_failing": [],
+  "newly_passing": []
+ }
+}

@@ -40,3 +40,20 @@ Notes:
 - ASR scores worse today than in the 2026-10-27 benchmark on the same recordings (`diagnostics/asr_real/results.json`: 3.6% WER, no missed terms). Decoding here is deterministic (every segment decodes at temperature 0, checked over repeated runs) and uses the same model snapshot, so the cause is not yet explained; it needs a look before the ASR numbers are used to compare models.
 - The 9 turns that miss are mostly the same routing gaps as above plus ASR damage: "compared the weather in Shelbyville and Springfield" is not escalated, and phrase 20 (the long NHL/NFL/AcmeCorp summary) was answered directly.
 - Typed prompts skip ASR; recorded phrases run through the same headless Julius, so ASR errors carry into routing.
+
+## After the Phase A fixes (2026-10-30)
+
+`audio_baseline.json` now holds the post-fix audio numbers; the first baseline is kept as `audio_baseline_before.json`.
+
+| | Before | After |
+|---|---|---|
+| Routing eval, all cases | 89.5% (105 cases) | 96.6% (119 cases, majority of 3 runs) |
+| direct / escalate / files / followup / intent / tool / utility | 100 / 70 / 76.9 / 100 / 100 / 83.3 / 85.7 | 100 / 70 / 100 / 100 / 100 / 95.7 / 100 |
+| New: held-out escalation (10) / parallel lookups (5) | n/a | 100 / 100 |
+| ASR mean WER | 8.0% | 3.8% (vocabulary hint) |
+| Phrases with a missed term | 3 of 20 | 0 |
+| Whole audio turn correct | 69.0% | 82.8% (one phrase relabelled to the new reminder tool) |
+| First audio median | 1.61 s | 1.60 s (tool 2.13 to 2.57 s, escalate 6.5 to 9.1 s) |
+| Cost per audio turn | $0.0004 | $0.0018 (planner escalations ran longer; single run, noisy) |
+
+Known misses: r097, r101, r105 (Haiku answers with lookups instead of escalating; borderline), r056 (Sunday scores: tool only covers today and yesterday). Six brain cases still vary between runs because Haiku 5.5 accepts no temperature setting.

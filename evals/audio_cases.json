@@ -28,7 +28,7 @@
   "8":  {"expect": {"path": "shortcut", "tool": "calculate"}},
   "9":  {"expect": {"path": "shortcut", "tool": "convert_units"}},
   "10": {"expect": {"path": "shortcut", "tool": "get_datetime", "args_contain": ["tokyo"]}},
-  "11": {"expect": {"path": "shortcut", "tool": "utility", "ok": true}},
+  "11": {"expect": {"path": "tool", "tool": "set_reminder"}},
   "12": {"expect": {"path": "shortcut", "path_in": ["shortcut", "tool"], "tool": "get_quote", "args_contain": ["btc"]}},
   "13": {"expect": {"path": "tool", "tool_in": ["web_search", "get_scores"]}},
   "14": {"expect": {"path": "escalate", "tool": "escalate_to_planner"}},
