@@ -56,3 +56,8 @@ logs/
 artifacts/
 legacy/
 *.wav
+
+# Eval run outputs: audio results hold the text of recorded phrases and model answers; routing results are committed as baselines
+evals/results/audio_*
+evals/results/*.tmp
+evals/results/dev_runs/

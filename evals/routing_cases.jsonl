@@ -1,0 +1,105 @@
+{"id": "r001", "cat": "intent", "text": "What's the weather in Springfield?", "expect": {"path": "shortcut", "tool": "get_weather", "args_contain": ["springfield"]}}
+{"id": "r002", "cat": "intent", "text": "What's the weather like in Shelbyville right now?", "expect": {"path": "shortcut", "tool": "get_weather", "args_contain": ["shelbyville"]}}
+{"id": "r003", "cat": "intent", "text": "What's the forecast for Tokyo?", "expect": {"path": "shortcut", "tool": "get_forecast", "args_contain": ["tokyo"]}}
+{"id": "r004", "cat": "intent", "text": "weather in Seattle", "expect": {"path": "shortcut", "tool": "get_weather", "args_contain": ["seattle"]}}
+{"id": "r005", "cat": "intent", "text": "What time is it in Tokyo right now?", "expect": {"path": "shortcut", "tool": "get_datetime", "args_contain": ["tokyo"]}}
+{"id": "r006", "cat": "intent", "text": "What time is it?", "expect": {"path": "shortcut", "tool": "get_datetime"}}
+{"id": "r007", "cat": "intent", "text": "What's today's date?", "expect": {"path": "shortcut", "tool": "get_datetime"}}
+{"id": "r008", "cat": "intent", "text": "What's 17 percent of 2480?", "expect": {"path": "shortcut", "tool": "calculate"}}
+{"id": "r009", "cat": "intent", "text": "What's 17 times 4839?", "expect": {"path": "shortcut", "tool": "calculate"}}
+{"id": "r010", "cat": "intent", "text": "twelve plus thirty four", "expect": {"path": "shortcut", "tool": "calculate"}}
+{"id": "r011", "cat": "intent", "text": "Convert 26.2 miles to kilometers.", "expect": {"path": "shortcut", "tool": "convert_units"}}
+{"id": "r012", "cat": "intent", "text": "convert 100 fahrenheit to celsius", "expect": {"path": "shortcut", "tool": "convert_units"}}
+{"id": "r013", "cat": "intent", "text": "What are the NHL scores?", "expect": {"path": "shortcut", "tool": "get_scores", "args_contain": ["nhl"]}}
+{"id": "r014", "cat": "intent", "text": "Show me the MLB results yesterday", "expect": {"tool": "get_scores", "args_contain": ["mlb"], "path_in": ["shortcut", "tool"], "path": "shortcut"}}
+{"id": "r015", "cat": "intent", "text": "What's the latest news?", "expect": {"path": "shortcut", "tool": "get_news"}}
+{"id": "r016", "cat": "intent", "text": "news about the Warriors", "expect": {"path": "shortcut", "tool": "get_news", "args_contain": ["warriors"]}}
+{"id": "r017", "cat": "intent", "text": "What's the price of AAPL?", "expect": {"path": "shortcut", "tool": "get_quote", "args_contain": ["aapl"]}}
+{"id": "r018", "cat": "intent", "text": "What's Bitcoin trading at?", "expect": {"path": "shortcut", "tool": "get_quote", "args_contain": ["btc"]}}
+{"id": "r019", "cat": "intent", "text": "Is Bitcoin up or down today?", "expect": {"tool": "get_quote", "args_contain": ["btc"], "path_in": ["shortcut", "tool"], "path": "shortcut"}}
+{"id": "r020", "cat": "followup", "text": "And what about tomorrow in Shelbyville?", "expect": {"path": "shortcut", "tool": "get_forecast", "args_contain": ["shelbyville"]}, "ctx": [{"fn": "get_weather", "args": {"location": "Springfield, Illinois"}}]}
+{"id": "r021", "cat": "followup", "text": "and tomorrow?", "expect": {"path": "shortcut", "tool": "get_forecast", "args_contain": ["springfield"]}, "ctx": [{"fn": "get_weather", "args": {"location": "Springfield, Illinois"}}]}
+{"id": "r022", "cat": "followup", "text": "and in Shelbyville?", "expect": {"path": "shortcut", "tool": "get_weather", "args_contain": ["shelbyville"]}, "ctx": [{"fn": "get_weather", "args": {"location": "Springfield, Illinois"}}]}
+{"id": "r023", "cat": "followup", "text": "what about Tokyo?", "expect": {"path": "shortcut", "tool": "get_weather", "args_contain": ["tokyo"]}, "ctx": [{"fn": "get_weather", "args": {"location": "Springfield, Illinois"}}]}
+{"id": "r024", "cat": "followup", "text": "and ETH?", "expect": {"path": "shortcut", "tool": "get_quote", "args_contain": ["eth"]}, "ctx": [{"fn": "get_quote", "args": {"symbol": "BTC-USD"}}]}
+{"id": "r025", "cat": "followup", "text": "what about Tesla?", "expect": {"path": "shortcut", "tool": "get_quote", "args_contain": ["tesla"]}, "ctx": [{"fn": "get_quote", "args": {"symbol": "BTC-USD"}}]}
+{"id": "r026", "cat": "followup", "text": "how many hours ahead is that?", "expect": {"path": "shortcut", "tool": "get_datetime"}, "ctx": [{"fn": "get_datetime", "args": {"location": "Tokyo"}}]}
+{"id": "r027", "cat": "followup", "text": "and in London?", "expect": {"path": "shortcut", "tool": "get_datetime", "args_contain": ["london"]}, "ctx": [{"fn": "get_datetime", "args": {"location": "Tokyo"}}]}
+{"id": "r028", "cat": "followup", "text": "and tomorrow?", "expect": {"path": "tool", "tool_in": ["get_forecast", "get_weather"]}}
+{"id": "r029", "cat": "files", "text": "List the files in my Downloads folder.", "expect": {"path": "shortcut", "tool": "files:list"}}
+{"id": "r030", "cat": "files", "text": "show me the files in Documents", "expect": {"path": "shortcut", "tool": "files:list"}}
+{"id": "r031", "cat": "files", "text": "Find the file budget.csv", "expect": {"path": "shortcut", "tool": "files:find"}}
+{"id": "r032", "cat": "files", "text": "Find all my CSV files in Downloads", "expect": {"path": "shortcut", "tool": "files:find"}}
+{"id": "r033", "cat": "files", "text": "Read the file notes.txt in Downloads", "expect": {"path": "shortcut", "tool": "files:read"}}
+{"id": "r034", "cat": "files", "text": "Rename report.pdf to q3_report.pdf", "expect": {"path": "shortcut", "tool": "files:rename"}}
+{"id": "r035", "cat": "files", "text": "Create a file \"hello.txt\" containing \"hi there\"", "expect": {"path": "shortcut", "tool": "files:create"}}
+{"id": "r036", "cat": "files", "text": "Move all the PDFs from Downloads into a new folder named Papers", "expect": {"path": "shortcut", "tool": "files:move"}}
+{"id": "r037", "cat": "files", "text": "Copy my notebooks from Downloads into Documents", "expect": {"path": "shortcut", "tool": "files:copy"}}
+{"id": "r038", "cat": "files", "text": "Undo that.", "expect": {"path": "shortcut", "tool": "files:undo"}}
+{"id": "r039", "cat": "files", "text": "Organize my downloads folder by file type.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
+{"id": "r040", "cat": "files", "text": "Sort my photos into folders by year.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
+{"id": "r041", "cat": "files", "text": "Tidy up my desktop.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
+{"id": "r042", "cat": "utility", "text": "Remind me in 10 minutes to stretch.", "expect": {"path": "shortcut", "tool": "utility", "ok": true}}
+{"id": "r043", "cat": "utility", "text": "Set a timer for 5 minutes.", "expect": {"path": "shortcut", "tool": "utility", "ok": true}}
+{"id": "r044", "cat": "utility", "text": "Hey Julius, remind me to call my mom at 3:45 PM.", "expect": {"path": "shortcut", "tool": "utility", "ok": true}}
+{"id": "r045", "cat": "utility", "text": "Remind me tomorrow at 9 am to send the invoice.", "expect": {"path": "shortcut", "tool": "utility", "ok": true}}
+{"id": "r046", "cat": "utility", "text": "Add a task buy printer paper", "expect": {"path": "shortcut", "tool": "utility", "ok": true}}
+{"id": "r047", "cat": "utility", "text": "List my reminders", "expect": {"path": "shortcut", "tool": "utility", "ok": true}}
+{"id": "r048", "cat": "utility", "text": "What's on my calendar tomorrow?", "expect": {"path": "tool", "tool": "list_planner_items"}}
+{"id": "r049", "cat": "tool", "text": "Is it going to rain tomorrow in Springfield?", "expect": {"path": "tool", "tool_in": ["get_forecast", "get_weather"], "args_contain": ["springfield"]}}
+{"id": "r050", "cat": "tool", "text": "Do I need a jacket in Shelbyville tonight?", "expect": {"path": "tool", "tool_in": ["get_weather", "get_forecast"], "args_contain": ["shelbyville"]}}
+{"id": "r051", "cat": "tool", "text": "What's Ethereum trading at right now?", "expect": {"path": "tool", "tool": "get_quote", "args_contain": ["eth"]}}
+{"id": "r052", "cat": "tool", "text": "How's Tesla stock doing?", "expect": {"path": "tool", "tool": "get_quote", "args_contain": ["tsla"]}}
+{"id": "r053", "cat": "tool", "text": "What's the Solana price?", "expect": {"path": "tool", "tool": "get_quote", "args_contain": ["sol"]}}
+{"id": "r054", "cat": "tool", "text": "Who won the Giants game last night?", "expect": {"path": "tool", "tool": "get_scores"}}
+{"id": "r055", "cat": "tool", "text": "Did the Sharks win yesterday?", "expect": {"path": "tool", "tool": "get_scores"}}
+{"id": "r056", "cat": "tool", "text": "Show me the NFL scores from Sunday.", "expect": {"path": "tool", "tool_in": ["get_scores", "web_search"]}}
+{"id": "r057", "cat": "tool", "text": "What happened in the news about the election today?", "expect": {"path": "tool", "tool_in": ["get_news", "web_search"]}}
+{"id": "r058", "cat": "tool", "text": "What's the latest on the Warriors trade rumors?", "expect": {"path": "tool", "tool_in": ["get_news", "web_search"]}}
+{"id": "r059", "cat": "tool", "text": "What's the temperature in Tokyo?", "expect": {"path": "tool", "tool": "get_weather", "args_contain": ["tokyo"]}}
+{"id": "r060", "cat": "tool", "text": "What day of the week is March 3rd 2027?", "expect": {"path": "tool", "tool_in": ["date_calculate", "calculate", "web_search"]}}
+{"id": "r061", "cat": "tool", "text": "What's 15 plus 8 divided by 2 squared?", "expect": {"path": "tool", "tool": "calculate"}}
+{"id": "r062", "cat": "tool", "text": "How many ounces are in 3.5 pounds?", "expect": {"path": "tool", "tool": "convert_units"}}
+{"id": "r063", "cat": "tool", "text": "Convert 72 degrees Fahrenheit into Celsius please", "expect": {"path": "tool", "tool": "convert_units"}}
+{"id": "r064", "cat": "tool", "text": "What time is it in Sydney?", "expect": {"path": "shortcut", "tool": "get_datetime", "args_contain": ["sydney"]}}
+{"id": "r065", "cat": "tool", "text": "Look up the current price of gold.", "expect": {"path": "tool", "tool_in": ["get_quote", "web_search"]}}
+{"id": "r066", "cat": "tool", "text": "Search the web for the best Ollama models for 16 gigabytes of memory.", "expect": {"path": "tool", "tool": "web_search"}}
+{"id": "r067", "cat": "tool", "text": "Find my tax return pdf.", "expect": {"path": "shortcut", "tool": "files:find", "ok": true}}
+{"id": "r068", "cat": "tool", "text": "What files are in my Desktop folder?", "expect": {"path": "tool", "tool_in": ["list_files"]}}
+{"id": "r069", "cat": "tool", "text": "Show me what's in my todo.txt file.", "expect": {"path": "tool", "tool_in": ["read_file", "find_files"]}}
+{"id": "r070", "cat": "tool", "text": "Summarize the report in my Downloads called annual_report.pdf.", "expect": {"path": "tool", "tool_in": ["read_document", "find_files"]}}
+{"id": "r071", "cat": "tool", "text": "What's on my reminders list this week?", "expect": {"path": "tool", "tool": "list_planner_items"}}
+{"id": "r072", "cat": "tool", "text": "What's the weather in Springfield and the time in Tokyo?", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
+{"id": "r073", "cat": "direct", "text": "Hey Julius, how's it going?", "expect": {"path": "direct"}}
+{"id": "r074", "cat": "direct", "text": "Hey there.", "expect": {"path": "direct"}}
+{"id": "r075", "cat": "direct", "text": "Explain overfitting simply.", "expect": {"path": "direct"}}
+{"id": "r076", "cat": "direct", "text": "What's the difference between precision and recall?", "expect": {"path": "direct"}}
+{"id": "r077", "cat": "direct", "text": "Why does dropout help with overfitting?", "expect": {"path": "direct"}}
+{"id": "r078", "cat": "direct", "text": "Tell me a joke.", "expect": {"path": "direct"}}
+{"id": "r079", "cat": "direct", "text": "What should I name my new puppy?", "expect": {"path": "direct"}}
+{"id": "r080", "cat": "direct", "text": "Thanks, that's all.", "expect": {"path": "direct"}}
+{"id": "r081", "cat": "direct", "text": "Can you see me right now, or are you just listening?", "expect": {"path": "direct"}}
+{"id": "r082", "cat": "direct", "text": "Who are you?", "expect": {"path": "direct"}}
+{"id": "r083", "cat": "direct", "text": "What can you do?", "expect": {"path": "direct"}}
+{"id": "r084", "cat": "direct", "text": "Give me a two-sentence summary of how transformers work.", "expect": {"path": "direct"}}
+{"id": "r085", "cat": "direct", "text": "What's a good way to learn guitar chords quickly?", "expect": {"path": "direct"}}
+{"id": "r086", "cat": "direct", "text": "Is a tomato a fruit or a vegetable?", "expect": {"path": "direct"}}
+{"id": "r087", "cat": "direct", "text": "Define regularization in machine learning.", "expect": {"path": "direct"}}
+{"id": "r088", "cat": "direct", "text": "What's the capital of Australia?", "expect": {"path": "direct"}}
+{"id": "r089", "cat": "direct", "text": "How do I stay focused while studying?", "expect": {"path": "direct"}}
+{"id": "r090", "cat": "direct", "text": "What does CNN stand for in deep learning?", "expect": {"path": "direct"}}
+{"id": "r091", "cat": "direct", "text": "Say that again, but shorter.", "expect": {"path": "direct"}}
+{"id": "r092", "cat": "direct", "text": "Good morning!", "expect": {"path": "direct"}}
+{"id": "r093", "cat": "direct", "text": "Okay, which of those would you try first, and why?", "expect": {"path": "direct"}, "history": [{"role": "user", "content": "My CNN gets 62 percent validation accuracy while training hits 95."}, {"role": "assistant", "content": "That gap is classic overfitting. Try augmentation, dropout and early stopping."}]}
+{"id": "r094", "cat": "direct", "text": "I've been training a convolutional network on the FER 2013 dataset and the validation accuracy keeps plateauing around 62 percent while the training accuracy climbs, so I think it's overfitting. What should I try first?", "expect": {"path": "direct"}}
+{"id": "r095", "cat": "direct", "text": "What's the best AcmeCorp slip for tonight?", "expect": {"path": "direct"}}
+{"id": "r096", "cat": "escalate", "text": "Plan a three day trip to Tokyo, including the weather and what time it is there.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
+{"id": "r097", "cat": "escalate", "text": "Compare today's weather in Springfield and Tokyo and tell me which is warmer.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
+{"id": "r098", "cat": "escalate", "text": "Plan my weekend in San Francisco and check the forecast for both days.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
+{"id": "r099", "cat": "escalate", "text": "Research the best laptops under a thousand dollars and compare the top three.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
+{"id": "r100", "cat": "escalate", "text": "Give me an itinerary for two days in Lisbon with the weather each day.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
+{"id": "r101", "cat": "escalate", "text": "Summarize the three most important things I should look at before tonight: the NHL schedule, the NFL injury report, and an Ethereum price chart.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
+{"id": "r102", "cat": "escalate", "text": "Compare the weather in Springfield and Shelbyville.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
+{"id": "r103", "cat": "escalate", "text": "Move all my screenshots from Desktop into a new folder called Screenshots, sorted by month.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
+{"id": "r104", "cat": "escalate", "text": "Rename all the files in my Downloads folder so they start with the date.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
+{"id": "r105", "cat": "escalate", "text": "Check the weather in Springfield, the price of Bitcoin, and the latest NHL scores, then give me a quick briefing.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}

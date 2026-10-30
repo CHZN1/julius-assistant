@@ -1,0 +1,42 @@
+{
+ "_note": "Reference text for recorded phrases is read at run time from diagnostics/asr_real/phrases.json (not committed); numbers match phrase_NN.wav.",
+ "keywords": {
+  "1": ["julius", "springfield"], "2": ["shelbyville"], "3": ["ethereum"], "4": ["overfitting"], "5": ["acmecorp"], "6": ["nhl"], "7": ["nfl"],
+  "8": ["17|seventeen", "percent", "2480|two thousand four hundred eighty"], "9": ["26 2|twenty six point two", "kilometers"], "10": ["tokyo"],
+  "11": ["julius", "3 45|three forty five", "pm"], "12": ["bitcoin"], "13": ["sharks"], "14": ["springfield", "shelbyville"], "15": ["precision", "recall"],
+  "16": ["downloads|download"], "17": ["tokyo", "3|three"], "18": ["patrick example", "nfl", "passing yards"], "19": ["fer 2013|fer two thousand thirteen", "62|sixty two", "overfitting"],
+  "20": ["nhl", "acmecorp", "springfield", "nfl", "ethereum"]},
+ "typed": [
+  {"id": "t01", "text": "Hey there.", "expect": {"path": "direct"}},
+  {"id": "t02", "text": "Hey Julius, how's it going?", "expect": {"path": "direct"}},
+  {"id": "t03", "text": "What's the weather in Springfield?", "expect": {"path": "shortcut", "tool": "get_weather", "args_contain": ["springfield"]}},
+  {"id": "t04", "text": "and what about tomorrow?", "expect": {"path": "shortcut", "tool": "get_forecast"}},
+  {"id": "t05", "text": "What's 17% of 2480 again?", "expect": {"path": "shortcut", "tool": "calculate"}},
+  {"id": "t06", "text": "Who won the Giants game yesterday?", "expect": {"path": "tool", "tool": "get_scores"}},
+  {"id": "t07", "text": "What's ETH at right now?", "expect": {"path": "tool", "tool": "get_quote", "args_contain": ["eth"]}},
+  {"id": "t08", "text": "Explain overfitting in one sentence.", "expect": {"path": "direct"}},
+  {"id": "t09", "text": "Plan a three day trip to Tokyo for me, including the weather and what time it is there right now.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
+ ],
+ "recorded": {
+  "1":  {"expect": {"path": "shortcut", "tool": "get_weather", "args_contain": ["springfield"]}},
+  "2":  {"expect": {"path": "shortcut", "tool": "get_forecast", "args_contain": ["shelbyville"]}},
+  "3":  {"expect": {"path": "tool", "tool": "get_quote", "args_contain": ["eth"]}},
+  "4":  {"expect": {"path": "direct"}},
+  "5":  {"expect": {"path": "direct"}},
+  "6":  {"expect": {"path": "tool", "tool": "get_scores"}},
+  "7":  {"expect": {"path": "tool", "tool_in": ["get_scores", "web_search"]}},
+  "8":  {"expect": {"path": "shortcut", "tool": "calculate"}},
+  "9":  {"expect": {"path": "shortcut", "tool": "convert_units"}},
+  "10": {"expect": {"path": "shortcut", "tool": "get_datetime", "args_contain": ["tokyo"]}},
+  "11": {"expect": {"path": "shortcut", "tool": "utility", "ok": true}},
+  "12": {"expect": {"path": "shortcut", "path_in": ["shortcut", "tool"], "tool": "get_quote", "args_contain": ["btc"]}},
+  "13": {"expect": {"path": "tool", "tool_in": ["web_search", "get_scores"]}},
+  "14": {"expect": {"path": "escalate", "tool": "escalate_to_planner"}},
+  "15": {"expect": {"path": "direct"}},
+  "16": {"expect": {"path": "escalate", "tool": "escalate_to_planner"}},
+  "17": {"expect": {"path": "escalate", "tool": "escalate_to_planner"}},
+  "18": {"expect": {"path": "tool", "tool_in": ["web_search", "get_scores"]}},
+  "19": {"expect": {"path": "direct"}},
+  "20": {"expect": {"path": "escalate", "tool": "escalate_to_planner"}}
+ }
+}
