@@ -8,7 +8,7 @@ class RecognitionOptionsTests(unittest.TestCase):
   fn=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='transcribe')
   recognizer=Mock();recognizer.transcribe.return_value={'text':'overfitting','language':'en','segments':[]}
   ns={'os':os,'time':time,'tts':Mock(backend='qwen-mlx'),'close_backend':Mock(),
-      'recognition_resources':lambda release:contextlib.nullcontext(), 'mlx_whisper':recognizer,'ASR':'existing-model'}
+      'recognition_resources':lambda release:contextlib.nullcontext(), 'mlx_whisper':recognizer,'ASR':'existing-model','ASR_HINT':None}
   exec(compile(ast.Module(body=[fn],type_ignores=[]),'recognition','exec'),ns)
   for language,expected in [('en','en'),('auto',None)]:
    with patch.dict(os.environ,{'JULIUS_ASR_LANGUAGE':language}):
@@ -18,6 +18,9 @@ class RecognitionOptionsTests(unittest.TestCase):
    self.assertNotIn('initial_prompt',kwargs)
    self.assertFalse(kwargs['condition_on_previous_text'])
   self.assertEqual(ns['tts'].suspend.call_count,2)
+  ns['ASR_HINT']='Julius, AcmeCorp.'  # the configured vocabulary hint reaches Whisper as initial_prompt
+  ns['transcribe'](__import__('numpy').ones(4096)*.02)
+  self.assertEqual(recognizer.transcribe.call_args.kwargs['initial_prompt'],'Julius, AcmeCorp.')
 if __name__=='__main__':unittest.main()
 
 class SilentRecognitionTests(unittest.TestCase):
