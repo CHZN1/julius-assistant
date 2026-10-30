@@ -23,18 +23,23 @@ TIERS = {
 }
 
 # Appended to Julius's system prompt in cloud mode so the front end knows when to escalate.
-PLANNING_PROMPT = ("\n\nPLANNING\nYou have a planner: escalate_to_planner. Use it instead of answering yourself whenever a request "
-                   "combines several lookups (for example weather and the time, or comparing two places), asks for a plan or itinerary, "
-                   "needs research or comparison, or involves moving, sorting, organising, copying or renaming files. The planner can only "
-                   "propose file changes; nothing happens until the user says yes, so never say a change was made. Pass the full task. "
-                   "Its result is your answer: say it in your own voice, briefly. Answer one-step requests with your own tools.")
+PLANNING_PROMPT = ("\n\nPLANNING\nYou have a planner: escalate_to_planner. Use it when the answer needs thinking across several facts, not just fetching them. "
+                   "Escalate for: (1) a plan, itinerary or schedule, e.g. 'plan a trip', 'plan a party'; (2) comparing options or making a "
+                   "recommendation, even when each fact is a single lookup, e.g. 'compare the weather in two cities', 'which is cheaper', 'should I "
+                   "buy X or Y'; (3) research, e.g. 'look into the best X'; (4) a briefing or summary assembled from several sources; (5) any change "
+                   "to many files at once: moving, sorting, renaming, organising or cleaning up. Do NOT escalate a single fact, and do not escalate "
+                   "several independent lookups that only need reading out, e.g. 'the weather in A and the time in B': call every tool for those in the "
+                   "same reply and answer in one go. The planner can only propose file changes; nothing happens until the user says yes, so never "
+                   "say a change was made. Pass the full task. Its result is your answer: say it in your own voice, briefly.")
 
 ESCALATE_SCHEMA = {"type": "function", "function": {
     "name": "escalate_to_planner",
-    "description": ("Hand a multi-step task to the planner (a stronger model that can run sub-agents, look several things up "
-                    "and propose file reorganisations). ALWAYS use it for: plans and itineraries, requests that combine several "
-                    "lookups, research or comparisons, and organising/sorting/moving/renaming files. Do not use it for a simple fact "
-                    "or a single tool call. Describe the task fully in your own words. The result is what you should say aloud."),
+    "description": ("Hand a task that needs thinking, not just fetching, to the planner (a stronger model that can run sub-agents, look "
+                    "several things up and propose file reorganisations). ALWAYS use it for: plans and itineraries; comparing options or "
+                    "recommending one (including 'compare the weather in two cities' and 'which is better'); research; briefings built from "
+                    "several sources; and bulk file work (organising, sorting, moving, renaming or cleaning up many files). Never use it for a "
+                    "single fact or tool call, or for independent lookups that just need reading out (call those tools together instead). "
+                    "Describe the task fully in your own words. The result is what you should say aloud."),
     "parameters": {"type": "object", "properties": {"task": {"type": "string", "description": "The full task, with every detail the planner needs"}},
                    "required": ["task"], "additionalProperties": False}}}
 

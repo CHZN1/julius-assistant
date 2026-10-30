@@ -69,7 +69,7 @@
 {"id": "r069", "cat": "tool", "text": "Show me what's in my todo.txt file.", "expect": {"path": "tool", "tool_in": ["read_file", "find_files"]}}
 {"id": "r070", "cat": "tool", "text": "Summarize the report in my Downloads called annual_report.pdf.", "expect": {"path": "tool", "tool_in": ["read_document", "find_files"]}}
 {"id": "r071", "cat": "tool", "text": "What's on my reminders list this week?", "expect": {"path": "tool", "tool": "list_planner_items"}}
-{"id": "r072", "cat": "tool", "text": "What's the weather in Springfield and the time in Tokyo?", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
+{"id": "r072", "cat": "parallel", "text": "What's the weather in Springfield and the time in Tokyo?", "expect": {"path": "tool", "tools_all": ["get_weather", "get_datetime"]}}
 {"id": "r073", "cat": "direct", "text": "Hey Julius, how's it going?", "expect": {"path": "direct"}}
 {"id": "r074", "cat": "direct", "text": "Hey there.", "expect": {"path": "direct"}}
 {"id": "r075", "cat": "direct", "text": "Explain overfitting simply.", "expect": {"path": "direct"}}
@@ -103,3 +103,17 @@
 {"id": "r103", "cat": "escalate", "text": "Move all my screenshots from Desktop into a new folder called Screenshots, sorted by month.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
 {"id": "r104", "cat": "escalate", "text": "Rename all the files in my Downloads folder so they start with the date.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
 {"id": "r105", "cat": "escalate", "text": "Check the weather in Springfield, the price of Bitcoin, and the latest NHL scores, then give me a quick briefing.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
+{"id": "r106", "cat": "escalate_heldout", "text": "Help me plan a four day trip to Vancouver and tell me what the weather will be like.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
+{"id": "r107", "cat": "escalate_heldout", "text": "Which is better for a road trip this weekend, Yosemite or Big Sur? Check the forecast for both and give me a recommendation.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
+{"id": "r108", "cat": "escalate_heldout", "text": "Look into the best standing desks, compare a few, and tell me which one to buy.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
+{"id": "r109", "cat": "escalate_heldout", "text": "Put together a morning briefing for me with the weather, the NHL scores, and the top headlines, and tell me what matters most.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
+{"id": "r110", "cat": "escalate_heldout", "text": "Go through my Documents folder and sort everything into folders by project.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
+{"id": "r111", "cat": "escalate_heldout", "text": "Rename every photo in my Pictures folder to include the year it was taken.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
+{"id": "r112", "cat": "escalate_heldout", "text": "Compare the price of Bitcoin and Ethereum today and tell me which one is doing better this week.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
+{"id": "r113", "cat": "escalate_heldout", "text": "Plan a birthday dinner for six people next Saturday and figure out what the weather will be so we can pick indoor or outdoor.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
+{"id": "r114", "cat": "escalate_heldout", "text": "Research how the Oilers and the Panthers have done this season and tell me who has the better chance at the cup.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
+{"id": "r115", "cat": "escalate_heldout", "text": "Clean up my downloads by moving old installers and zip files into an Archive folder.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
+{"id": "r116", "cat": "parallel", "text": "What's the weather in Shelbyville and what time is it in London?", "expect": {"path": "tool", "tools_all": ["get_weather", "get_datetime"]}}
+{"id": "r117", "cat": "parallel", "text": "Give me the price of Ethereum and the NFL scores.", "expect": {"path": "tool", "tools_all": ["get_quote", "get_scores"]}}
+{"id": "r118", "cat": "parallel", "text": "What's the forecast for Springfield tomorrow, and how's Bitcoin trading?", "expect": {"path": "tool", "tools_all": ["get_forecast", "get_quote"]}}
+{"id": "r119", "cat": "parallel", "text": "Tell me the time in Tokyo and the weather in Seattle.", "expect": {"path": "tool", "tools_all": ["get_datetime", "get_weather"]}}

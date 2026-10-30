@@ -35,3 +35,16 @@ class ShortcutPrecisionTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class EscalationGuidanceTests(unittest.TestCase):
+    def test_prompt_separates_judgement_from_independent_lookups(self):
+        import julius_cloud
+        text = julius_cloud.PLANNING_PROMPT
+        for needle in ("comparing options", "itinerary", "briefing", "renaming", "independent lookups"):
+            self.assertIn(needle, text)
+
+    def test_bulk_rename_is_not_a_shortcut(self):
+        root = os.path.expanduser('~')
+        self.assertIsNone(julius_router.route("Rename every photo in my Pictures folder to include the year", root))
+        self.assertEqual(julius_router.route("rename report.pdf to q3.pdf", root)[0], 'rename')

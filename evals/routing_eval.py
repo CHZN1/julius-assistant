@@ -73,6 +73,7 @@ def judge(case, got):
     tool_ok = True
     if "tool" in e: tool_ok = got.get("tool") == e["tool"]
     if "tool_in" in e: tool_ok = got.get("tool") in e["tool_in"]
+    if "tools_all" in e: tool_ok = set(e["tools_all"]) <= set(got.get("tools") or [])  # parallel lookups: every needed tool called in one reply
     if e["path"] == "direct": tool_ok = got["path"] == "direct"
     if "path_in" in e and "tool" in e: tool_ok = got.get("tool") == e["tool"]
     args = (got.get("args") or "").lower()
@@ -88,12 +89,13 @@ def brain_turn(case, brain, tracker, system):
         r = brain.chat(msgs, tools=jt.select_schemas(case["text"]), options={"num_predict": 256})
         calls = r.message.tool_calls or []
         c = calls[0].function if calls else None
+        names = [x.function.name for x in calls]
         seconds = time.perf_counter() - t0
         usd = sum(tracker.today_by_tier().values()) - before
         if c is None:
             return {"path": "direct", "tool": "", "args": "", "detail": (r.message.content or "")[:90].replace("\n", " "), "seconds": seconds, "usd": usd}
         path = "escalate" if c.name == "escalate_to_planner" else "tool"
-        return {"path": path, "tool": c.name, "args": json.dumps(dict(c.arguments)), "detail": "", "seconds": seconds, "usd": usd}
+        return {"path": path, "tool": c.name, "tools": names, "args": json.dumps(dict(c.arguments)), "detail": "", "seconds": seconds, "usd": usd}
     except Exception as exc:
         return {"path": "error", "tool": "", "args": "", "detail": f"{type(exc).__name__}: {exc}"[:120], "seconds": time.perf_counter() - t0, "usd": 0.0}
 
@@ -139,7 +141,7 @@ def main():
             continue
         got = rows[case["id"]]
         p, t, ar, s = judge(case, got)
-        out.append({"id": case["id"], "cat": case["cat"], "text": case["text"], "expected_path": e["path"], "expected_tool": e.get("tool") or "|".join(e.get("tool_in", [])),
+        out.append({"id": case["id"], "cat": case["cat"], "text": case["text"], "expected_path": e["path"], "expected_tool": e.get("tool") or "|".join(e.get("tool_in", [])) or "+".join(e.get("tools_all", [])),
                     "actual_path": got["path"], "actual_tool": got.get("tool", ""), "args": got.get("args", ""), "path_ok": p, "tool_ok": t, "args_ok": ar,
                     "ok": (p and t and ar and s) if "votes_ok" not in got else int(got["votes_ok"].split("/")[0]) * 2 > int(got["votes_ok"].split("/")[1]), "votes_ok": got.get("votes_ok", ""), "varies": got.get("varies", False), "variants": got.get("alt", ""), "seconds": round(got.get("seconds", 0), 2), "usd": round(got.get("usd", 0), 6), "detail": got.get("detail", "")})
     n = len(out)

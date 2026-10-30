@@ -1,7 +1,7 @@
 """Bounded deterministic file routing; ambiguity never becomes a broad move."""
 import difflib, os, re
 from pathlib import Path
-PLANNING_RE=re.compile(r'\b(?:organi[sz]e|sort|tidy|clean(?:\s|-)?up|declutter|categori[sz]e|group)\b',re.I)
+PLANNING_RE=re.compile(r'\b(?:organi[sz]e|sort|tidy|clean(?:\s|-)?up|declutter|categori[sz]e|group|rename (?:all|every|each))\b',re.I)
 MOVE_RE=re.compile(r'\b(move|organize|organise|tidy|archive|put|sort|copy)\b',re.I)
 FILEWORD=re.compile(r'\b(file|files|csvs?|notebooks?|pdfs?|images?|docs?|scripts?|everything|photos?|pictures?|documents?)\b',re.I)
 UNDO=re.compile(r'^\s*(?:please\s+)?(?:undo(?:\s+(?:that|the last (?:move|copy|change)|last))?|revert the last (?:move|change)|put (?:them|it) back)\s*[.!]?\s*$',re.I)
