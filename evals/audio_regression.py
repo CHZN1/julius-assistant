@@ -44,6 +44,8 @@ def missed(number, transcript):
 def run_asr(folder):
     import numpy as np, soundfile as sf, mlx_whisper, mlx.core as mx
     from julius_speech_text import fix_transcript
+    import julius_config
+    hint = julius_config.asr_initial_prompt()  # same vocabulary hint as the live transcriber
     repo = "mlx-community/whisper-small.en-mlx"
     phrases = json.loads((folder / "phrases.json").read_text())
     clips = sorted(folder.glob("phrase_*.wav"))
@@ -53,7 +55,7 @@ def run_asr(folder):
         audio = audio[:, 0] if audio.ndim > 1 else audio
         mx.random.seed(SEED)  # Whisper falls back to sampled decoding on hard segments; seeding makes runs repeatable
         t0 = time.perf_counter()
-        r = mlx_whisper.transcribe(audio, path_or_hf_repo=repo, condition_on_previous_text=False, language="en", no_speech_threshold=0.6)
+        r = mlx_whisper.transcribe(audio, path_or_hf_repo=repo, condition_on_previous_text=False, language="en", no_speech_threshold=0.6, **({"initial_prompt": hint} if hint else {}))
         return fix_transcript(r["text"].strip()), time.perf_counter() - t0
     transcribe(clips[0])  # warm-up: model load is not part of a turn
     out = []

@@ -14,6 +14,13 @@ DEFAULTS = {
     "orchestrator": {"max_steps": 8, "subagent_max_steps": 6},
     "offline": {"model": "llama3.2:3b", "retry_seconds": 60},
     "voice": {"keep_loaded": True},
+    "asr": {"vocabulary_hint": True,
+            "vocabulary": ["Julius", "AcmeCorp", "Pat Example", "FER 2013", "Ethereum", "ETH", "Bitcoin", "NHL", "NFL", "MLB", "WNBA", "Springfield", "Shelbyville"],
+            "nhl_teams": ["Ducks", "Coyotes", "Bruins", "Sabres", "Flames", "Hurricanes", "Blackhawks", "Avalanche", "Blue Jackets", "Stars", "Red Wings", "Oilers", "Panthers", "Kings", "Wild",
+                          "Canadiens", "Predators", "Devils", "Islanders", "Rangers", "Senators", "Flyers", "Penguins", "Sharks", "Kraken", "Blues", "Lightning", "Maple Leafs", "Utah Mammoth",
+                          "Canucks", "Golden Knights", "Capitals", "Jets"],
+            "nfl_teams": ["Cardinals", "Falcons", "Ravens", "Bills", "Panthers", "Bears", "Bengals", "Browns", "Cowboys", "Broncos", "Lions", "Packers", "Texans", "Colts", "Jaguars", "Chiefs",
+                          "Raiders", "Chargers", "Rams", "Dolphins", "Vikings", "Patriots", "Saints", "Giants", "Jets", "Eagles", "Steelers", "49ers", "Seahawks", "Buccaneers", "Titans", "Commanders"]},
 }
 
 
@@ -61,3 +68,12 @@ def describe_key():
     """Safe status for logs: whether a key is present and how long it is, never the value."""
     key = api_key()
     return f"set ({len(key)} chars)" if key else "missing"
+
+
+def asr_initial_prompt(config=None):
+    """The Whisper initial_prompt built from [asr] in julius.toml, or None when the hint is disabled."""
+    asr = (config or load_config())["asr"]
+    if not asr.get("vocabulary_hint", True):
+        return None
+    words = list(asr.get("vocabulary", [])) + list(asr.get("nhl_teams", [])) + list(asr.get("nfl_teams", []))
+    return ", ".join(dict.fromkeys(words)) + "." if words else None
