@@ -23,5 +23,5 @@ retry_seconds = 60          # how long to stay offline before trying the API aga
 keep_loaded = true          # with the brain in the cloud the TTS voice is never unloaded between turns
 
 [asr]
-vocabulary_hint = false     # off: helped the 20 recorded phrases (WER 8.0% -> 3.8%) but hurt 10 held-out phrases (7.1% -> 8.3%, "Ramirez's" -> "Ramirez'"; no hallucinated hint words). Set true to re-enable
+vocabulary_hint = true      # Whisper initial_prompt of names/teams: WER 8.0% -> 3.8% on the 20 recorded phrases (AcmeCorp, Example, FER 2013 recognised), +0.03 s; on 10 held-out phrases 7.1% -> 8.3% (one apostrophe, no hallucinated hint words), judged noise. Set false to disable
 # vocabulary, nhl_teams and nfl_teams (lists) can be overridden here; defaults live in julius_config.py
