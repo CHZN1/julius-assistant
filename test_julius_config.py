@@ -6,7 +6,8 @@ import julius_config as cfg
 
 class ConfigTests(unittest.TestCase):
  def test_asr_vocabulary_hint_is_built_from_config_and_can_be_disabled(self):
-  hint=cfg.asr_initial_prompt()
+  on=cfg.load_config();on['asr']['vocabulary_hint']=True
+  hint=cfg.asr_initial_prompt(on)
   for word in ('AcmeCorp','Pat Example','FER 2013','Ethereum','Sharks','Chiefs'):self.assertIn(word,hint)
   self.assertLess(len(hint.split()),150)  # Whisper reads at most 224 prompt tokens
   c=cfg.load_config();c['asr']['vocabulary_hint']=False;self.assertIsNone(cfg.asr_initial_prompt(c))

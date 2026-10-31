@@ -24,6 +24,8 @@ Everything lives in `evals/`; results are dated CSVs in `evals/results/` and eac
 
 First baseline (2026-10-29): routing eval 89.5% (94/105); recorded audio mean WER 8.0%, 69% of turns fully correct, median first audio 1.6 s, $0.0004 per turn. Details and the list of misses are in `evals/baselines/README.md`.
 
+**Phase A complete (2026-10-30).** Routing 97.5-98.3% (119 cases), file agent eval 100%, scores tool handles weekdays/dates/last week, tool-turn first audio 1.66 s. ASR vocabulary hint switched off after it hurt held-out phrases (trade-off in `evals/baselines/README.md`).
+
 ## Phase B: Daily driver for me
 
 Long-term memory, reminders/calendar, barge-in (interrupt Julius while he talks), a dedicated low-CPU wake-word engine instead of Whisper transcripts, an always-on launchd service with crash recovery, structured logging.

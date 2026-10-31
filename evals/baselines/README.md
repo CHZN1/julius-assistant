@@ -57,3 +57,16 @@ Notes:
 | Cost per audio turn | $0.0004 | $0.0018 (planner escalations ran longer; single run, noisy) |
 
 Known misses: r097, r101, r105 (Haiku answers with lookups instead of escalating; borderline), r056 (Sunday scores: tool only covers today and yesterday). Six brain cases still vary between runs because Haiku 5.5 accepts no temperature setting.
+
+## Phase A close-out (2026-10-30)
+
+| | Value |
+|---|---|
+| Routing eval (119 cases, majority of 3) | 97.5-98.3% across three runs; 1-2 cases flip between runs (r048, r049, r112 are noise), known misses r097, r105 |
+| Scores tool | today, yesterday, last night, a weekday ("Sunday" = most recent one), a calendar date, last week (7-day range); r056 passes |
+| Haiku system prompt + tool schemas | 4,366 -> 5,117 tokens (3 reminder tools, escalation guidance); Haiku cache hit 92.9-93.6% (about 5,490 read, 372-413 written, 4 uncached tokens per call) |
+| First audio (median) | shortcut 1.49 s, direct 1.52 s, tool 1.66 s (was 2.13 s), escalate varies 1.4-8 s by turn mix |
+| Cost per turn | Haiku-only $0.00013-0.00019 (baseline $0.00011-0.00015); planner turns dominate the mean |
+| ASR vocabulary hint | **OFF** (`julius.toml [asr] vocabulary_hint = false`). It cut WER 8.0% -> 3.8% on the 20 recorded phrases (AcmeCorp, Pat Example, FER 2013 recognised), but on 10 held-out phrases WER was 7.1% without and 8.3% with it ("Ramirez's" became "Ramirez'"); no hint words were hallucinated. With it off the audio baseline is WER 8.0%, 3 missed terms (AcmeCorp, Pat Example, FER 2013), whole turn correct 82.8%. |
+
+Why the planner cost looks 5x higher than the first baseline: the same Tokyo-plan turns cost the same ($0.0048 then, $0.0048-0.0052 now; 2 planner calls with about 3,200 vs 3,580 cached prefix tokens). The mean rose because two prompts that used to be mishandled for free ("Compare the weather in Springfield and Shelbyville", "Organize my downloads folder by file type") now correctly escalate; the downloads plan is 3 planner calls with a 1,100-token plan, about $0.023. A cold Sonnet cache (first escalation after 5 idle minutes) adds a 3,900-token cache write, about $0.01.

@@ -1,42 +1,81 @@
 {
  "suite": "audio_regression",
- "date": "2026-10-30 00:09",
+ "date": "2026-10-30 20:25",
  "recorded_phrases": 20,
  "typed_prompts": 9,
- "mean_wer": 0.038,
- "phrases_with_missed_terms": 0,
- "mean_asr_s": 0.254,
+ "mean_wer": 0.08,
+ "phrases_with_missed_terms": 3,
+ "mean_asr_s": 0.259,
  "pipeline_ran": true,
  "pipeline_exit_code": 0,
- "pipeline_seconds": 353.2,
- "routing_path_ok_pct": 82.8,
- "routing_tool_ok_pct": 82.8,
+ "pipeline_seconds": 372.8,
+ "routing_path_ok_pct": 89.7,
+ "routing_tool_ok_pct": 89.7,
  "turn_ok_pct": 82.8,
- "first_audio_median_s": 1.6,
- "first_audio_max_s": 15.24,
- "est_end_of_speech_to_first_audio_mean_s": 3.666,
- "cost_per_turn_mean_usd": 0.00176,
- "total_usd": 0.0511,
+ "first_audio_median_s": 1.56,
+ "first_audio_max_s": 8.8,
+ "est_end_of_speech_to_first_audio_mean_s": 2.371,
+ "cost_per_turn_mean_usd": 0.00167,
+ "total_usd": 0.0486,
  "by_path": {
   "shortcut": {
-   "n": 10,
-   "first_audio_median_s": 1.53,
-   "cost_mean_usd": 3e-05
+   "n": 9,
+   "first_audio_median_s": 1.48,
+   "cost_mean_usd": 1e-05
   },
   "direct": {
    "n": 7,
-   "first_audio_median_s": 1.89,
-   "cost_mean_usd": 0.00017
+   "first_audio_median_s": 1.49,
+   "cost_mean_usd": 0.00013
   },
   "tool": {
-   "n": 7,
-   "first_audio_median_s": 2.57,
-   "cost_mean_usd": 0.00024
+   "n": 8,
+   "first_audio_median_s": 1.68,
+   "cost_mean_usd": 0.00018
   },
   "escalate": {
    "n": 5,
-   "first_audio_median_s": 9.09,
-   "cost_mean_usd": 0.0096
+   "first_audio_median_s": 1.37,
+   "cost_mean_usd": 0.00922
   }
+ },
+ "repeats": 1,
+ "by_actual_path": {
+  "direct": {
+   "n": 10,
+   "first_audio_median_s": 1.56,
+   "cost_mean_usd": 0.00014
+  },
+  "shortcut": {
+   "n": 8,
+   "first_audio_median_s": 1.52,
+   "cost_mean_usd": 0.0
+  },
+  "tool": {
+   "n": 7,
+   "first_audio_median_s": 1.65,
+   "cost_mean_usd": 0.00019
+  },
+  "escalate": {
+   "n": 4,
+   "first_audio_median_s": 1.57,
+   "cost_mean_usd": 0.01147
+  }
+ },
+ "cost_per_turn_median_usd": 0.00167,
+ "haiku_calls": 28,
+ "haiku_cache_hit_pct": 93.6,
+ "haiku_cache_write_tokens_per_call": 372,
+ "haiku_cache_read_tokens_per_call": 5493,
+ "haiku_uncached_tokens_per_call": 4,
+ "regressions_vs_previous": {
+  "previous": "audio_20261030_011420.csv",
+  "newly_failing": [
+   "p05",
+   "p19"
+  ],
+  "newly_passing": [
+   "p07"
+  ]
  }
 }
