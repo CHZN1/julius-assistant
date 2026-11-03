@@ -74,11 +74,19 @@ def oww(model_arg):
     peaks = [oww_scores(model, a)[name] for _, a in wake]
     miss = [f for (f, _), p in zip(wake, peaks) if p < thr]
     print(f"miss rate {100 * len(miss) / len(wake):.1f}% ({len(miss)}/{len(wake)}) at threshold {thr}")
-    secs = 0; fires = 0
-    for s in ("talk1", "talk2", "talk3"):
-        for f, a in load(s):
-            secs += len(a) / SR + 1.5; fires += oww_scores(model, a)[name] >= thr
-    if secs: print(f"false wakes: {fires} in {secs / 60:.1f} min of ordinary talk = {fires / (secs / 3600):.1f} per hour")
+    def talk(sessions):
+        secs = fires = 0
+        for sess in sessions:
+            for f, a in load(sess):
+                secs += len(a) / SR + 1.5; fires += oww_scores(model, a)[name] >= thr
+        return secs, fires
+    jv = sorted((ROOT / "wake" / "data" / "eval_julius").glob("*.wav"))
+    if jv:
+        fired = [p.name for p in jv if oww_scores(model, sf.read(p, dtype="float32")[0])[name] >= thr]
+        print(f"Julius's own voice (held-out lines, {len(jv)} clips, real Qwen clone): {len(fired)} wakes" + (f" {fired}" if fired else ""))
+    for label, sessions in (("talk3 (held out, never trained on)", ["talk3"]), ("talk1+talk2 (used as training negatives)", ["talk1", "talk2"])):
+        secs, fires = talk(sessions)
+        if secs: print(f"false wakes, {label}: {fires} in {secs / 60:.1f} min = {fires / (secs / 3600):.1f} per hour")
 
 if __name__ == "__main__":
     {"baseline": baseline, "oww": lambda: oww(sys.argv[2])}[sys.argv[1] if len(sys.argv) > 1 else "baseline"]()

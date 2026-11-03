@@ -1,0 +1,106 @@
+"""Train the "Julius" wake-word head on top of openWakeWord's pretrained feature extractor and export wake/models/julius.onnx.
+
+Each clip is embedded (80 ms frames x 96 dims); the head scores every 16-frame window (1.28 s) and the clip score is the max over windows
+(multiple-instance training: no word alignment needed, and "Julius, what's the weather" works like a bare "Julius").
+Positives: wake/data/pos. Negatives: neg_hard, neg_general, neg_julius (Julius's own voices, weighted up) and real human speech from
+~/datasets (CREMA_D, RAVDESS) plus synthetic noise. Validation holds out one voice (bf_emma) the head never trains on.
+Your ordinary-talk sessions talk1 and talk2 (diagnostics/wake_real/) are negatives; talk3 and the 30 wake utterances are never trained on.
+Usage: python wake/train_head.py [--epochs 40]"""
+import argparse, json, random, sys
+from pathlib import Path
+import numpy as np, soundfile as sf, torch, torch.nn as nn
+from scipy import signal
+ROOT = Path(__file__).resolve().parent.parent
+DATA = ROOT / "wake" / "data"; OUT = ROOT / "wake" / "models"
+SR, WIN, DIM = 16000, 16, 96
+HOLDOUT_VOICE = "bf_emma"
+
+class Head(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.net = nn.Sequential(nn.Flatten(), nn.Linear(WIN * DIM, 128), nn.LayerNorm(128), nn.ReLU(), nn.Dropout(.2),
+                                 nn.Linear(128, 64), nn.ReLU(), nn.Linear(64, 1), nn.Sigmoid())
+    def forward(self, x): return self.net(x)
+
+def read16k(path):
+    x, sr = sf.read(path, dtype="float32")
+    if x.ndim > 1: x = x[:, 0]
+    return x if sr == SR else signal.resample_poly(x, SR // np.gcd(SR, sr), sr // np.gcd(SR, sr)).astype(np.float32)
+
+def embed(files, cache, extractor, max_s=4.0, loader=read16k):
+    if cache.exists(): return list(np.load(cache, allow_pickle=True))
+    out = []
+    for i in range(0, len(files), 64):
+        clips = []
+        for f in files[i:i + 64]:
+            x = loader(f)[: int(max_s * SR)]; x = np.pad(x, (0, int(max_s * SR) - len(x)))
+            clips.append((np.clip(x, -1, 1) * 32767).astype(np.int16))
+        e = extractor.embed_clips(np.stack(clips), batch_size=64)
+        out += list(e)
+        print(f"  embedded {min(i + 64, len(files))}/{len(files)}", flush=True)
+    np.save(cache, np.array(out, dtype=object), allow_pickle=True)
+    return out
+
+def windows(emb):  # (frames, 96) -> (n, 16, 96)
+    return np.stack([emb[i:i + WIN] for i in range(len(emb) - WIN + 1)]).astype(np.float32)
+
+def clip_scores(model, embs):
+    model.eval(); out = []
+    with torch.no_grad():
+        for e in embs: out.append(float(model(torch.from_numpy(windows(e))).max()))
+    return np.array(out)
+
+def main():
+    ap = argparse.ArgumentParser(); ap.add_argument("--epochs", type=int, default=40); ap.add_argument("--real-negatives", type=int, default=4000); a = ap.parse_args()
+    from openwakeword.utils import AudioFeatures
+    ex = AudioFeatures(inference_framework="onnx")
+    manifest = {m["file"]: m for f in sorted(DATA.glob("manifest_*.json")) for m in json.load(open(f))}
+    sets = {}
+    for cls in ("pos", "neg_hard", "neg_general", "neg_julius"):
+        files = sorted(f for f in manifest if f.startswith(cls + "/"))
+        embs = embed([DATA / f for f in files], DATA / f"emb_{cls}.npy", ex)
+        sets[cls] = [(manifest[f]["voice"], e) for f, e in zip(files, embs)]
+    rng = random.Random(3)
+    real = sorted((Path.home() / "datasets" / "CREMA_D" / "AudioWAV").glob("*.wav")) + sorted((Path.home() / "datasets" / "RAVDESS").rglob("*.wav"))
+    rng.shuffle(real); real = real[:a.real_negatives]
+    sets["neg_real"] = [("real", e) for e in embed(real, DATA / "emb_neg_real.npy", ex)]
+    noise = np.random.default_rng(0)
+    def noise_clip(i):  # background noise negatives
+        n = int(4 * SR); w = noise.standard_normal(n).astype(np.float32)
+        if i % 3 == 1: f = np.fft.rfft(w); f /= np.sqrt(np.maximum(np.arange(len(f)), 1)); w = np.fft.irfft(f, n).astype(np.float32)
+        return w / np.abs(w).max() * noise.uniform(.02, .5)
+    for sess, voice in (("talk1", "user"), ("talk2", "user"), ("talk3", "roy_val")):  # your ordinary talk: talk1/2 train, talk3 stays held out for the false-wake eval
+        tf = sorted((ROOT / "diagnostics" / "wake_real" / sess).glob(f"{sess}_*.wav"))
+        sets.setdefault("neg_talk", []).extend((voice, e) for e in embed(tf, DATA / f"emb_{sess}.npy", ex))
+    nf = list(range(300)); sets["neg_noise"] = [("noise", e) for e in embed(nf, DATA / "emb_neg_noise.npy", ex, loader=noise_clip)]
+    train, val = [], []
+    weight = {"neg_talk": 3.0, "pos": 1.0, "neg_hard": 2.0, "neg_general": 1.0, "neg_julius": 4.0, "neg_real": 1.0, "neg_noise": 1.0}
+    for cls, items in sets.items():
+        for voice, e in items:
+            (val if voice in (HOLDOUT_VOICE, "roy_val") else train).append((cls, e))
+    print({c: sum(1 for k, _ in train if k == c) for c in sets}, "| held-out voice clips:", len(val), flush=True)
+    model = Head(); opt = torch.optim.AdamW(model.parameters(), 2e-3, weight_decay=1e-3); bce = nn.BCELoss(reduction="none")
+    torch.manual_seed(0)
+    for ep in range(a.epochs):
+        model.train(); rng.shuffle(train); total = 0
+        for i in range(0, len(train), 32):
+            batch = train[i:i + 32]
+            xs, y, w, ids = [], [], [], []
+            for k, (cls, e) in enumerate(batch):
+                wi = windows(e); xs.append(torch.from_numpy(wi)); ids += [k] * len(wi); y.append(1.0 if cls == "pos" else 0.0); w.append(weight[cls])
+            s = model(torch.cat(xs)).squeeze(1); ids_t = torch.tensor(ids)
+            clip = torch.stack([s[ids_t == k].max() for k in range(len(batch))])
+            loss = (bce(clip, torch.tensor(y)) * torch.tensor(w)).mean()
+            opt.zero_grad(); loss.backward(); opt.step(); total += float(loss)
+        if ep % 5 == 4 or ep == a.epochs - 1:
+            vs = {c: clip_scores(model, [e for k, e in val if k == c]) for c in sets if any(k == c for k, _ in val)}
+            print(f"epoch {ep + 1} loss {total / (len(train) / 32):.4f} | held-out voice: " + ", ".join(
+                f"{c} {'recall' if c == 'pos' else 'false-fire'} {(v >= .5).mean() * 100:.1f}%" for c, v in vs.items()), flush=True)
+    OUT.mkdir(exist_ok=True)
+    model.eval(); torch.onnx.export(model, torch.zeros(1, WIN, DIM), OUT / "julius.onnx", input_names=["input"], output_names=["output"],
+                                    dynamic_axes={"input": {0: "batch"}, "output": {0: "batch"}}, opset_version=17, dynamo=False)
+    torch.save(model.state_dict(), OUT / "julius_head.pt")
+    print("wrote", OUT / "julius.onnx")
+
+if __name__ == "__main__":
+    main()
