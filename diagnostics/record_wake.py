@@ -1,6 +1,7 @@
 """Record wake-word test audio for the wake-word eval (16 kHz mono). Files go to diagnostics/wake_real/<session>/ (local only; *.wav is gitignored).
 
   python diagnostics/record_wake.py wake    30 wake utterances ("Julius", "Hey Julius", with a request), about 5 minutes
+  python diagnostics/record_wake.py wake2   the same 30 prompts saved as wake2 (a fresh eval set); wake3 ... likewise
   python diagnostics/record_wake.py talk1   about 35 ordinary sentences that must NOT wake Julius (also talk2, talk3); about 5 minutes each
 Each prompt waits for you to start speaking and stops after 0.8 s of silence; rerun to resume where you stopped.
 """
@@ -11,8 +12,9 @@ ROOT = Path(__file__).resolve().parent.parent
 SR, CHUNK = 16000, 1024
 session = sys.argv[1] if len(sys.argv) > 1 else ""
 prompts = json.loads((ROOT / "diagnostics" / "wake_prompts.json").read_text())
-if session not in prompts: sys.exit(f"usage: record_wake.py {'|'.join(prompts)}")
-items = [(p, "") if isinstance(p, str) else tuple(p) for p in prompts[session]]
+key = session if session in prompts else session.rstrip("0123456789")  # wake2, wake3 ... reuse the wake prompts under a new name
+if key not in prompts: sys.exit(f"usage: record_wake.py {'|'.join(prompts)}")
+items = [(p, "") if isinstance(p, str) else tuple(p) for p in prompts[key]]
 out = ROOT / "diagnostics" / "wake_real" / session; out.mkdir(parents=True, exist_ok=True)
 (out / "prompts.json").write_text(json.dumps(items, indent=1))
 q = queue.Queue()

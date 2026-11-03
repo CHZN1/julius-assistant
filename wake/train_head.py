@@ -3,7 +3,7 @@
 Each clip is embedded (80 ms frames x 96 dims); the head scores every 16-frame window (1.28 s) and the clip score is the max over windows
 (multiple-instance training: no word alignment needed, and "Julius, what's the weather" works like a bare "Julius").
 Positives: wake/data/pos. Negatives: neg_hard, neg_general, neg_julius (Julius's own voices, weighted up) and real human speech from
-~/datasets (CREMA_D, RAVDESS) plus synthetic noise. Validation holds out one voice (bf_emma) the head never trains on.
+~/datasets (CREMA_D, RAVDESS) plus synthetic noise. Validation holds out three voices (bf_emma, af_sky, bm_george) the head never trains on.
 Your ordinary-talk sessions talk1 and talk2 (diagnostics/wake_real/) are negatives; talk3 and the 30 wake utterances are never trained on.
 Usage: python wake/train_head.py [--epochs 40]"""
 import argparse, json, random, sys
@@ -13,7 +13,7 @@ from scipy import signal
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "wake" / "data"; OUT = ROOT / "wake" / "models"
 SR, WIN, DIM = 16000, 16, 96
-HOLDOUT_VOICE = "bf_emma"
+HOLDOUT_VOICES = ("bf_emma", "af_sky", "bm_george")
 
 class Head(nn.Module):
     def __init__(self):
@@ -77,7 +77,7 @@ def main():
     weight = {"neg_talk": 3.0, "pos": 1.0, "neg_hard": 2.0, "neg_general": 1.0, "neg_julius": 4.0, "neg_real": 1.0, "neg_noise": 1.0}
     for cls, items in sets.items():
         for voice, e in items:
-            (val if voice in (HOLDOUT_VOICE, "roy_val") else train).append((cls, e))
+            (val if voice in HOLDOUT_VOICES + ("roy_val",) else train).append((cls, e))
     print({c: sum(1 for k, _ in train if k == c) for c in sets}, "| held-out voice clips:", len(val), flush=True)
     model = Head(); opt = torch.optim.AdamW(model.parameters(), 2e-3, weight_decay=1e-3); bce = nn.BCELoss(reduction="none")
     torch.manual_seed(0)

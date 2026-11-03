@@ -56,3 +56,22 @@ JULIUS_OWN_EVAL = [
     "Julius, that's me. What do you need?", "It's Julius again, with your reminder.", "Hey, Julius here. Your timer is done.", "Okay Julius is ready when you are.",
     "Yes, I'm Julius.", "Hey the user, I'm Julius.", "The weather in Springfield is clear, says Julius.", "Julius is checking now.",
 ]
+
+# Templated sound-alike sentences: names that sound like the wake word, at the start, middle and end of ordinary speech
+_NAMES = ["Julia", "Julian", "Julie", "Jules", "Julio", "Julianna", "Jillian", "Gillian", "Juliette"]
+_TEMPLATES = [
+    "{n} left her umbrella at the office again.", "I asked {n} to bring the folding chairs.", "{n}, do you have a minute?", "Hey {n}, did you finish the report?",
+    "Okay {n}, let's get started.", "Did you see what {n} posted last night?", "{n} said she would call me back tomorrow.", "We're having dinner with {n} on Friday.",
+    "Tell {n} the meeting moved to Thursday.", "I think {n} has the answer.", "{n} just adopted a rescue cat.", "Have you met {n}'s new roommate?",
+    "It was {n} who left the garage door open.", "Yeah, {n} is coming over around six.", "Say hi to {n} for me.", "{n} and I are going hiking this weekend.",
+    "Hey {n}, what time does the movie start?", "Can you pass the salt, {n}?", "I borrowed this book from {n}.", "What do you think, {n}?",
+    "{n}'s birthday is coming up and nobody has a gift idea.", "I was talking to {n} about the trip yesterday.", "Where did {n} put the car keys?", "Good morning, {n}.",
+    "{n} is learning to play the cello.", "Remind {n} to send the slides tonight.", "Okay, {n}, I'll be right there.", "I haven't heard from {n} since March.",
+]
+_JEALOUS = ["I'm not jealous, I'm just saying some people have all the luck.", "He gets a little jealous whenever I mention the lake house.",
+            "Don't be jealous, there's plenty for everyone.", "She was jealous of the view from their balcony.", "A little jealousy never hurt anyone.",
+            "You'd be jealous if you saw the kitchen.", "Jealous much?", "The jury is still out on the new schedule.", "That joke was a real jewel.",
+            "He was jealous of the attention she got.", "They're just jealous because we got the best seats."]
+def soundalike_sentences():
+    out = [t.format(n=n) for n in _NAMES for t in _TEMPLATES] + _JEALOUS
+    return out

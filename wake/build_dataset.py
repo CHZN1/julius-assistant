@@ -40,7 +40,7 @@ def augment(x, rng):
         x = signal.fftconvolve(x, ir / np.abs(ir).sum() * 2.5)[:len(x) + n // 2].astype(np.float32)
     if rng.random() < .3:  # cheap microphone: band limit
         b, a = signal.butter(2, [rng.uniform(100, 250) / (SR / 2), rng.uniform(3500, 7000) / (SR / 2)], "band"); x = signal.lfilter(b, a, x).astype(np.float32)
-    x = x / (np.abs(x).max() + 1e-6) * rng.uniform(.15, .9)
+    x = x / (np.abs(x).max() + 1e-6) * float(np.exp(rng.uniform(np.log(.03), np.log(.9))))  # quiet and far takes down to about -30 dBFS
     lead, tail = rng.uniform(.2, 1.0), rng.uniform(.3, 1.0)
     y = np.concatenate([np.zeros(int(lead * SR), np.float32), x, np.zeros(int(tail * SR), np.float32)])
     if rng.random() < .85:
@@ -72,10 +72,23 @@ def julius_voice_clips(lines):
     proc.stdin.write(json.dumps({"op": "close"}) + "\n"); proc.stdin.flush(); proc.wait(timeout=30)
     return out
 
+def user_positives(rng, per_clip=40):
+    """Your 30 recorded wake utterances (diagnostics/wake_real/wake) with many augmentations; never the wake2 eval set or talk3."""
+    out = []
+    for p in sorted((ROOT / "diagnostics" / "wake_real" / "wake").glob("wake_*.wav")):
+        x, _ = sf.read(p, dtype="float32")
+        for k in range(per_clip):
+            y = x[int(rng.integers(0, int(.15 * SR))):] if k else x
+            if k % 3 == 1: y = signal.resample_poly(y, 100, int(rng.integers(88, 113))).astype(np.float32)  # small speed change
+            name = f"pos/user_{p.stem}_{k:02d}.wav"; save(DATA / name, augment(y, rng)); out.append({"file": name, "text": p.stem, "voice": "user", "speed": 1.0})
+    return out
+
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument("--per-class", type=int, default=1500); ap.add_argument("--julius-voice", action="store_true")
     ap.add_argument("--seed", type=int, default=7); ap.add_argument("--classes", default="pos,neg_hard,neg_general,julius"); ap.add_argument("--start", type=int, default=0); ap.add_argument("--eval-julius", action="store_true", help="render the held-out Julius-voice eval clips (wake/data/eval_julius)"); args = ap.parse_args()
     rng = np.random.default_rng(args.seed); random.seed(args.seed)
+    if args.classes == "user":
+        m = user_positives(np.random.default_rng(args.seed)); (DATA / "manifest_user.json").write_text(json.dumps(m)); print("done", len(m)); return
     if args.eval_julius:
         for k, (text, x) in enumerate(julius_voice_clips(P.JULIUS_OWN_EVAL)):
             save(DATA / "eval_julius" / f"qwen_{k:02d}.wav", np.concatenate([np.zeros(int(.5 * SR), np.float32), x / (np.abs(x).max() + 1e-6) * .6, np.zeros(int(.8 * SR), np.float32)]))
@@ -90,7 +103,7 @@ def main():
     def pos_text():
         return random.choice(P.BARE) if random.random() < .5 else random.choice(P.PREFIXES) + random.choice(P.REQUESTS)
     classes = {"pos": pos_text,
-               "neg_hard": lambda: random.choice(P.SOUNDALIKES + P.SOUNDALIKE_SENTENCES),
+               "neg_hard": lambda: random.choice(P.SOUNDALIKES + P.SOUNDALIKE_SENTENCES + P.soundalike_sentences() * 2),
                "neg_general": lambda: random.choice(P.GENERAL)}
     manifest = []
     want = args.classes.split(",")
