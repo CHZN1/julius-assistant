@@ -10,7 +10,7 @@ import numpy as np
 SR, FRAME = 16000, 1280
 
 class WakeStream:
-    def __init__(self, model_path, threshold, verify=None, after=1.5, back=2.0, refractory=2.0):
+    def __init__(self, model_path, threshold, verify=None, after=1.5, back=3.0, refractory=2.0):
         from openwakeword.model import Model
         self.model = Model(wakeword_models=[str(model_path)], inference_framework="onnx"); self.name = list(self.model.models)[0]
         self.threshold, self.verify, self.after, self.back, self.refractory = threshold, verify, after, back, refractory
@@ -40,12 +40,12 @@ def run_clip(stream, audio, tail=2.5):
     for i in range(0, len(x) - FRAME + 1, FRAME): events += stream.push(x[i:i + FRAME])
     return events
 
-def whisper_verify():
-    """Stage 2: small.en with the vocabulary hint on the short clip; accepts only a transcript the wake regex matches (Julius / hey Julius)."""
+def whisper_verify(hint_mode="none"):
+    """Stage 2: small.en on the short clip (hint_mode: none, the vocabulary hint, or a contrast hint naming the sound-alikes); accepts only a transcript the wake regex matches (Julius / hey Julius)."""
     import mlx_whisper, mlx.core as mx
     import julius_config
     from julius_listening import has_wake
-    hint = julius_config.asr_initial_prompt(); repo = "mlx-community/whisper-small.en-mlx"
+    hint = {"none": None, "vocab": julius_config.asr_initial_prompt(), "contrast": "Julius. Hey Julius. Julia. Julian. Julie. Jules."}[hint_mode]; repo = "mlx-community/whisper-small.en-mlx"
     import time
     def verify(clip):
         mx.random.seed(1301); t0 = time.perf_counter()

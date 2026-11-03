@@ -113,7 +113,7 @@ def compare():
     from wake.stream import WakeStream, run_clip, whisper_verify
     import julius_listening
     model, t_det, t_cas = sys.argv[2], float(sys.argv[3]), float(sys.argv[4])
-    verify = whisper_verify()
+    verify = whisper_verify("contrast")
     engines = {"detector alone": WakeStream(model, t_det), "cascade (low threshold + Whisper)": WakeStream(model, t_cas, verify=verify)}
     wake = load("wake2"); talk3 = load("talk3"); jv = [(p.name, sf.read(p, dtype="float32")[0]) for p in sorted((ROOT / "wake" / "data" / "eval_julius").glob("*.wav"))]
     if not wake: sys.exit("no wake2 recordings: python diagnostics/record_wake.py wake2")
