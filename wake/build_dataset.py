@@ -72,7 +72,7 @@ def julius_voice_clips(lines):
     proc.stdin.write(json.dumps({"op": "close"}) + "\n"); proc.stdin.flush(); proc.wait(timeout=30)
     return out
 
-def user_positives(rng, per_clip=40):
+def user_positives(rng, per_clip=24):
     """Your recorded wake utterances (sessions wake, wake2 and quick) with many augmentations; never the final eval sets wake3, wake4 or talk3."""
     out = []
     files = [p for s in ("wake", "wake2", "quick") for p in sorted((ROOT / "diagnostics" / "wake_real" / s).glob(f"{s}_*.wav"))]

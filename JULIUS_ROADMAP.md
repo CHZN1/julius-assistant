@@ -28,7 +28,13 @@ First baseline (2026-10-29): routing eval 89.5% (94/105); recorded audio mean WE
 
 ## Phase B: Daily driver for me
 
-Long-term memory, reminders/calendar, barge-in (interrupt Julius while he talks), a dedicated low-CPU wake-word engine instead of Whisper transcripts, an always-on launchd service with crash recovery, structured logging.
+- [x] **Dedicated wake-word engine** (done 2026-11-05): `[wake] engine = "cascade"` in `julius.toml`. A noise-gated openWakeWord "Julius" detector (0.03% of a core idle) fires at a low threshold, then one Whisper run on the whole utterance checks the wake word (hint names Julius beside Julia/Julian/Julie/Jules) and gives the request; `engine = "whisper"` is the fallback. Optional personal speaker verifier in `~/.julius/` (currently off, see below). Every fire is logged to `julius_memory/wake_log.jsonl` with near-miss clips for retraining. Details: `wake/`, `julius_wake.py`, `evals/wake_eval.py`.
+  - Measured on 60 fresh recordings (wake3 + wake4), 3.4 min of ordinary talk and 18 held-out Julius-voice lines: miss 3.3% (2/60), 0 false wakes per hour, Julius's own voice woke it 6 of 18 in isolation (live, `MicrophoneGate` also drops audio while he speaks). Previous model: 8.3% misses. The verifier cut Julius-voice wakes to 3 of 18 but added a miss (5.0%), so it ships off.
+  - Open: retrain the detector and verifier on the real-usage log (`wake_log.jsonl` near-miss clips); make Julius's own voice a harder negative; longer ordinary-talk sets to tighten the false-wake estimate (3.4 min is a small sample).
+- [ ] Barge-in (interrupt Julius while he talks; must not trigger on his own voice).
+- [ ] Always-on launchd service (starts at login, restarts on crash, one on/off command) with structured JSON logs and rotation.
+- [ ] Long-term memory across sessions, stored locally, with "forget that".
+- Also: reminders/calendar polish.
 
 ## Phase C: Agents
 
@@ -46,6 +52,7 @@ Julius supervises my NHL/NFL/MLB/WNBA pipelines in `~/dev` as sub-agents: run to
 - Audit the full git history for secrets and personal data (API keys, .env, julius_memory, planner state, my recorded voice phrases); report findings before any history rewrite.
 - Bring-your-own Anthropic key via `.env.example`; clear setup README with requirements (Apple Silicon, memory), a demo GIF/video, architecture diagram, and cost-per-turn table.
 - MIT license.
+- Wake word: the shipped detector (`wake/models/julius.onnx`) and the default `engine = "cascade"` path must work for anyone without the personal speaker verifier. The verifier is a personal layer trained on one person's voice (`python wake/verifier.py train`) and stored outside the repo in `~/.julius/`; the repo must not contain recordings, the verifier file or `julius_memory/wake_log.jsonl`. The detector was trained with the author's wake recordings as part of its positives: before release, retrain it from synthetic voices only (or ship it clearly labelled) and document how to record a personal wake set. Confirm the openWakeWord models download step (`openwakeword.utils.download_models`) is in the setup README.
 
 ## Phase F: UI
 

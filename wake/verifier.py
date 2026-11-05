@@ -29,16 +29,16 @@ def windows(model, name, audio, min_score, every=None):
 def load(path):
     a, sr = sf.read(path, dtype="float32"); return a if a.ndim == 1 else a[:, 0]
 
-def train(out, holdout=None, min_score=0.05, seed=0):
+def train(out, holdout=None, min_score=0.05, seed=0, sessions="wake,wake2,quick", model=None):
     from openwakeword.model import Model
     from sklearn.linear_model import LogisticRegression
     from sklearn.pipeline import make_pipeline
     from sklearn.preprocessing import StandardScaler
     import build_dataset as bd
-    rng = np.random.default_rng(seed); model_path = ROOT / "wake" / "models" / "julius.onnx"
+    rng = np.random.default_rng(seed); model_path = Path(model) if model else ROOT / "wake" / "models" / "julius.onnx"
     m = Model(wakeword_models=[str(model_path)], inference_framework="onnx"); name = list(m.models)[0]
     pos, neg, count = [], [], {}
-    wake_sessions = [s for s in ("wake", "wake2", "quick") if s != holdout and (REAL / s).is_dir()]
+    wake_sessions = [s for s in sessions.split(",") if s != holdout and (REAL / s).is_dir()]
     for s in wake_sessions:
         for p in sorted((REAL / s).glob(f"{s}_*.wav")):
             a = load(p)
@@ -74,6 +74,6 @@ def load_verifier(path=None):
     return pickle.load(open(path, "rb")) if path.exists() else None
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(); ap.add_argument("cmd", choices=["train", "info"]); ap.add_argument("--holdout"); ap.add_argument("--out", default=str(DEFAULT)); a = ap.parse_args()
-    if a.cmd == "train": train(a.out, a.holdout)
+    ap = argparse.ArgumentParser(); ap.add_argument("cmd", choices=["train", "info"]); ap.add_argument("--holdout"); ap.add_argument("--out", default=str(DEFAULT)); ap.add_argument("--sessions", default="wake,wake2,quick"); ap.add_argument("--model"); a = ap.parse_args()
+    if a.cmd == "train": train(a.out, a.holdout, sessions=a.sessions, model=a.model)
     else: print(DEFAULT, "exists" if DEFAULT.exists() else "missing")

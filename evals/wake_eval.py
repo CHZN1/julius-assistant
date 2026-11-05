@@ -122,7 +122,7 @@ def compare():
     if speaker is not None:
         engines["cascade v2 + speaker verifier (no gate)"] = WakeStream(model, t_low, verify=verify, speaker=speaker, speaker_threshold=sthr, gate=False)
         engines["cascade v2 + speaker verifier (noise gate)"] = WakeStream(model, t_low, verify=verify, speaker=speaker, speaker_threshold=sthr)
-    wake = load(session); talk3 = load("talk3"); jv = [(p.name, sf.read(p, dtype="float32")[0]) for p in sorted((ROOT / "wake" / "data" / "eval_julius").glob("*.wav"))]
+    wake = [c for x in session.split(",") for c in load(x)]; talk3 = load("talk3"); jv = [(p.name, sf.read(p, dtype="float32")[0]) for p in sorted((ROOT / "wake" / "data" / "eval_julius").glob("*.wav"))]
     if not wake: sys.exit(f"no {session} recordings: python diagnostics/record_wake.py {session}")
     rng = np.random.default_rng(0); idle = (rng.standard_normal(60 * SR) * 0.003).astype(np.float32)
     res = {}
