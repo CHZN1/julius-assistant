@@ -31,7 +31,7 @@ def oww_scores(model, audio, tail=0.6):
 def whisper_wake(clips):
     import mlx_whisper, mlx.core as mx
     import julius_config, julius_listening as jl
-    hint = julius_config.asr_initial_prompt()
+    hint = julius_config.asr_initial_prompt(wake=True)
     repo = "mlx-community/whisper-small.en-mlx"
     def run(a):
         mx.random.seed(1301)

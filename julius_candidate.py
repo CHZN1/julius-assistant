@@ -51,7 +51,9 @@ ASR_MODELS   = {"small.en": "mlx-community/whisper-small.en-mlx", "distil-large-
                 "large-v3-turbo": "mlx-community/whisper-large-v3-turbo"}
 ASR          = ASR_MODELS.get(os.environ.get("JULIUS_ASR_MODEL", "small.en"), os.environ.get("JULIUS_ASR_MODEL", "small.en"))
 import julius_config as _asr_cfg
-ASR_HINT     = _asr_cfg.asr_initial_prompt()  # vocabulary hint from [asr] in julius.toml; cuts mis-hearings of names (WER 8.0% -> 3.8% on the recorded phrases)
+ASR_HINT     = _asr_cfg.asr_initial_prompt()  # request transcription while awake; the wake check uses asr_initial_prompt(wake=True)
+WAKE_HINT    = _asr_cfg.asr_initial_prompt(wake=True)
+# vocabulary hint from [asr] in julius.toml; cuts mis-hearings of names (WER 8.0% -> 3.8% on the recorded phrases)
 intent_router = LiveIntentRouter()
 VOICE, SPEED = "am_adam", 1.05
 WAKE         = ["julius", "juliet", "hey julius"]
@@ -523,7 +525,7 @@ def save_utterance(audio):
     _sf.write(folder / f"utt_{_saved_utterances[0]:03d}.wav", audio.astype('float32'), 16000)
 
 
-def transcribe(a):
+def transcribe(a, wake=False):
     import time
     from julius_listening import has_voice_activity
     started=time.perf_counter()
@@ -541,7 +543,7 @@ def transcribe(a):
                                    condition_on_previous_text=False,
                                    language=(None if os.environ.get('JULIUS_ASR_LANGUAGE','en') in ('','auto') else os.environ.get('JULIUS_ASR_LANGUAGE','en')),
                                    no_speech_threshold=0.6,
-                                   **({'initial_prompt': ASR_HINT} if ASR_HINT else {}))
+                                   **({'initial_prompt': WAKE_HINT if wake else ASR_HINT} if (WAKE_HINT if wake else ASR_HINT) else {}))
     nsp = max((s.get("no_speech_prob", 0) for s in r.get("segments", [])), default=0)
     globals()['_last_asr_seconds']=time.perf_counter()-started
     globals()['_last_asr_confidence']={'no_speech_probability':nsp,
@@ -553,10 +555,10 @@ def transcribe(a):
     return text, r.get("language", "?"), nsp
 
 
-def transcribe_input(audio):
+def transcribe_input(audio, wake=False):
     """A failed recognition turn must not stop listening or invent a request."""
     try:
-        result = transcribe(audio)
+        result = transcribe(audio, wake) if wake else transcribe(audio)
         import os as _os
         if _os.environ.get('JULIUS_DEBUG_ASR') == '1':
             from julius_listening import has_wake as _has_wake
@@ -777,7 +779,7 @@ print(f"noise floor {floor:.4f} -> threshold {TH:.4f} (0.5s preroll)")
 def _wake_verify(clip):
     """Cascade stage 2: one Whisper run on the whole utterance; the wake regex decides, the transcript becomes the request."""
     started=time.perf_counter()
-    text,_lang,nsp=transcribe_input(clip)
+    text,_lang,nsp=transcribe_input(clip, wake=True)
     return bool(text) and nsp<=.6 and has_wake(text), text, time.perf_counter()-started
 import julius_wake
 wake_engine = None if _validation_no_devices else julius_wake.from_config(_wake_verify, jm.MEM)
@@ -927,7 +929,7 @@ with microphone_stream():
                     # into an apparently long utterance. Preserve short answers.
                     if dur < MIN_SPEECH or longest_voiced_run < 2:continue
                     if os.environ.get('JULIUS_SAVE_AUDIO_DIR'):save_utterance(audio)
-                    text, lang, nsp = transcribe_input(audio)
+                    text, lang, nsp = transcribe_input(audio, wake=not utterance_awake)
                     if not text or nsp > 0.6:
                         q.clear()
                         continue

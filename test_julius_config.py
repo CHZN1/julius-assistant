@@ -12,7 +12,9 @@ class ConfigTests(unittest.TestCase):
   self.assertLess(len(hint.split()),150)  # Whisper reads at most 224 prompt tokens
   c=cfg.load_config();c['asr']['vocabulary_hint']=False;self.assertIsNone(cfg.asr_initial_prompt(c))
  def test_hint_names_the_wake_word_with_its_sound_alikes_and_never_lists_julius_alone(self):
-  hint=cfg.asr_initial_prompt(dict(cfg.load_config(),asr=dict(cfg.load_config()['asr'],vocabulary_hint=True,vocabulary=['Julius','AcmeCorp'])))
+  conf=dict(cfg.load_config(),asr=dict(cfg.load_config()['asr'],vocabulary_hint=True,vocabulary=['Julius','AcmeCorp']))
+  self.assertTrue(cfg.asr_initial_prompt(conf).startswith('Julius, AcmeCorp'));self.assertNotIn('Julia',cfg.asr_initial_prompt(conf))  # awake request hint: vocabulary only
+  hint=cfg.asr_initial_prompt(conf,wake=True)
   self.assertTrue(hint.startswith(cfg.WAKE_CONTRAST));self.assertIn('Julia. Julian.',hint);self.assertNotIn(', Julius',hint);self.assertIn('AcmeCorp',hint)
  def test_project_file_loads_with_expected_tiers_and_cap(self):
   c=cfg.load_config()

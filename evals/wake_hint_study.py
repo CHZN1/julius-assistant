@@ -12,9 +12,7 @@ from julius_speech_text import fix_transcript
 from julius_listening import has_wake
 import julius_config as cfg
 CONTRAST = "Julius. Hey Julius. Julia. Julian. Julie. Jules."
-def combined():
-    vocab = cfg.asr_initial_prompt(); terms = [t.strip() for t in vocab.rstrip(".").split(",") if t.strip().lower() != "julius"]
-    return CONTRAST + " " + ", ".join(terms) + "."
+def combined(): return cfg.asr_initial_prompt(wake=True)
 HINTS = {"none": None, "vocab": cfg.asr_initial_prompt(), "contrast": CONTRAST, "combined": combined()}
 repo = "mlx-community/whisper-small.en-mlx"
 def tr(a, h):

@@ -15,7 +15,7 @@ REAL = ROOT / "diagnostics" / "wake_real"; RESULTS = ROOT / "evals" / "results"
 NAMES = re.compile(r"julia|julian|jealous|julie|jules", re.I)
 
 def main():
-    hint = cfg.asr_initial_prompt(); repo = "mlx-community/whisper-small.en-mlx"
+    hint = cfg.asr_initial_prompt(wake=True); repo = "mlx-community/whisper-small.en-mlx"
     def tr(a):
         mx.random.seed(1301)
         return fix_transcript(mlx_whisper.transcribe(a, path_or_hf_repo=repo, condition_on_previous_text=False, language="en", no_speech_threshold=0.6,

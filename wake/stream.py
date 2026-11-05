@@ -104,7 +104,7 @@ def whisper_verify():
     import julius_config
     from julius_listening import has_wake
     from julius_speech_text import fix_transcript
-    hint = julius_config.asr_initial_prompt(); repo = "mlx-community/whisper-small.en-mlx"
+    hint = julius_config.asr_initial_prompt(wake=True); repo = "mlx-community/whisper-small.en-mlx"
     def verify(clip):
         mx.random.seed(1301); t0 = time.perf_counter()
         text = fix_transcript(mlx_whisper.transcribe(clip.astype(np.float32), path_or_hf_repo=repo, condition_on_previous_text=False, language="en", no_speech_threshold=0.6,
