@@ -13,17 +13,17 @@ import numpy as np
 SR, FRAME = 16000, 1280
 
 class WakeStream:
-    def __init__(self, model_path, threshold, verify=None, speaker=None, speaker_threshold=0.5, end_silence=0.6, max_after=12.0, refractory=2.0):
+    def __init__(self, model_path, threshold, verify=None, speaker=None, speaker_threshold=0.5, end_silence=0.6, max_after=12.0, refractory=2.0, gate=True):
         from openwakeword.model import Model
         self.model = Model(wakeword_models=[str(model_path)], inference_framework="onnx"); self.name = list(self.model.models)[0]
         self.threshold, self.verify, self.speaker, self.speaker_threshold = threshold, verify, speaker, speaker_threshold
         self.end_silence, self.max_after, self.refractory = end_silence, max_after, refractory
-        self.speaker_calls = 0; self.speaker_s = 0.0
+        self.speaker_calls = 0; self.speaker_s = 0.0; self.gate = gate; self.scored = 0; self.frames = 0
         self.reset()
 
     def reset(self):
         self.model.reset(); self.n = 0; self.ring = deque(maxlen=int(12 * SR / FRAME) + 1); self.level = deque(maxlen=int(12 * SR / FRAME) + 1)
-        self.pending = None; self.quiet_until = 0.0; self.fires = 0; self.speaker_rejects = 0
+        self.pending = None; self.quiet_until = 0.0; self.fires = 0; self.speaker_rejects = 0; self.hang = 99; self.gated = True
 
     def _threshold(self):
         quiet = np.percentile(np.array(self.level), 20) if len(self.level) > 10 else .002
@@ -48,7 +48,20 @@ class WakeStream:
     def push(self, frame):
         x = frame.astype(np.float32) / 32768
         self.ring.append(frame); self.level.append(float(np.abs(x).mean())); self.n += 1; now = self.n * FRAME / SR
-        score = float(self.model.predict(frame)[self.name]); events = []
+        events = []; self.frames += 1
+        if self.gate and self.pending is None:
+            # Noise gate: only score audio above the noise floor. After 1.6 s of quiet (longer than the detector's 1.28 s window) frames are skipped;
+            # when sound returns, the detector restarts on the last 1.3 s so a wake word that begins the sound is not cut.
+            quiet = np.percentile(np.array(self.level), 20) if len(self.level) > 10 else .002
+            loud = self.level[-1] > max(.0015, 1.5 * quiet)
+            self.hang = 0 if loud else self.hang + 1
+            if self.hang > 20:
+                self.gated = True; return []
+            if self.gated:
+                self.gated = False; self.model.reset()
+                for f in list(self.ring)[-17:-1]: self.model.predict(f)
+        self.scored += 1
+        score = float(self.model.predict(frame)[self.name])
         if self.pending is None and score >= self.threshold and now >= self.quiet_until:
             self.fires += 1; self.quiet_until = now + self.refractory
             if self.speaker is not None:

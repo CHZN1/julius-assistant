@@ -119,7 +119,9 @@ def compare():
     sthr = float(sys.argv[7]) if len(sys.argv) > 7 else 0.5
     verify = whisper_verify(); speaker = pickle.load(open(vpath, "rb")) if vpath and vpath.exists() else None
     engines = {"detector alone": WakeStream(model, t_det), "cascade v2": WakeStream(model, t_low, verify=verify)}
-    if speaker is not None: engines["cascade v2 + speaker verifier"] = WakeStream(model, t_low, verify=verify, speaker=speaker, speaker_threshold=sthr)
+    if speaker is not None:
+        engines["cascade v2 + speaker verifier (no gate)"] = WakeStream(model, t_low, verify=verify, speaker=speaker, speaker_threshold=sthr, gate=False)
+        engines["cascade v2 + speaker verifier (noise gate)"] = WakeStream(model, t_low, verify=verify, speaker=speaker, speaker_threshold=sthr)
     wake = load(session); talk3 = load("talk3"); jv = [(p.name, sf.read(p, dtype="float32")[0]) for p in sorted((ROOT / "wake" / "data" / "eval_julius").glob("*.wav"))]
     if not wake: sys.exit(f"no {session} recordings: python diagnostics/record_wake.py {session}")
     rng = np.random.default_rng(0); idle = (rng.standard_normal(60 * SR) * 0.003).astype(np.float32)
@@ -140,6 +142,9 @@ def compare():
                       "speaker_ms_per_fire": round(1000 * st.speaker_s / max(1, st.speaker_calls), 2) if st.speaker is not None else 0,
                       "speaker_rejects_wake": sum(1 for _ in [0]) and None, "talk3_min": round(t["audio_s"] / 60, 1)}
         del res[label]["speaker_rejects_wake"]
+        if "gate" in label:
+            t4 = stream_stats(st, load("talk4")); res[label]["talk4_false_wakes"] = t4["accepted"]; res[label]["talk4_stage1_fires"] = t4["fires"]
+            res[label]["frames_scored_pct_in_speech_sets"] = round(100 * st.scored / max(1, st.frames), 1)
         print(label, json.dumps(res[label], indent=1), flush=True)
     (REAL / f"compare_{session}.json").write_text(json.dumps(res, indent=1))
 
