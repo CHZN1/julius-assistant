@@ -109,31 +109,39 @@ def thresholds():
     for t in (.05, .1, .2, .3, .5, .7, .9): print(f"thr {t}: miss {100 * (wk < t).mean():.1f}%  stage-1 fires on talk1+2 {int((tk >= t).sum())} ({(tk >= t).sum() / (secs / 3600):.0f}/h)")
 
 def compare():
-    """python evals/wake_eval.py compare MODEL DETECTOR_THR CASCADE_THR  : retrained detector alone vs the two-stage cascade, same metrics."""
-    from wake.stream import WakeStream, run_clip, whisper_verify
-    import julius_listening
-    model, t_det, t_cas = sys.argv[2], float(sys.argv[3]), float(sys.argv[4])
-    verify = whisper_verify("contrast")
-    engines = {"detector alone": WakeStream(model, t_det), "cascade (low threshold + Whisper)": WakeStream(model, t_cas, verify=verify)}
-    wake = load("wake2"); talk3 = load("talk3"); jv = [(p.name, sf.read(p, dtype="float32")[0]) for p in sorted((ROOT / "wake" / "data" / "eval_julius").glob("*.wav"))]
-    if not wake: sys.exit("no wake2 recordings: python diagnostics/record_wake.py wake2")
-    # noise-floor idle cost: 60 s of room-level noise through stage 1
+    """python evals/wake_eval.py compare MODEL DETECTOR_THR LOW_THR [WAKE_SESSION] [VERIFIER.pkl] [SPEAKER_THR]
+    Detector alone vs cascade v2 (low-threshold stage 1 -> whole-utterance Whisper) vs cascade v2 + personal speaker verifier, same metrics.
+    talk3 and the held-out Julius-voice lines are the false-wake sets; WAKE_SESSION (default wake3) is the miss-rate set."""
+    from wake.stream import WakeStream, whisper_verify
+    import pickle
+    model, t_det, t_low = sys.argv[2], float(sys.argv[3]), float(sys.argv[4])
+    session = sys.argv[5] if len(sys.argv) > 5 else "wake3"; vpath = Path(sys.argv[6]).expanduser() if len(sys.argv) > 6 else None
+    sthr = float(sys.argv[7]) if len(sys.argv) > 7 else 0.5
+    verify = whisper_verify(); speaker = pickle.load(open(vpath, "rb")) if vpath and vpath.exists() else None
+    engines = {"detector alone": WakeStream(model, t_det), "cascade v2": WakeStream(model, t_low, verify=verify)}
+    if speaker is not None: engines["cascade v2 + speaker verifier"] = WakeStream(model, t_low, verify=verify, speaker=speaker, speaker_threshold=sthr)
+    wake = load(session); talk3 = load("talk3"); jv = [(p.name, sf.read(p, dtype="float32")[0]) for p in sorted((ROOT / "wake" / "data" / "eval_julius").glob("*.wav"))]
+    if not wake: sys.exit(f"no {session} recordings: python diagnostics/record_wake.py {session}")
     rng = np.random.default_rng(0); idle = (rng.standard_normal(60 * SR) * 0.003).astype(np.float32)
     res = {}
     for label, st in engines.items():
         w = stream_stats(st, wake); t = stream_stats(st, talk3); j = stream_stats(st, jv)
         st.reset(); xi = (idle * 32767).astype(np.int16); c0 = time.process_time()
         for i in range(0, len(xi) - FRAME + 1, FRAME): st.push(xi[i:i + FRAME])
-        cpu = 100 * (time.process_time() - c0) / 60
-        hours = t["audio_s"] / 3600
-        res[label] = {"miss_pct": round(100 * (1 - w["accepted"] / len(wake)), 1), "missed": [n for n, ev in w["detail"] if not any(e["accepted"] for e in ev)],
-                      "false_wakes_per_hour": round(t["accepted"] / hours, 1), "stage1_fires_per_hour_talk": round(t["fires"] / hours, 1),
+        cpu = 100 * (time.process_time() - c0) / 60; hours = t["audio_s"] / 3600
+        casc = label != "detector alone"
+        res[label] = {"miss_pct": round(100 * (1 - sum(any(e["accepted"] for e in ev) for _, ev in w["detail"]) / len(wake)), 1),
+                      "missed": [n for n, ev in w["detail"] if not any(e["accepted"] for e in ev)],
+                      "false_wakes_per_hour": round(t["accepted"] / hours, 1), "stage1_fires_per_hour": round(t["fires"] / hours, 1),
                       "julius_voice_wakes": j["accepted"], "julius_voice_stage1_fires": j["fires"], "idle_cpu_pct_of_core": round(cpu, 2),
-                      "whisper_runs_per_hour": round(t["fires"] / hours, 1) if label.startswith("cascade") else 0,
-                      "whisper_s_per_hour": round(t["whisper_s"] / hours, 1) if label.startswith("cascade") else 0,
-                      "decision_delay_after_fire_s": round(float(np.median(w["delays"])), 2) if w["delays"] else None, "talk3_min": round(t["audio_s"] / 60, 1)}
-        print(label, json.dumps(res[label], indent=1))
-    (REAL / "compare.json").write_text(json.dumps(res, indent=1))
+                      "whisper_runs_per_hour": round(sum(1 for _, ev in t["detail"] for e in ev) / hours, 1) if casc else 0,
+                      "whisper_s_per_hour": round(t["whisper_s"] / hours, 1) if casc else 0,
+                      "whisper_s_per_wake": round(float(np.median([e["verify_s"] for _, ev in w["detail"] for e in ev if e["accepted"]] or [0])), 2) if casc else 0,
+                      "speaker_ms_per_fire": round(1000 * st.speaker_s / max(1, st.speaker_calls), 2) if st.speaker is not None else 0,
+                      "speaker_rejects_wake": sum(1 for _ in [0]) and None, "talk3_min": round(t["audio_s"] / 60, 1)}
+        del res[label]["speaker_rejects_wake"]
+        print(label, json.dumps(res[label], indent=1), flush=True)
+    (REAL / f"compare_{session}.json").write_text(json.dumps(res, indent=1))
 
 if __name__ == "__main__":
     {"baseline": baseline, "oww": lambda: oww(sys.argv[2]), "compare": compare, "thresholds": thresholds}[sys.argv[1] if len(sys.argv) > 1 else "baseline"]()

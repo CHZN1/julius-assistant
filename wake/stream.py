@@ -1,56 +1,98 @@
-"""Streaming wake-word detection: openWakeWord stage 1, optional Whisper stage 2 (the cascade).
+"""Streaming wake-word detection, cascade v2: openWakeWord stage 1 -> optional speaker verifier -> Whisper on the whole utterance.
 
-WakeStream.push(frame) takes 80 ms of 16 kHz int16 audio and returns the wake events that were decided on that frame:
-  {"fire": seconds, "decided": seconds, "accepted": bool, "heard": str, "verify_s": float}
-Without a verifier the stage-1 fire is the decision. With one, the stream waits `after` seconds after the fire, hands the last
-back+after seconds of audio to verify(clip) -> (accepted, heard, seconds), and decides on that. The ring buffer keeps the last 6 s."""
+WakeStream.push(frame) takes 80 ms of 16 kHz int16 audio and returns the wake events decided on that frame:
+  {"fire", "decided", "accepted", "heard", "request", "verify_s", "score", "speaker"}   (times in seconds of audio)
+Stage 1 fires at a LOW threshold. The stream then keeps capturing until the speaker stops (`end_silence` s of quiet, at most `max_after`
+s), cuts the utterance back to where that speech began, and hands the whole thing - wake word plus request - to verify(clip) ->
+(accepted, text, seconds). One Whisper run serves the wake check and the request: `request` is the transcript with the wake word removed.
+With verify=None the stage-1 fire is the decision (detector alone). An optional speaker verifier (wake/verifier.py) rejects a fire whose
+audio features do not match the owner's voice before any Whisper run is spent. The ring buffer keeps the last 12 s."""
 from collections import deque
 import numpy as np
 
 SR, FRAME = 16000, 1280
 
 class WakeStream:
-    def __init__(self, model_path, threshold, verify=None, after=1.5, back=3.0, refractory=2.0):
+    def __init__(self, model_path, threshold, verify=None, speaker=None, speaker_threshold=0.5, end_silence=0.6, max_after=12.0, refractory=2.0):
         from openwakeword.model import Model
         self.model = Model(wakeword_models=[str(model_path)], inference_framework="onnx"); self.name = list(self.model.models)[0]
-        self.threshold, self.verify, self.after, self.back, self.refractory = threshold, verify, after, back, refractory
+        self.threshold, self.verify, self.speaker, self.speaker_threshold = threshold, verify, speaker, speaker_threshold
+        self.end_silence, self.max_after, self.refractory = end_silence, max_after, refractory
+        self.speaker_calls = 0; self.speaker_s = 0.0
         self.reset()
 
     def reset(self):
-        self.model.reset(); self.n = 0; self.ring = deque(maxlen=int(6 * SR / FRAME) + 1); self.pending = None; self.quiet_until = 0; self.fires = 0
+        self.model.reset(); self.n = 0; self.ring = deque(maxlen=int(12 * SR / FRAME) + 1); self.level = deque(maxlen=int(12 * SR / FRAME) + 1)
+        self.pending = None; self.quiet_until = 0.0; self.fires = 0; self.speaker_rejects = 0
+
+    def _threshold(self):
+        quiet = np.percentile(np.array(self.level), 20) if len(self.level) > 10 else .002
+        return min(0.02, max(0.0045, quiet * 2.2))
+
+    def _utterance_start(self):
+        """(ring index where the speech nearest the fire begins, frames of silence since it ended). Gaps up to 0.4 s stay inside the utterance;
+        the fire often lands after the word, so first look back (up to 3 s) for the most recent speech."""
+        th = self._threshold(); lv = list(self.level); i = len(lv) - 1
+        while i >= 0 and lv[i] <= th and len(lv) - 1 - i < 38: i -= 1
+        trailing = len(lv) - 1 - i
+        if i < 0 or lv[i] <= th: return len(lv) - 1, trailing
+        start = i; gap = 0
+        while i >= 0:
+            if lv[i] > th: start = i; gap = 0
+            else:
+                gap += 1
+                if gap > 5: break
+            i -= 1
+        return max(0, start - 2), trailing
 
     def push(self, frame):
-        self.ring.append(frame); self.n += 1; now = self.n * FRAME / SR; events = []
-        score = float(self.model.predict(frame)[self.name])
+        x = frame.astype(np.float32) / 32768
+        self.ring.append(frame); self.level.append(float(np.abs(x).mean())); self.n += 1; now = self.n * FRAME / SR
+        score = float(self.model.predict(frame)[self.name]); events = []
         if self.pending is None and score >= self.threshold and now >= self.quiet_until:
             self.fires += 1; self.quiet_until = now + self.refractory
-            if self.verify is None: return [{"fire": now, "decided": now, "accepted": True, "heard": "", "verify_s": 0.0, "score": score}]
-            self.pending = {"fire": now, "due": now + self.after, "score": score}
-        if self.pending and now >= self.pending["due"]:
-            clip = np.concatenate(list(self.ring))[-int((self.back + self.after) * SR):]
-            ok, heard, secs = self.verify(clip); p = self.pending; self.pending = None
-            events.append({"fire": p["fire"], "decided": now, "accepted": ok, "heard": heard, "verify_s": secs, "score": p["score"]})
+            if self.speaker is not None:
+                import time; t0 = time.perf_counter()
+                feats = self.model.preprocessor.get_features(self.model.model_inputs[self.name]); sp = float(self.speaker.predict_proba(np.asarray(feats, dtype=np.float32).reshape(1, -1))[0][1])
+                self.speaker_calls += 1; self.speaker_s += time.perf_counter() - t0
+                if sp < self.speaker_threshold: self.speaker_rejects += 1; return []
+            else: sp = None
+            if self.verify is None: return [{"fire": now, "decided": now, "accepted": True, "heard": "", "request": "", "verify_s": 0.0, "score": score, "speaker": sp}]
+            idx, trailing = self._utterance_start()
+            self.pending = {"fire": now, "start_n": self.n - (len(self.level) - 1 - idx), "score": score, "speaker": sp, "silent": trailing}
+        if self.pending:
+            self.pending["silent"] = self.pending["silent"] + 1 if self.level[-1] <= self._threshold() else 0
+            done = self.pending["silent"] * FRAME / SR >= self.end_silence or now - self.pending["fire"] >= self.max_after
+            if done:
+                p = self.pending; self.pending = None
+                frames = list(self.ring); first = max(0, len(frames) - 1 - (self.n - p["start_n"]))
+                clip = np.concatenate(frames[first:]).astype(np.float32) / 32768
+                ok, heard, secs = self.verify(clip)
+                from julius_listening import strip_wake
+                events.append({"fire": p["fire"], "decided": now, "accepted": ok, "heard": heard, "request": strip_wake(heard) if ok else "",
+                               "verify_s": secs, "score": p["score"], "speaker": p["speaker"]})
         return events
 
 def run_clip(stream, audio, tail=2.5):
-    """Feed one float clip (plus trailing silence so a pending verification completes); return every decided event."""
+    """Feed one float clip (plus trailing silence so a pending utterance completes); return every decided event."""
     stream.reset()
-    x = (np.clip(np.concatenate([audio, np.zeros(int(tail * SR), np.float32)]), -1, 1) * 32767).astype(np.int16)
+    x = (np.clip(np.concatenate([np.zeros(int(.5 * SR), np.float32), audio, np.zeros(int(tail * SR), np.float32)]), -1, 1) * 32767).astype(np.int16)
     events = []
     for i in range(0, len(x) - FRAME + 1, FRAME): events += stream.push(x[i:i + FRAME])
     return events
 
-def whisper_verify(hint_mode="none"):
-    """Stage 2: small.en on the short clip (hint_mode: none, the vocabulary hint, or a contrast hint naming the sound-alikes); accepts only a transcript the wake regex matches (Julius / hey Julius)."""
-    import mlx_whisper, mlx.core as mx
+def whisper_verify():
+    """Stage 2: small.en on the whole utterance with the production hint (wake word next to its sound-alikes, then the vocabulary);
+    accepts only a transcript the wake regex matches at the start (Julius / hey Julius, not Julia or Julian)."""
+    import mlx_whisper, mlx.core as mx, time
     import julius_config
     from julius_listening import has_wake
-    hint = {"none": None, "vocab": julius_config.asr_initial_prompt(), "contrast": "Julius. Hey Julius. Julia. Julian. Julie. Jules."}[hint_mode]; repo = "mlx-community/whisper-small.en-mlx"
-    import time
+    from julius_speech_text import fix_transcript
+    hint = julius_config.asr_initial_prompt(); repo = "mlx-community/whisper-small.en-mlx"
     def verify(clip):
         mx.random.seed(1301); t0 = time.perf_counter()
-        text = mlx_whisper.transcribe(clip.astype(np.float32), path_or_hf_repo=repo, condition_on_previous_text=False, language="en", no_speech_threshold=0.6,
-                                      **({"initial_prompt": hint} if hint else {}))["text"].strip()
+        text = fix_transcript(mlx_whisper.transcribe(clip.astype(np.float32), path_or_hf_repo=repo, condition_on_previous_text=False, language="en", no_speech_threshold=0.6,
+                                                     **({"initial_prompt": hint} if hint else {}))["text"].strip())
         return has_wake(text), text, time.perf_counter() - t0
     verify(np.zeros(SR * 2, np.float32))  # warm-up: model load is not part of a wake
     return verify
