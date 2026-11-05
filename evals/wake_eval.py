@@ -136,7 +136,7 @@ def compare():
                       "missed": [n for n, ev in w["detail"] if not any(e["accepted"] for e in ev)],
                       "false_wakes_per_hour": round(t["accepted"] / hours, 1), "stage1_fires_per_hour": round(t["fires"] / hours, 1),
                       "julius_voice_wakes": j["accepted"], "julius_voice_stage1_fires": j["fires"], "idle_cpu_pct_of_core": round(cpu, 2),
-                      "whisper_runs_per_hour": round(sum(1 for _, ev in t["detail"] for e in ev) / hours, 1) if casc else 0,
+                      "whisper_runs_per_hour": round(sum(1 for _, ev in t["detail"] for e in ev if e.get("reason") != "speaker") / hours, 1) if casc else 0,
                       "whisper_s_per_hour": round(t["whisper_s"] / hours, 1) if casc else 0,
                       "whisper_s_per_wake": round(float(np.median([e["verify_s"] for _, ev in w["detail"] for e in ev if e["accepted"]] or [0])), 2) if casc else 0,
                       "speaker_ms_per_fire": round(1000 * st.speaker_s / max(1, st.speaker_calls), 2) if st.speaker is not None else 0,
@@ -148,5 +148,28 @@ def compare():
         print(label, json.dumps(res[label], indent=1), flush=True)
     (REAL / f"compare_{session}.json").write_text(json.dumps(res, indent=1))
 
+def suite():
+    """python evals/wake_eval.py suite : the shipped configuration ([wake] in julius.toml, personal verifier if present) on every fresh wake set
+    (wake3, wake4 ...), talk3 and the held-out Julius-voice lines. Writes evals/results/wakecascade_<time>.summary.json for run_all.py."""
+    from wake.stream import WakeStream, whisper_verify
+    import pickle, julius_config as cfg
+    wake_cfg = cfg.load_config()["wake"]; verify = whisper_verify()
+    vpath = Path(str(wake_cfg["verifier"])).expanduser(); speaker = pickle.load(open(vpath, "rb")) if vpath.exists() else None
+    st = WakeStream(ROOT / "wake" / "models" / "julius.onnx", float(wake_cfg["threshold_low"]), verify=verify, speaker=speaker, speaker_threshold=float(wake_cfg["speaker_threshold"]))
+    sessions = [d.name for d in sorted(REAL.glob("wake[3-9]")) if d.is_dir()]
+    if not sessions: sys.exit("no fresh wake sets (wake3 ...) in diagnostics/wake_real")
+    clips = [(f"{s}/{n}", a) for s in sessions for n, a in load(s)]
+    w = stream_stats(st, clips); t = stream_stats(st, load("talk3"))
+    jv = [(p.name, sf.read(p, dtype="float32")[0]) for p in sorted((ROOT / "wake" / "data" / "eval_julius").glob("*.wav"))]; j = stream_stats(st, jv)
+    missed = [n for n, ev in w["detail"] if not any(e["accepted"] for e in ev)]; hours = t["audio_s"] / 3600
+    miss_pct = round(100 * len(missed) / len(clips), 1); fw = round(t["accepted"] / hours, 1)
+    breaches = ([f"miss {miss_pct}% > 3.4%"] if miss_pct > 3.4 else []) + ([f"false wakes {fw}/h > 1"] if fw > 1 else []) + ([f"Julius voice woke {j['accepted']}"] if j["accepted"] else [])
+    summary = {"suite": "wake_cascade", "date": time.strftime("%Y-%m-%d %H:%M"), "verifier": speaker is not None, "wake_sets": sessions, "wake_clips": len(clips), "missed": missed,
+               "miss_pct": miss_pct, "ok_pct": round(100 - miss_pct, 1), "false_wakes_per_hour": fw, "talk3_min": round(t["audio_s"] / 60, 1), "julius_voice_wakes": j["accepted"],
+               "whisper_runs_per_hour": round(t["fires"] / hours, 1), "regressions_vs_previous": {"newly_failing": breaches}, "total_usd": 0.0}
+    RES = ROOT / "evals" / "results"; RES.mkdir(exist_ok=True)
+    (RES / f"wakecascade_{time.strftime('%Y%m%d_%H%M%S')}.summary.json").write_text(json.dumps(summary, indent=1))
+    print(f"wake cascade: miss {miss_pct}% of {len(clips)} ({', '.join(missed) or 'none'}), false wakes {fw}/h on {summary['talk3_min']} min, Julius voice wakes {j['accepted']}, verifier {'on' if speaker is not None else 'off'}")
+
 if __name__ == "__main__":
-    {"baseline": baseline, "oww": lambda: oww(sys.argv[2]), "compare": compare, "thresholds": thresholds}[sys.argv[1] if len(sys.argv) > 1 else "baseline"]()
+    {"baseline": baseline, "oww": lambda: oww(sys.argv[2]), "compare": compare, "thresholds": thresholds, "suite": suite}[sys.argv[1] if len(sys.argv) > 1 else "baseline"]()

@@ -22,6 +22,6 @@ class RecognitionRecoveryTests(unittest.TestCase):
  def test_live_and_scripted_audio_use_recovery(self):
   tree=ast.parse(Path('julius_candidate.py').read_text())
   calls=[n for n in ast.walk(tree) if isinstance(n,ast.Call) and isinstance(n.func,ast.Name) and n.func.id=='transcribe_input']
-  self.assertEqual(len(calls),2)
+  self.assertEqual(len(calls),3)  # scripted audio, the live utterance, and the cascade wake check
 
 if __name__=='__main__':unittest.main()

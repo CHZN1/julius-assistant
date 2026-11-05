@@ -773,6 +773,35 @@ TH = min(0.020, max(0.0045, floor * 2.2))
 q.clear()
 pre_roll.clear()
 print(f"noise floor {floor:.4f} -> threshold {TH:.4f} (0.5s preroll)")
+
+def _wake_verify(clip):
+    """Cascade stage 2: one Whisper run on the whole utterance; the wake regex decides, the transcript becomes the request."""
+    started=time.perf_counter()
+    text,_lang,nsp=transcribe_input(clip)
+    return bool(text) and nsp<=.6 and has_wake(text), text, time.perf_counter()-started
+import julius_wake
+wake_engine = None if _validation_no_devices else julius_wake.from_config(_wake_verify, jm.MEM)
+_wake_prev_awake = True
+
+def _after_wake(ev):
+    """An accepted cascade wake: the request is the transcript after the wake word (same handling as a transcript that starts with 'Julius')."""
+    text = ev['request'].strip()
+    print("  [awake]", flush=True)
+    control = listening_control(text) if text else None
+    if control:
+        globals()['awake_until'] = 0.0 if control == 'sleep' else time.time() + SESSION_SEC
+        print(f"  [{ 'asleep' if control == 'sleep' else 'awake' }]", flush=True)
+        try:speak('Alright. Say Julius when you need me.' if control == 'sleep' else 'I am here.')
+        except TurnCancelled:print('  [response stopped]',flush=True)
+        if control=='sleep':release_idle_models()
+    elif len(text.split()) < 2:
+        globals()['awake_until'] = time.time() + SESSION_SEC
+        try:speak("Yeah?")
+        except TurnCancelled:print('  [response stopped]',flush=True)
+    else:
+        process(text, 'en')
+        globals()['awake_until'] = time.time() + SESSION_SEC
+    q.clear(); wake_engine.reset()
 print(f'\njulius ready · {LLM_BACKEND}:{LLM} · say "Julius" to wake or just type · Ctrl+C to quit\n')
 
 buf, recording, sil_t, spk_t = [], False, None, None
@@ -864,6 +893,13 @@ with microphone_stream():
             if not recording:
                 pre_roll.append(chunk)
 
+            if wake_engine is not None:
+                if awake: _wake_prev_awake = True
+                elif not recording:
+                    if _wake_prev_awake: wake_engine.reset(); _wake_prev_awake = False
+                    for _ev in wake_engine.feed(chunk): _after_wake(_ev)
+                    continue
+
             if lvl > TH:
                 if not recording:
                     recording, spk_t = True, now
@@ -901,6 +937,7 @@ with microphone_stream():
                         text = strip_wake(text)
                         print("  [awake]")
                     else:
+                        if wake_engine is not None and has_wake(text): wake_engine.note_spoken_wake(text)
                         text = strip_leading_wake(text)  # "Julius, what about tomorrow?" while awake must still reach the follow-up router
                     control = listening_control(text)
                     if control:

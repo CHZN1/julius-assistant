@@ -1,7 +1,7 @@
 """Streaming wake-word detection, cascade v2: openWakeWord stage 1 -> optional speaker verifier -> Whisper on the whole utterance.
 
 WakeStream.push(frame) takes 80 ms of 16 kHz int16 audio and returns the wake events decided on that frame:
-  {"fire", "decided", "accepted", "heard", "request", "verify_s", "score", "speaker"}   (times in seconds of audio)
+  {"fire", "decided", "accepted", "heard", "request", "verify_s", "score", "speaker", "reason": "" | "speaker" | "whisper", "clip": audio of a rejected fire}   (times in seconds of audio)
 Stage 1 fires at a LOW threshold. The stream then keeps capturing until the speaker stops (`end_silence` s of quiet, at most `max_after`
 s), cuts the utterance back to where that speech began, and hands the whole thing - wake word plus request - to verify(clip) ->
 (accepted, text, seconds). One Whisper run serves the wake check and the request: `request` is the transcript with the wake word removed.
@@ -68,9 +68,12 @@ class WakeStream:
                 import time; t0 = time.perf_counter()
                 feats = self.model.preprocessor.get_features(self.model.model_inputs[self.name]); sp = float(self.speaker.predict_proba(np.asarray(feats, dtype=np.float32).reshape(1, -1))[0][1])
                 self.speaker_calls += 1; self.speaker_s += time.perf_counter() - t0
-                if sp < self.speaker_threshold: self.speaker_rejects += 1; return []
+                if sp < self.speaker_threshold:
+                    self.speaker_rejects += 1
+                    return [{"fire": now, "decided": now, "accepted": False, "reason": "speaker", "heard": "", "request": "", "verify_s": 0.0, "score": score, "speaker": sp,
+                             "clip": np.concatenate(list(self.ring)[-38:]).astype(np.float32) / 32768}]
             else: sp = None
-            if self.verify is None: return [{"fire": now, "decided": now, "accepted": True, "heard": "", "request": "", "verify_s": 0.0, "score": score, "speaker": sp}]
+            if self.verify is None: return [{"fire": now, "decided": now, "accepted": True, "reason": "", "heard": "", "request": "", "verify_s": 0.0, "score": score, "speaker": sp}]
             idx, trailing = self._utterance_start()
             self.pending = {"fire": now, "start_n": self.n - (len(self.level) - 1 - idx), "score": score, "speaker": sp, "silent": trailing}
         if self.pending:
@@ -82,8 +85,8 @@ class WakeStream:
                 clip = np.concatenate(frames[first:]).astype(np.float32) / 32768
                 ok, heard, secs = self.verify(clip)
                 from julius_listening import strip_wake
-                events.append({"fire": p["fire"], "decided": now, "accepted": ok, "heard": heard, "request": strip_wake(heard) if ok else "",
-                               "verify_s": secs, "score": p["score"], "speaker": p["speaker"]})
+                events.append({"fire": p["fire"], "decided": now, "accepted": ok, "reason": "" if ok else "whisper", "heard": heard, "request": strip_wake(heard) if ok else "",
+                               "verify_s": secs, "score": p["score"], "speaker": p["speaker"], "clip": clip})
         return events
 
 def run_clip(stream, audio, tail=2.5):

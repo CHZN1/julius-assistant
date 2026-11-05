@@ -65,3 +65,5 @@ evals/results/dev_runs/
 # Wake-word training audio and personal verifier (local only)
 wake/data/
 wake/personal/
+
+!wake/models/julius.onnx

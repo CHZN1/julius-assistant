@@ -67,6 +67,8 @@ def main():
         rows.append(suite("routing" + (" (shortcuts only)" if a.free else ""), "routing_eval.py", routing_args, "routing" if not a.free else "partial_routing", "ok_pct", "correct", 2.0, not a.free))
     if "wake" not in skip and (ROOT / "diagnostics" / "wake_real").is_dir():
         rows.append(suite("wake words", "wake_regression.py", [], "wake", "ok_pct", "ok", 0.0, False))
+    if "wake" not in skip and not a.free and (ROOT / "diagnostics" / "wake_real" / "wake3").is_dir():
+        rows.append(suite("wake cascade", "wake_eval.py", ["suite"], "wakecascade", "ok_pct", "ok", 3.4, False))
     if "file" not in skip: rows.append(suite("file agent", "file_eval.py", [], "file", "ok_pct", "pass", 0.0, False))
     if "audio" not in skip and not a.free:
         rows.append(suite("recorded audio", "audio_regression.py", [], "audio", "turn_ok_pct", "turns ok", 3.0, True))
