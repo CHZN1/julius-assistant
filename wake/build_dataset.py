@@ -73,9 +73,10 @@ def julius_voice_clips(lines):
     return out
 
 def user_positives(rng, per_clip=40):
-    """Your 30 recorded wake utterances (diagnostics/wake_real/wake) with many augmentations; never the wake2 eval set or talk3."""
+    """Your recorded wake utterances (sessions wake, wake2 and quick) with many augmentations; never the final eval sets wake3, wake4 or talk3."""
     out = []
-    for p in sorted((ROOT / "diagnostics" / "wake_real" / "wake").glob("wake_*.wav")):
+    files = [p for s in ("wake", "wake2", "quick") for p in sorted((ROOT / "diagnostics" / "wake_real" / s).glob(f"{s}_*.wav"))]
+    for p in files:
         x, _ = sf.read(p, dtype="float32")
         for k in range(per_clip):
             y = x[int(rng.integers(0, int(.15 * SR))):] if k else x

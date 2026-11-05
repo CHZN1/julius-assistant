@@ -69,7 +69,7 @@ def main():
         n = int(4 * SR); w = noise.standard_normal(n).astype(np.float32)
         if i % 3 == 1: f = np.fft.rfft(w); f /= np.sqrt(np.maximum(np.arange(len(f)), 1)); w = np.fft.irfft(f, n).astype(np.float32)
         return w / np.abs(w).max() * noise.uniform(.02, .5)
-    for sess, voice in (("talk1", "user"), ("talk2", "user"), ("talk3", "roy_val")):  # your ordinary talk: talk1/2 train, talk3 stays held out for the false-wake eval
+    for sess, voice in (("talk1", "user"), ("talk2", "user"), ("talk4", "user"), ("talk3", "roy_val")):  # your ordinary talk: talk1/2 train, talk3 stays held out for the false-wake eval
         tf = sorted((ROOT / "diagnostics" / "wake_real" / sess).glob(f"{sess}_*.wav"))
         sets.setdefault("neg_talk", []).extend((voice, e) for e in embed(tf, DATA / f"emb_{sess}.npy", ex))
     nf = list(range(300)); sets["neg_noise"] = [("noise", e) for e in embed(nf, DATA / "emb_neg_noise.npy", ex, loader=noise_clip)]

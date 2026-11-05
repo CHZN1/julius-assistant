@@ -7,7 +7,7 @@ setting [wake] verifier in julius.toml) and never committed.
 
   python wake/verifier.py train [--holdout wake2] [--out PATH]    --holdout leaves a wake session (and talk3, always) out of training
   python wake/verifier.py info
-Training sessions used: wake, wake2, talk1, talk2, talk4 (when recorded). Never: talk3 and wake3 (the final eval sets)."""
+Training sessions used: wake, wake2, quick, talk1, talk2, talk4 (when recorded). Never: talk3, wake3 and wake4 (the final eval sets)."""
 import argparse, glob, pickle, sys, time
 from pathlib import Path
 import numpy as np, soundfile as sf
@@ -38,7 +38,7 @@ def train(out, holdout=None, min_score=0.05, seed=0):
     rng = np.random.default_rng(seed); model_path = ROOT / "wake" / "models" / "julius.onnx"
     m = Model(wakeword_models=[str(model_path)], inference_framework="onnx"); name = list(m.models)[0]
     pos, neg, count = [], [], {}
-    wake_sessions = [s for s in ("wake", "wake2") if s != holdout and (REAL / s).is_dir()]
+    wake_sessions = [s for s in ("wake", "wake2", "quick") if s != holdout and (REAL / s).is_dir()]
     for s in wake_sessions:
         for p in sorted((REAL / s).glob(f"{s}_*.wav")):
             a = load(p)
