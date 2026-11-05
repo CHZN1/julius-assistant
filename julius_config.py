@@ -70,10 +70,17 @@ def describe_key():
     return f"set ({len(key)} chars)" if key else "missing"
 
 
+WAKE_CONTRAST = "Julius. Hey Julius. Julia. Julian. Julie. Jules."
+
+
 def asr_initial_prompt(config=None):
-    """The Whisper initial_prompt built from [asr] in julius.toml, or None when the hint is disabled."""
+    """The Whisper initial_prompt built from [asr] in julius.toml, or None when the hint is disabled.
+
+    It opens with the wake word next to its sound-alikes and leaves the bare name out of the vocabulary list: a vocabulary
+    hint that lists "Julius" alone makes Whisper hear Julia and Julian as Julius (a false wake), and this one prompt serves
+    both the wake check and the request transcript (evals/wake_hint_study.py)."""
     asr = (config or load_config())["asr"]
     if not asr.get("vocabulary_hint", True):
         return None
-    words = list(asr.get("vocabulary", [])) + list(asr.get("nhl_teams", [])) + list(asr.get("nfl_teams", []))
-    return ", ".join(dict.fromkeys(words)) + "." if words else None
+    words = [w for w in list(asr.get("vocabulary", [])) + list(asr.get("nhl_teams", [])) + list(asr.get("nfl_teams", [])) if w.strip().lower() != "julius"]
+    return WAKE_CONTRAST + " " + ", ".join(dict.fromkeys(words)) + "." if words else None
