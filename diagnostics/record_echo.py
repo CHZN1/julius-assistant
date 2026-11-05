@@ -18,12 +18,12 @@ LONG = [
 ]
 def render():
     import build_dataset as bd, phrases as P
-    p = OUT / "long_0_ref.wav"
+    p = OUT / "long_0_src.wav"
     if p.exists(): return
     print("rendering Julius's voice for the long answers (one time) ...", flush=True)
-    for i, (text, x) in enumerate(bd.julius_voice_clips(LONG)): sf.write(OUT / f"long_{i}_ref.wav", (x / (np.abs(x).max() + 1e-6) * .7).astype(np.float32), SR)
+    for i, (text, x) in enumerate(bd.julius_voice_clips(LONG)): sf.write(OUT / f"long_{i}_src.wav", (x / (np.abs(x).max() + 1e-6) * .7).astype(np.float32), SR)
 def clips():
-    out = [(f"long_{i}", sf.read(OUT / f"long_{i}_ref.wav", dtype="float32")[0]) for i in range(3)]
+    out = [(f"long_{i}", sf.read(OUT / f"long_{i}_src.wav", dtype="float32")[0]) for i in range(3)]
     out += [(f"line_{p.stem}", sf.read(p, dtype="float32")[0]) for p in sorted((ROOT / "wake" / "data" / "eval_julius").glob("*.wav"))]
     return out
 def main():
