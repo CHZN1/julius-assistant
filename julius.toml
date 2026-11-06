@@ -28,6 +28,7 @@ voice = false                  # spoken barge-in over the speakers; stays off un
 
 [wake]
 engine = "cascade"             # "cascade": openWakeWord "Julius" detector -> optional speaker verifier -> Whisper check; "whisper": transcript-regex wake (the fallback)
+level_floor = 0.0015           # speech level that counts as the speaker still talking; lower hears quieter and more distant speech (0.0045 missed 65% at 2.5x the distance, 0.0015 missed 3%)
 threshold_low = 0.05           # stage-1 detector threshold; low on purpose, Whisper and the verifier reject the false fires
 speaker_threshold = 0.25       # personal verifier cut-off (only used when the verifier file below exists)
 verifier = "~/.julius/wake_verifier.pkl"   # personal layer trained on your voice by wake/verifier.py; outside the repo, optional

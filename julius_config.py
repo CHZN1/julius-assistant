@@ -15,7 +15,7 @@ DEFAULTS = {
     "offline": {"model": "llama3.2:3b", "retry_seconds": 60},
     "voice": {"keep_loaded": True},
     "barge_in": {"hotkey": "<ctrl>+<alt>+s", "voice": False},
-    "wake": {"engine": "whisper", "threshold_low": 0.05, "speaker_threshold": 0.25, "verifier": "~/.julius/wake_verifier.pkl"},
+    "wake": {"engine": "whisper", "threshold_low": 0.05, "level_floor": 0.0015, "speaker_threshold": 0.25, "verifier": "~/.julius/wake_verifier.pkl"},
     "asr": {"vocabulary_hint": True,
             "vocabulary": ["Julius", "AcmeCorp", "Pat Example", "FER 2013", "Ethereum", "ETH", "Bitcoin", "NHL", "NFL", "MLB", "WNBA", "Springfield", "Shelbyville"],
             "nhl_teams": ["Ducks", "Coyotes", "Bruins", "Sabres", "Flames", "Hurricanes", "Blackhawks", "Avalanche", "Blue Jackets", "Stars", "Red Wings", "Oilers", "Panthers", "Kings", "Wild",

@@ -13,12 +13,12 @@ import numpy as np
 SR, FRAME = 16000, 1280
 
 class WakeStream:
-    def __init__(self, model_path, threshold, verify=None, speaker=None, speaker_threshold=0.5, end_silence=0.6, max_after=12.0, refractory=2.0, gate=True):
+    def __init__(self, model_path, threshold, verify=None, speaker=None, speaker_threshold=0.5, end_silence=0.6, max_after=12.0, refractory=2.0, gate=True, level_floor=0.0015):
         from openwakeword.model import Model
         self.model = Model(wakeword_models=[str(model_path)], inference_framework="onnx"); self.name = list(self.model.models)[0]
         self.threshold, self.verify, self.speaker, self.speaker_threshold = threshold, verify, speaker, speaker_threshold
         self.end_silence, self.max_after, self.refractory = end_silence, max_after, refractory
-        self.speaker_calls = 0; self.speaker_s = 0.0; self.gate = gate; self.scored = 0; self.frames = 0
+        self.level_floor = level_floor; self.speaker_calls = 0; self.speaker_s = 0.0; self.gate = gate; self.scored = 0; self.frames = 0
         self.reset()
 
     def reset(self):
@@ -27,7 +27,7 @@ class WakeStream:
 
     def _threshold(self):
         quiet = np.percentile(np.array(self.level), 20) if len(self.level) > 10 else .002
-        return min(0.02, max(0.0045, quiet * 2.2))
+        return min(0.02, max(self.level_floor, quiet * 2.2))
 
     def _utterance_start(self):
         """(ring index where the speech nearest the fire begins, frames of silence since it ended). Gaps up to 0.4 s stay inside the utterance;

@@ -20,4 +20,9 @@ class WakeVoiceActivityTests(unittest.TestCase):
         rng=np.random.default_rng(1);x=(rng.standard_normal(32000)*.0035).astype(np.float32)
         self.assertFalse(has_voice_activity(x,16000,.0045));self.assertTrue(has_voice_activity(x,16000,.0015))
         src=Path('julius_candidate.py').read_text();self.assertIn("min(globals().get('TH',.0045),.0015) if wake",src)
+class FarFieldTests(unittest.TestCase):
+    def test_stream_level_floor_is_low_enough_for_distant_speech(self):
+        """Regression: the 0.0045 floor cut a distant speaker's utterance to one frame (65% missed at 2.5x the distance); 0.0015 misses 3%."""
+        import julius_config
+        self.assertLessEqual(julius_config.DEFAULTS["wake"]["level_floor"],.0015)
 if __name__=='__main__':unittest.main()

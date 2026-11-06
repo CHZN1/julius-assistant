@@ -346,6 +346,7 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
         user_text = f"{user_text}\n\n[you can see: {vision_line}]"
 
     msgs = list(history) + [{"role": "user", "content": user_text}]
+    globals()['_turn_msgs'] = (msgs, len(msgs))  # process() keeps this turn's tool exchange in the history
     # The cloud brain gets the full tool list on every turn: keyword hints can miss a garbled or oblique request
     # ("what's their eath at right now?"), and a text-only turn costs the same single call. Local models keep the hints.
     hinted = tool_carry or TOOL_HINT.search(user_text) or globals().get('cloud_brain') is not None
@@ -720,6 +721,10 @@ def _process(text, lang):
             except Exception as speech_error:
                 print(f"  [speech unavailable: {speech_error}; reply shown as text]", flush=True)
         history.append({"role": "user", "content": text})
+        # Keep the tool call and its result in the history: a factual answer with no lookup behind it makes the next turn accuse itself of making it up.
+        _tm=globals().pop('_turn_msgs',None)
+        if _tm and globals().get('cloud_brain') is not None:
+            history.extend(m for m in _tm[0][_tm[1]:] if m.get('role')=='tool' or m.get('tool_calls'))
         history.append({"role": "assistant", "content": reply})
         jm.log_turn(text, reply,
                     {"emotion": st.get("emotion"), "conf": st.get("conf")})
@@ -732,6 +737,7 @@ def _process(text, lang):
 
     if len(history) > 9:
         history[:] = [history[0]] + history[-8:]
+    while len(history) > 1 and history[1].get('role') != 'user':history.pop(1)  # never start mid tool exchange
 
     if _validation_output:
         import resource

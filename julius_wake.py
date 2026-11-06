@@ -75,7 +75,7 @@ def from_config(verify, log_dir, config=None, say=print):
         if vpath.exists():
             import pickle
             with vpath.open("rb") as fh: speaker = pickle.load(fh)  # your own file, written by wake/verifier.py
-        stream = WakeStream(model, float(wake.get("threshold_low", 0.05)), verify=verify, speaker=speaker, speaker_threshold=float(wake.get("speaker_threshold", 0.25)))
+        stream = WakeStream(model, float(wake.get("threshold_low", 0.05)), verify=verify, speaker=speaker, speaker_threshold=float(wake.get("speaker_threshold", 0.25)), level_floor=float(wake.get("level_floor", 0.0015)))
     except Exception as exc:
         say(f"  [wake: cascade unavailable ({type(exc).__name__}: {exc}), using the Whisper wake]"); return None
     say(f"  [wake: cascade detector{' + speaker verifier' if speaker is not None else ''} + Whisper check]")
