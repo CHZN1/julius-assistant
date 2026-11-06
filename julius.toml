@@ -22,6 +22,10 @@ retry_seconds = 60          # how long to stay offline before trying the API aga
 [voice]
 keep_loaded = true          # with the brain in the cloud the TTS voice is never unloaded between turns
 
+[barge_in]
+hotkey = "<ctrl>+<alt>+s"      # global stop: silences Julius at once, whatever the microphone hears. macOS asks once to allow input monitoring for the terminal
+voice = false                  # spoken barge-in over the speakers; stays off until it meets the eval targets (evals/bargein_eval.py)
+
 [wake]
 engine = "cascade"             # "cascade": openWakeWord "Julius" detector -> optional speaker verifier -> Whisper check; "whisper": transcript-regex wake (the fallback)
 threshold_low = 0.05           # stage-1 detector threshold; low on purpose, Whisper and the verifier reject the false fires

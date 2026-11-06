@@ -105,4 +105,15 @@ class PlayerTests(unittest.TestCase):
         self.assertIn('abort',sd.log)
     def test_empty_generator_plays_nothing(self):
         sd=FakeSD();p=player(sd);self.assertEqual(p.play(iter([]))['chunks'],0);self.assertEqual(sd.streams,[])
+    def test_abort_silences_the_stream_from_another_thread_and_a_write_error_reports_the_cancellation(self):
+        sd=FakeSD();p=player(sd);self.assertIsNone(p.abort())  # nothing open: harmless
+        class Stop(Exception):pass
+        flag=[]
+        def gen():
+            yield np.zeros(100,dtype=np.float32),24000;yield np.zeros(100,dtype=np.float32),24000
+            p.abort();flag.append(1);raise OSError('stream aborted')  # what a blocked write() raises after abort()
+        def cancel():
+            if flag:raise Stop()
+        with self.assertRaises(Stop):p.play(gen(),cancel_check=cancel)
+        self.assertIn('abort',sd.log);self.assertIsNone(p.stream)
 if __name__=='__main__':unittest.main()

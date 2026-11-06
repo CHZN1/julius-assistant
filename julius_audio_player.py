@@ -50,6 +50,15 @@ class SpeechPlayer:
             self._timer = None
             self._close_stream()
 
+    def abort(self):
+        """Silence the speakers now, from any thread (the stop hotkey). Does not take the playback lock: play() may be blocked in write()."""
+        stream = self.stream
+        if stream is not None:
+            try:
+                stream.abort()
+            except Exception:
+                pass
+
     def close(self):
         with self._lock:
             if self._timer is not None:
@@ -105,6 +114,8 @@ class SpeechPlayer:
                     self.sleep(remaining)
             except BaseException:
                 self._close_stream(abort=True)  # cancelled or failed: stop now, reopen on the next sentence
+                if cancel_check is not None:
+                    cancel_check()  # an abort() from the hotkey surfaces as a write error; report it as the cancellation it is
                 raise
             finally:
                 close = getattr(it, "close", None)

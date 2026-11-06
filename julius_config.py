@@ -14,6 +14,7 @@ DEFAULTS = {
     "orchestrator": {"max_steps": 8, "subagent_max_steps": 6},
     "offline": {"model": "llama3.2:3b", "retry_seconds": 60},
     "voice": {"keep_loaded": True},
+    "barge_in": {"hotkey": "<ctrl>+<alt>+s", "voice": False},
     "wake": {"engine": "whisper", "threshold_low": 0.05, "speaker_threshold": 0.25, "verifier": "~/.julius/wake_verifier.pkl"},
     "asr": {"vocabulary_hint": True,
             "vocabulary": ["Julius", "AcmeCorp", "Pat Example", "FER 2013", "Ethereum", "ETH", "Bitcoin", "NHL", "NFL", "MLB", "WNBA", "Springfield", "Shelbyville"],

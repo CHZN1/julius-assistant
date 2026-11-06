@@ -219,6 +219,14 @@ if tts.backend == 'qwen-mlx':  # one persistent output stream, prefill and under
     speech_player = SpeechPlayer(sd, prefill_chunks=int(os.environ.get('JULIUS_AUDIO_PREFILL_CHUNKS', '1')),
                                  latency=float(os.environ.get('JULIUS_AUDIO_LATENCY', '0.4')))
 
+def stop_now(source='hotkey'):
+    """Stop generation and speech immediately (global hotkey, typed /stop)."""
+    if cancellation.request():print(f'  [stop requested: {source}]',flush=True)
+    if speech_player is not None:speech_player.abort()
+if os.environ.get('JULIUS_VALIDATION_NO_DEVICES')!='1':
+    import julius_hotkey,julius_config
+    julius_hotkey.start(stop_now,(julius_config.load_config().get('barge_in') or {}).get('hotkey','<ctrl>+<alt>+s'))
+
 # Cloud brain: Claude Haiku answers every turn, the planner (Sonnet) is reached through escalate_to_planner.
 cloud_brain = cloud_tracker = None
 if LLM_BACKEND == 'cloud':
@@ -756,7 +764,7 @@ def _kbd():
             line = input()
             command=line.strip()
             if command.lower() in {'/stop','stop','cancel response'}:
-                if cancellation.request():print('  [stop requested]',flush=True)
+                if cancellation.busy.is_set():stop_now('typed')
                 else:print('  [no response is active]',flush=True)
             elif command:
                 if command=='/quit':cancellation.request()

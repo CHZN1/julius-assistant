@@ -33,8 +33,9 @@ class RuntimeCaptureResetTests(unittest.TestCase):
   tree=ast.parse(Path('julius_candidate.py').read_text())
   branch=next(n for n in ast.walk(tree) if isinstance(n,ast.If) and isinstance(n.test,ast.Call) and isinstance(n.test.func,ast.Attribute) and n.test.func.attr=='discontinuous')
   clock=CaptureClock();clock.discontinuous(1)
-  scope={'capture_clock':clock,'now':91,'buf':['old audio'],'recording':True,'sil_t':1,'spk_t':.5,'voiced_run':2,'longest_voiced_run':3,'pre_roll':deque(['old preroll']),'print':Mock()}
+  scope={'capture_clock':clock,'now':91,'buf':['old audio'],'recording':True,'sil_t':1,'spk_t':.5,'voiced_run':2,'longest_voiced_run':3,'pre_roll':deque(['old preroll']),'print':Mock(),'wake_engine':Mock()}
   exec(compile(ast.Module(body=[branch],type_ignores=[]),'resume','exec'),scope)
+  scope['wake_engine'].reset.assert_called_once()  # a gap also restarts the wake stream
   self.assertFalse(scope['recording']);self.assertEqual(scope['buf'],[])
   self.assertFalse(scope['pre_roll']);self.assertIsNone(scope['sil_t']);self.assertIsNone(scope['spk_t'])
   self.assertEqual(scope['longest_voiced_run'],0)
