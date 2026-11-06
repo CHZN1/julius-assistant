@@ -49,7 +49,7 @@ Known open items:
 - Unmeasured: service idle CPU/memory over a day, restart-after-crash, live Whisper-wake timing after sleep.
 - Reminders/calendar polish.
 
-## Phase C: Agents (next)
+## Phase C: Agents: built 2026-11-06, live voice test pending
 
 Julius is the orchestrator; agents are sub-agents dispatched and supervised by the Sonnet planner. Build order:
 
@@ -59,7 +59,7 @@ Julius is the orchestrator; agents are sub-agents dispatched and supervised by t
    3. [x] Planner trash proposals (`files_propose` action `trash`): staged only, every one shown in the preview and confirmed. Never proposed (enforced in the agent, also when the planner names files explicitly): folders and anything inside them (loose files only), `.app`/package bundles, music (Logic, GarageBand, Waves, NI/Kontakt, Slate, Zebra, stems, audio and plug-in file types), files beside code or project markers, source-code files, files changed or downloaded in the last 7 days, installers used in the last 30 days. Spoken voice commands skip the recency/code/installer rules (you named the file) but keep music, app and project protections.
    4. [x] Per-folder permissions: `[files.folders]` in `julius.toml` (`write` / `read` / `none`, most specific folder wins); extra folders are added by editing the file only; undo and confirm re-check them.
    5. [x] Eval: `evals/file_eval.py` now has 43 scenarios (15 original, 28 new for preview, trash, undo stack across restart, zero-files-lost invariant, empty-trash, permissions, planner protections, prompt injection), all deterministic, no model calls: 43/43; part of `run_all.py`. 41 new unit tests in `test_julius_file_hardening.py`. Not yet measured: the real planner choosing what to propose for "clean up my Downloads" (needs a paid eval).
-2. **Coding agent**: Opus 5.5 as a sub-agent of the Sonnet planner.
+2. **Coding agent: built 2026-11-06** (details in the Phase C part 2 section below). Decisions made: `claude -p` over the Agent SDK; $1.50 default, $5 hard max, 20-minute timeout; merging into a real project is always a separate voice yes after the diff summary; the stop hotkey stops speech only and "cancel the coding task" by voice stops a task. Original checklist, all done: 
    1. Compare the Claude Agent SDK against `claude -p` (tool control, streaming, session resume, permission model, cost reporting); pick one.
    2. Per-task cost cap enforced by Julius, with a spoken warning and a hard stop.
    3. Eval suite: small repo tasks with tests as the oracle, cost and time per task, refusal/stop behavior, no writes outside the project folder.
@@ -97,3 +97,12 @@ Vision branch (beyond emotion detection), hosted version with subscriptions.
 - **Voice:** "have the coding agent <goal> in <project>" stages a preview, a separate yes starts it, Julius announces the result, "show the changes", "merge it" reads the diff summary, a separate yes merges (never deletes, never overwrites a file edited since, backups kept), "undo the merge", "discard the coding task". The Sonnet planner stages tasks through `code_task` the same way.
 - **Free tests:** 56 (project vetting, copy, command and environment, a real seatbelt escape attempt, runner, voice flow, planner tool). **Paid eval** (`evals/code_eval.py`, in `run_all.py`): bugfix, push refused, other-folder refused, injection README, cap hit. 5/5 on the final run for about $0.25. Opus mostly declined the bad requests by itself (the appended rules), so the hard guarantees rest on the seatbelt tests, not on the model's behaviour.
 - **Known limits:** network is port 443 only, not host-restricted, so code the agent runs could still reach any HTTPS host (it holds no secrets to send except the project copy); the stop hotkey stops speech, not a running coding task (say "cancel the coding task"); a task cannot see other projects, so cross-project work is out of scope.
+
+### Phase C status (2026-11-06)
+Built, unit-tested (588 tests) and evaluated: file agent 43/43 (free), planner eval 25/25 clean runs (paid, $0.27), coding agent eval 5/5 (paid, $0.25). **Not yet marked complete:** the live voice test of the file agent sandbox commands and the coding agent (fix, show, merge, undo) has not been recorded; the log showed no test activity after the 14:34 restart. Headless checks of the same session classes on the real config passed (demo.wav refused, "Documents" asks which project, a coding preview and cancel). Phase C completes when the user's five live results are in.
+
+**Known limitations**
+- Coding agent network: the sandbox allows outbound port 443 to any host (the seatbelt cannot filter by hostname). Later: restrict it to the Anthropic API with a local allow-list proxy (CONNECT proxy on localhost, sandbox allows only that port). The agent holds no secrets, but code it runs could reach any HTTPS site.
+- The stop hotkey does not cancel a coding task (by decision); say "cancel the coding task".
+- Opus 5.5 pricing is not in `julius_costs.RATES`; coding spend uses the dollar figure the CLI reports.
+- "what did you change today" now says so when nothing changed today (fixed 2026-11-06); before it listed the last change whatever its date.

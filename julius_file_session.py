@@ -63,7 +63,7 @@ class FileSession:
         elif kind=='trash_info':
             self.pending=None;out=self.agent.trash_info()
         elif kind=='history':
-            self.pending=None;out=self.agent.history()
+            self.pending=None;out=self.agent.history(today=bool((args or {}).get('today')))
         elif kind=='approve':
             out=self.agent.execute(self.pending,confirmed=True,turn=turn);self.pending=None
         elif kind=='cancel':

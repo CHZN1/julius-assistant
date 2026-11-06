@@ -190,7 +190,7 @@ def route(text,root,pending=False,has_last=False):
     if pending and APPROVE.fullmatch(text):return ('approve',None)
     if EMPTY_TRASH.fullmatch(text):return ('empty_trash',None)
     if TRASH_INFO.fullmatch(text):return ('trash_info',None)
-    if FILE_HISTORY.fullmatch(text):return ('history',None)
+    if FILE_HISTORY.fullmatch(text):return ('history',{'today':bool(re.search(r'\btoday\b',text,re.I))})
     if PLANNING_RE.search(text):return None  # organize/sort/clean-up need a plan; the Sonnet planner takes them
     trash=parse_trash(text,root)
     if trash:return ('clarify',trash) if 'clarification' in trash else ('trash',trash)

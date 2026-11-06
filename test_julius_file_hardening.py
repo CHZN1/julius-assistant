@@ -84,6 +84,11 @@ class TrashTests(Base):
         try: r = self.apply(self.trash())
         finally: fa.TRASH_NOTICE_BYTES = old
         self.assertIn('empty the trash', r['message']); self.assertNotIn('empty the trash', self.apply(self.trash(self.file('c.txt', 'y').name, turn=5), None)['message']) if False else None
+    def test_history_for_today_ignores_older_changes_and_says_so(self):
+        import json
+        self.file('a.txt'); self.apply(self.trash()); self.assertIn('trashed 1 file', self.agent.history(today=True)['message'])
+        state = json.loads(self.agent.state_path.read_text()); [p.__setitem__('created', p['created'] - 3 * 86400) for p in state['plans'].values()]; self.agent.state_path.write_text(json.dumps(state))
+        out = self.agent.history(today=True)['message']; self.assertIn('not changed any files today', out); self.assertIn('last change was on', out)
     def test_history_lists_recent_changes(self):
         self.file('a.txt'); self.apply(self.trash()); h = self.agent.history(); self.assertIn('trashed 1 file', h['message']); self.assertEqual(self.agent.undo()['code'], 'undone')
         self.assertIn('undone', self.agent.history()['message'])

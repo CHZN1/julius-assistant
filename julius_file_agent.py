@@ -435,17 +435,20 @@ class FileAgent:
         return result(True, 'purged', f"Emptied the trash: {gone} file(s) deleted permanently." + (f" {kept} could not be removed." if kept else ''), plan=plan)
 
     @response
-    def history(self, limit=8):
+    def history(self, limit=8, today=False):
         with self._locked(): state = self._load()
-        rows = []
+        rows, midnight, older = [], time.mktime(time.localtime()[:3] + (0, 0, 0, 0, 0, -1)), None
         for pid in reversed(state['batches']):
             plan = state['plans'][pid]
+            if today and plan['created'] < midnight:
+                older = older or time.strftime('%b %d', time.localtime(plan['created'])); continue
             when = time.strftime('%b %d %H:%M', time.localtime(plan['created'])); verb = {'trash': 'trashed', 'move': 'moved', 'copy': 'copied', 'rename': 'renamed', 'create': 'created'}.get(plan['action'], plan['action'])
             first = Path(plan['ops'][0]['from'] or plan['ops'][0]['to']).name
             if plan['action'] == 'trash': first = re.sub(r'^\d+__', '', Path(plan['ops'][0]['to']).name)
             rows.append({'id': pid, 'when': when, 'action': plan['action'], 'count': len(plan['ops']), 'status': plan['status'], 'first': first,
                          'text': f"{when}: {verb} {len(plan['ops'])} file(s), {first}{' and others' if len(plan['ops']) > 1 else ''} ({plan['status']})"})
             if len(rows) >= max(1, min(int(limit), 30)): break
+        if not rows and today: return result(True, 'history', 'I have not changed any files today.' + (f' The last change was on {older}.' if older else ''), items=[])
         if not rows: return result(True, 'history', 'I have not changed any files yet.', items=[])
         spoken = '; '.join(r['text'] for r in rows[:3])
         return result(True, 'history', f"Recent file changes: {spoken}." + (' The rest is on screen.' if len(rows) > 3 else ''), items=rows)
