@@ -27,7 +27,10 @@ def _safe(p): return agent().resolve(p,new=True)
 def render(res):
     text=res['message'];data=res.get('data',{})
     if 'plan' in data:
-        p=data['plan'];text=f"PLAN {p['id']}: "+text; text+='\n'+ '\n'.join(f"{op['from'] or 'New text file'} -> {op['to']}" for op in p['ops'][:20])
+        from julius_file_agent import human_size
+        p=data['plan'];text=f"PLAN {p['id']}: "+text; text+='\n'+ '\n'.join(f"{op['from'] or 'New text file'} -> {op['to']}  ({human_size(op['fingerprint']['size'])})" for op in p['ops'][:20])
+        if len(p['ops'])>1: text+=f"\n{len(p['ops'])} files, {human_size(p.get('total_bytes',0))} in total"
+        for skipped in data.get('skipped',[])[:10]: text+=f"\nskipped (protected): {skipped['name']}: {skipped['reason']}"
         if len(p['ops'])>20: text+=f"\n...and {len(p['ops'])-20} more."
     elif 'items' in data:
         text+='\n'+ '\n'.join(item.get('relative_path',item['name']) for item in data['items'][:40])

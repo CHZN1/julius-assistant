@@ -12,6 +12,18 @@ class FileProblem(Exception):
     def __init__(self, code, message, **data):
         super().__init__(message); self.code, self.data = code, data
 
+def human_size(n):
+    for unit in ('bytes', 'KB', 'MB', 'GB'):
+        if n < 1024 or unit == 'GB': return f'{n} bytes' if unit == 'bytes' else f'{n:.1f} {unit}'.replace('.0 ', ' ')
+        n /= 1024
+
+def summarize_ops(ops, limit=3):
+    """'a.pdf, b.txt and c.csv (12 MB in total) and 9 more' for speech; the full list is printed from the plan."""
+    names = [Path(o['to']).name for o in ops]; total = sum(o['fingerprint']['size'] for o in ops)
+    shown = names[:limit]; text = ', '.join(shown[:-1]) + (' and ' if len(shown) > 1 else '') + shown[-1] if shown else ''
+    more = len(names) - len(shown)
+    return f"{text}{f' and {more} more' if more > 0 else ''} ({human_size(total)} in total)"
+
 def result(ok, code, message, **data):
     return {'agent':'files', 'ok': ok, 'code': code, 'message': message, 'data': data}
 
@@ -250,10 +262,11 @@ class FileAgent:
             op['fingerprint']=self._fingerprint(op['from']) if op['from'] else {'size':len(content.encode('utf-8')), 'sha256':hashlib.sha256(content.encode('utf-8')).hexdigest()}
             total+=op['fingerprint']['size'];op['status']='planned'
         if total>self.MAX_PLAN_BYTES: raise FileProblem('too_large','This selection exceeds the 512 MB batch limit. Split it into smaller requests.')
-        plan={'id':uuid.uuid4().hex[:12],'session':self.session,'turn':turn,'created':time.time(),'action':action,'status':'pending','ops':ops,'total_bytes':total}
+        plan={'id':uuid.uuid4().hex[:12],'session':self.session,'turn':turn,'created':time.time(),'action':action,'status':'pending','ops':ops,'total_bytes':total,'count':len(ops)}
         with self._locked():
             state=self._load();state['plans'][plan['id']]=plan;self._save(state)
-        if action in {'move','copy'}:message=f'I found {len(ops)} file(s) in {src.name}. I can {action} them to {dst.name}.'
+        detail=' It covers '+summarize_ops(ops)+'.' if action in {'move','copy','rename'} else ''
+        if action in {'move','copy'}:message=f'I found {len(ops)} file(s) in {src.name}. I can {action} them to {dst.name}.'+detail
         elif action=='rename':message=f'I can rename {src.name} to {dst.name}.'
         else:message=f'I can create {dst.name} with the supplied text.'
         return result(True,'preview',message+' Nothing has changed. Say yes to confirm or cancel to discard.',plan=plan)
