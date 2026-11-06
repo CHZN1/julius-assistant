@@ -11,7 +11,7 @@ Updated November 5, 2026. Current priority order; older milestone documents (JUL
 - Router shortcuts with filler stripping and follow-up carry-forward; one round trip for simple tools.
 - Sonnet-controlled file agent with confirmation.
 - Cloud profile is the default everywhere (`python julius.py` and `run_julius.sh` use the same defaults; `--help` prints usage).
-- 500 tests passing.
+- 530 tests passing.
 
 ## Phase A: Evaluation harness (now)
 
@@ -28,7 +28,7 @@ First baseline (2026-10-29): routing eval 89.5% (94/105); recorded audio mean WE
 
 ## Phase B: Daily driver for me: complete (2026-11-05)
 
-Julius runs all day as a login service, wakes on his name, can be silenced or put to sleep without any macOS permission, and remembers what you tell him. 500 unit tests pass.
+Julius runs all day as a login service, wakes on his name, can be silenced or put to sleep without any macOS permission, and remembers what you tell him. 530 unit tests pass.
 
 - [x] **Wake word, cascade v2** (`[wake] engine = "cascade"`): a noise-gated openWakeWord "Julius" detector (about 0.03% of a core idle, measured when built; no results file) fires at a low threshold, then one resident Whisper small.en run over the whole utterance checks the wake word (hint names Julius beside Julia/Julian/Julie/Jules) and gives the request. Numbers from `evals/results/wakecascade_*.summary.json` (`python evals/wake_eval.py suite`: wake3+wake4, 60 recordings, 3.4 min of ordinary talk, 18 held-out Julius-voice lines, verifier off):
   - **Misses: 2/60 (3.3%)** in the 14:27 and 14:34 runs (clips wake4_14 and wake4_26, both distant/quiet), the figure this phase shipped on. After the far-field fix (stream level floor 0.0045 to 0.0015, relaxed VAD precheck) the 17:34 run and a re-run at 22:14 both show **0/60**. Treat 2/60 as the honest figure until more far-field clips are recorded; 0/60 is the same 60 clips after tuning on their failure, so it is not an independent test.
@@ -53,11 +53,12 @@ Known open items:
 
 Julius is the orchestrator; agents are sub-agents dispatched and supervised by the Sonnet planner. Build order:
 
-1. **File agent hardening** (do first: it touches the user's files)
-   1. Change preview: every move/rename/delete shows exactly what will happen before confirmation.
-   2. Undo log and recoverable trash: nothing is permanently deleted; every change is journaled and reversible.
-   3. Per-folder permissions: read/write/none per folder, defaults to Documents, Desktop and Downloads only.
-   4. Its own eval set: sandbox scenarios for preview accuracy, undo round trips, permission denials and prompt-injection from file contents; added to `run_all.py`.
+1. **File agent hardening: built 2026-11-05** (`julius_file_agent.py`, `julius_router.py`, `evals/file_eval.py`)
+   1. [x] Change preview: the spoken preview names the first files, sizes and total ("report.pdf, notes.txt and data.csv (12 MB in total) and 9 more"); the full list prints on screen; a file edited after the preview blocks the plan (re-fingerprinted at confirm); confirmation must come in a later turn.
+   2. [x] Recoverable trash and persistent undo stack: "trash <file> in <folder>" / "move the pdfs in Downloads to the trash" (named files, quoted names or a file type only; "delete everything" or "delete that file" is refused with a question) moves loose files to `~/.julius/trash/<plan>/` after preview and a yes; "undo" works across restarts and repeats down a stack; "what did you change today" lists changes; "how big is the trash"; the trash is mentioned once it passes 1 GB and is emptied only by "empty the trash", which previews and then permanently deletes only what is in the trash (undo then reports those files as gone). The trash cannot be read or listed by path.
+   3. [x] Planner trash proposals (`files_propose` action `trash`): staged only, every one shown in the preview and confirmed. Never proposed (enforced in the agent, also when the planner names files explicitly): folders and anything inside them (loose files only), `.app`/package bundles, music (Logic, GarageBand, Waves, NI/Kontakt, Slate, Zebra, stems, audio and plug-in file types), files beside code or project markers, source-code files, files changed or downloaded in the last 7 days, installers used in the last 30 days. Spoken voice commands skip the recency/code/installer rules (you named the file) but keep music, app and project protections.
+   4. [x] Per-folder permissions: `[files.folders]` in `julius.toml` (`write` / `read` / `none`, most specific folder wins); extra folders are added by editing the file only; undo and confirm re-check them.
+   5. [x] Eval: `evals/file_eval.py` now has 43 scenarios (15 original, 28 new for preview, trash, undo stack across restart, zero-files-lost invariant, empty-trash, permissions, planner protections, prompt injection), all deterministic, no model calls: 43/43; part of `run_all.py`. 41 new unit tests in `test_julius_file_hardening.py`. Not yet measured: the real planner choosing what to propose for "clean up my Downloads" (needs a paid eval).
 2. **Coding agent**: Opus 5.5 as a sub-agent of the Sonnet planner.
    1. Compare the Claude Agent SDK against `claude -p` (tool control, streaming, session resume, permission model, cost reporting); pick one.
    2. Per-task cost cap enforced by Julius, with a spoken warning and a hard stop.
