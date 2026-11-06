@@ -138,4 +138,41 @@ class VoiceFlowTests(Base):
         self.assertTrue((self.downloads / 'fresh.txt').exists() and (self.downloads / 'mix.wav').exists() and (self.downloads / 'old.txt').exists())
         skipped = {x['name'] for x in self.session.last_result['data']['skipped']}; self.assertEqual(skipped, {'fresh.txt', 'mix.wav'})
 
+
+class PermissionTests(Base):
+    def agent_with(self, **folders):
+        return self.make(folders=folders)
+    def test_read_only_folder_allows_reading_and_copying_out_but_nothing_else(self):
+        a = self.agent_with(Documents='write', Downloads='read', Desktop='write'); p = self.file('a.txt', 'x')
+        self.assertTrue(a.list('Downloads')['ok']); self.assertTrue(a.read(str(p))['ok']); self.assertTrue(a.find('*.txt', 'Downloads')['ok'])
+        self.assertEqual(a.propose('move', source='Downloads', destination=str(self.docs / 'A'), pattern='a.txt', turn=1)['code'], 'read_only')
+        self.assertEqual(a.propose('copy', source='Downloads', destination=str(self.downloads / 'B'), pattern='a.txt', turn=1)['code'], 'read_only')
+        self.assertEqual(a.propose('rename', path=str(p), destination=str(self.downloads / 'z.txt'), turn=1)['code'], 'read_only')
+        self.assertEqual(a.propose('create', destination=str(self.downloads / 'n.txt'), content='hi', turn=1)['code'], 'read_only')
+        self.assertEqual(a.propose('trash', source='Downloads', pattern='a.txt', turn=1)['code'], 'read_only')
+        self.assertEqual(a.propose('trash', paths=[str(p)], turn=1)['code'], 'read_only')
+        copy = a.propose('copy', source='Downloads', destination=str(self.docs / 'Copies'), pattern='a.txt', turn=1); self.assertTrue(copy['ok'], copy)
+        self.apply(copy, a); self.assertTrue(p.exists() and (self.docs / 'Copies' / 'a.txt').exists())
+    def test_none_hides_a_folder_completely(self):
+        a = self.agent_with(Documents='write', Downloads='none', Desktop='write'); self.file('a.txt')
+        self.assertEqual(a.list('Downloads')['code'], 'outside_scope'); self.assertEqual(a.propose('move', source='Documents', destination=str(self.downloads / 'x'), turn=1, pattern='*')['code'], 'outside_scope')
+    def test_extra_folder_comes_only_from_the_config_table(self):
+        extra = self.root / 'Projects'; extra.mkdir(); (extra / 'n.txt').write_text('n')
+        self.assertEqual(self.agent.list(str(extra))['code'], 'outside_scope')
+        a = self.agent_with(Documents='write', **{str(extra): 'read'}); self.assertTrue(a.list(str(extra))['ok']); self.assertEqual(a.propose('trash', paths=[str(extra / 'n.txt')], turn=1)['code'], 'read_only')
+    def test_most_specific_folder_wins(self):
+        sub = self.docs / 'Locked'; sub.mkdir(); (sub / 'k.txt').write_text('k'); self.file('f.txt', folder=self.docs)
+        a = self.agent_with(Documents='write', **{'Documents/Locked': 'read'})
+        self.assertEqual(a.propose('trash', paths=[str(sub / 'k.txt')], turn=1)['code'], 'read_only'); self.assertTrue(a.propose('trash', paths=[str(self.docs / 'f.txt')], turn=1, origin='human')['ok'])
+    def test_bad_mode_is_a_config_error_and_defaults_are_write(self):
+        with self.assertRaises(FileProblem): self.agent_with(Documents='readwrite')
+        self.assertEqual(set(self.make().modes.values()), {'write'})
+    def test_undo_will_not_write_into_a_folder_that_became_read_only(self):
+        p = self.file('a.txt'); self.apply(self.agent.propose('trash', source='Downloads', pattern='a.txt', turn=1))
+        ro = self.agent_with(Documents='write', Downloads='read', Desktop='write'); u = ro.undo()
+        self.assertFalse(u['ok']); self.assertFalse(p.exists()); self.assertEqual(len(list(ro.trash_dir.rglob('*__a.txt'))), 1)
+    def test_shipped_config_table_matches_the_defaults(self):
+        import julius_config
+        self.assertEqual(julius_config.load_config()['files']['folders'], {'Documents': 'write', 'Desktop': 'write', 'Downloads': 'write'})
+
 if __name__ == '__main__': unittest.main()

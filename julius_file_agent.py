@@ -55,9 +55,10 @@ class FileAgent:
     MAX_PLAN_FILES = 100
     MAX_PLAN_BYTES = 512 * 1024 * 1024
     PLAN_TTL = 15 * 60
-    def __init__(self, root=None, state_dir=None, allowed_roots=None, trash_dir=None):
+    def __init__(self, root=None, state_dir=None, allowed_roots=None, trash_dir=None, folders=None):
         self.root = Path(root or Path.home()).resolve()
-        self.allowed = tuple(Path(p).resolve() for p in ([self.root/'Documents', self.root/'Desktop', self.root/'Downloads'] if allowed_roots is None else allowed_roots))
+        self.modes = self._modes(folders, allowed_roots)
+        self.allowed = tuple(p for p, mode in self.modes.items() if mode != 'none')
         self.state_dir = Path(state_dir or Path(__file__).resolve().parent/'julius_memory').resolve()
         self.use_birthtime = True
         self.trash_dir = Path(trash_dir or self.root/'.julius'/'trash').resolve()
@@ -65,6 +66,31 @@ class FileAgent:
         self.session = uuid.uuid4().hex
         self._mutex = threading.RLock()
         self.last_scan = {}
+
+    def _modes(self, folders, allowed_roots):
+        """{folder: 'write'|'read'|'none'} from the config table; names are relative to the home folder, other entries are paths."""
+        if allowed_roots is not None: return {Path(p).resolve(): 'write' for p in allowed_roots}
+        table = folders if folders is not None else {'Documents': 'write', 'Desktop': 'write', 'Downloads': 'write'}
+        modes = {}
+        for name, mode in table.items():
+            mode = str(mode).strip().lower()
+            if mode not in ('write', 'read', 'none'): raise FileProblem('bad_config', f'[files.folders] {name} must be "write", "read" or "none".')
+            path = Path(os.path.expanduser(str(name))); path = (path if path.is_absolute() else self.root / path).resolve()
+            modes[path] = mode
+        return modes
+
+    def mode_of(self, path):
+        """The permission of the most specific configured folder containing `path`."""
+        p = Path(path); best = None
+        for root, mode in self.modes.items():
+            if p.is_relative_to(root) and (best is None or len(root.parts) > len(best[0].parts)): best = (root, mode)
+        return best
+
+    def require_write(self, path):
+        found = self.mode_of(path)
+        if found is None or found[1] != 'write':
+            name = found[0].name if found else Path(path).parent.name
+            raise FileProblem('read_only', f'{name} is read-only for Julius, so I will not change anything there. You can change this in the [files.folders] section of julius.toml.')
 
     def resolve(self, value='.', *, new=False, internal=False):
         raw = str(value).strip().strip('"').strip("'")
@@ -247,9 +273,12 @@ class FileAgent:
         if action not in {'move','copy','rename','create'}: raise FileProblem('unsupported_action','That file action is not supported.')
         if not destination: raise FileProblem('missing_destination','Which folder or filename should I use?')
         dst=self.resolve(destination,new=True)
+        self.require_write(dst)
         if action in {'move','copy'}:
             if dst.exists() and not dst.is_dir(): raise FileProblem('not_folder',f'{dst.name} is not a folder.')
-            src=self.resolve(source); hits,scan=self._scan(src,pattern,recursive,limit=self.MAX_PLAN_FILES)
+            src=self.resolve(source)
+            if action=='move': self.require_write(src)
+            hits,scan=self._scan(src,pattern,recursive,limit=self.MAX_PLAN_FILES)
             if scan['truncated'] or scan['issues']: raise FileProblem('incomplete_selection','I could not check the complete selection. Narrow the search before changing files.',**scan)
             if not hits: raise FileProblem('no_matches','No matching files were found. Nothing will change.')
             ops=[]
@@ -261,7 +290,7 @@ class FileAgent:
                 if old==target: continue
                 ops.append({'from':str(old),'to':str(target)})
         elif action=='rename':
-            src=self.resolve(path)
+            src=self.resolve(path); self.require_write(src)
             if dst.parent!=src.parent: raise FileProblem('rename_location','A rename must keep the file in its current folder. Use move to change folders.')
             if src==dst: raise FileProblem('no_change','That file already has the requested name.')
             ops=[{'from':str(src),'to':str(dst)}]
@@ -316,12 +345,12 @@ class FileAgent:
         if paths:
             if not isinstance(paths, (list, tuple)) or len(paths) > self.MAX_PLAN_FILES: raise FileProblem('bad_paths', f'Give up to {self.MAX_PLAN_FILES} file paths.')
             for raw in paths:
-                p = self.resolve(raw)
+                p = self.resolve(raw); self.require_write(p)
                 reason = self.protection(p, origin)
                 if reason: skipped.append({'name': p.name, 'path': str(p), 'reason': reason})
                 else: hits.append({'path': str(p)})
         else:
-            src = self.resolve(source); found, scan = self._scan(src, pattern, False, limit=self.MAX_PLAN_FILES)   # loose files only: never recursive
+            src = self.resolve(source); self.require_write(src); found, scan = self._scan(src, pattern, False, limit=self.MAX_PLAN_FILES)   # loose files only: never recursive
             if scan['truncated'] or scan['issues']: raise FileProblem('incomplete_selection', 'I could not check the complete selection. Narrow the search before changing files.', **scan)
             for hit in found:
                 reason = self.protection(hit['path'], origin)
@@ -432,6 +461,8 @@ class FileAgent:
         if time.time()-plan['created']>self.PLAN_TTL: raise FileProblem('expired','That preview has expired. Please make a new plan.')
         if plan['action']=='purge': return
         for op in plan['ops']:
+            if plan['action']!='copy' and op['from']: self.require_write(op['from'])
+            if plan['action']!='purge': self.require_write(op['to']) if plan['action']!='trash' else None
             if op['from'] and not self._matches(op['from'],op['fingerprint'],identity=True): raise FileProblem('changed','A selected file changed or disappeared. Review a new plan before continuing.',path=op['from'])
             d=self.resolve(op['to'],new=True, internal=True)
             if d.exists(): raise FileProblem('collision',f'{d.name} now exists. Nothing will be overwritten.')
@@ -550,6 +581,9 @@ class FileAgent:
                     issues.append({'path':op['to'],'reason':'The result was changed or removed; it was left untouched.'});continue
                 if plan['action'] in MOVELIKE:
                     original=self.resolve(op['from'],new=True, internal=True)
+                    try: self.require_write(original)
+                    except FileProblem as exc:
+                        issues.append({'path':str(original),'reason':str(exc)});continue
                     if original.exists():
                         issues.append({'path':str(original),'reason':'The original location is occupied; nothing was overwritten.'});continue
                     reverse={'from':str(dst),'to':str(original),'fingerprint':self._fingerprint(dst)}

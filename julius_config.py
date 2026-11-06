@@ -16,6 +16,7 @@ DEFAULTS = {
     "voice": {"keep_loaded": True},
     "memory": {"announce_auto": True},
     "service": {"wake_hotkey": "<ctrl>+<alt>+j", "log_transcripts": False},
+    "files": {"folders": {"Documents": "write", "Desktop": "write", "Downloads": "write"}},
     "barge_in": {"hotkey": "<ctrl>+<alt>+s", "voice": False},
     "wake": {"engine": "whisper", "threshold_low": 0.05, "level_floor": 0.0015, "speaker_threshold": 0.25, "verifier": "~/.julius/wake_verifier.pkl"},
     "asr": {"vocabulary_hint": True,

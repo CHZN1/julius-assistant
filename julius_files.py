@@ -19,7 +19,8 @@ def agent():
     global _INSTANCE
     key=(str(SAFE_ROOT),str(STATE))
     if _INSTANCE is None or _INSTANCE[0]!=key:
-        _INSTANCE=(key,FileAgent(SAFE_ROOT,STATE))
+        import julius_config
+        _INSTANCE=(key,FileAgent(SAFE_ROOT,STATE,folders=(julius_config.load_config().get('files') or {}).get('folders')))
     return _INSTANCE[1]
 
 def _safe(p): return agent().resolve(p,new=True)
