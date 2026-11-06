@@ -29,6 +29,8 @@ from julius_asr_resources import recognition_resources
 from julius_cancellation import Cancellation,TurnCancelled
 cancellation=Cancellation()
 microphone_gate=MicrophoneGate()
+from julius_selfecho import SelfEcho
+self_echo=SelfEcho()
 
 if os.environ.get("JULIUS_MEMORY_DIR"):
     jm.MEM = Path(os.environ["JULIUS_MEMORY_DIR"])
@@ -218,6 +220,7 @@ if tts.backend == 'qwen-mlx':  # one persistent output stream, prefill and under
     from julius_audio_player import SpeechPlayer
     speech_player = SpeechPlayer(sd, prefill_chunks=int(os.environ.get('JULIUS_AUDIO_PREFILL_CHUNKS', '1')),
                                  latency=float(os.environ.get('JULIUS_AUDIO_LATENCY', '0.4')))
+    microphone_gate.cover_output_latency(speech_player.latency)
 
 def stop_now(source='hotkey'):
     """Stop generation and speech immediately (global hotkey, typed /stop)."""
@@ -260,6 +263,7 @@ def speak_sentence(p):
                 globals()['_first_audio_at']=time.perf_counter()
         p = clean_for_speech(p)
         if not p: return
+        if globals().get('self_echo') is not None: self_echo.note(p)
         # A previous failed reasoning request must not leave its model beside voice.
         if tts.backend in ('qwen-clone','qwen-mlx') and globals().get('close_backend') and not globals().get('keep_brain_loaded', lambda: False)():
             close_backend()
@@ -537,7 +541,8 @@ def transcribe(a, wake=False):
     import time
     from julius_listening import has_voice_activity
     started=time.perf_counter()
-    if not has_voice_activity(a,SR if 'SR' in globals() else 16000,globals().get('TH',.0045)):
+    # A wake clip already passed the detector and its noise gate; quiet or distant speech sits below the normal turn threshold, so the pre-check is relaxed for it
+    if not has_voice_activity(a,SR if 'SR' in globals() else 16000,min(globals().get('TH',.0045),.0015) if wake else globals().get('TH',.0045)):
         globals()['_last_asr_seconds']=time.perf_counter()-started
         globals()['_last_asr_confidence']={'rejected':'insufficient_audio_activity'}
         return '', '?', 1.0
@@ -788,6 +793,8 @@ def _wake_verify(clip):
     """Cascade stage 2: one Whisper run on the whole utterance; the wake regex decides, the transcript becomes the request."""
     started=time.perf_counter()
     text,_lang,nsp=transcribe_input(clip, wake=True)
+    if text and self_echo.is_echo(text):
+        print('  [wake ignored: that was Julius\'s own voice]',flush=True);return False,text,time.perf_counter()-started
     return bool(text) and nsp<=.6 and has_wake(text), text, time.perf_counter()-started
 import julius_wake
 wake_engine = None if _validation_no_devices else julius_wake.from_config(_wake_verify, jm.MEM)
@@ -942,6 +949,9 @@ with microphone_stream():
                     if not text or nsp > 0.6:
                         q.clear()
                         continue
+                    if self_echo.is_echo(text):
+                        print(f'  [ignored: Julius heard his own voice: {text!r}]',flush=True)
+                        q.clear(); continue
 
                     if not utterance_awake:
                         if not has_wake(text): continue
