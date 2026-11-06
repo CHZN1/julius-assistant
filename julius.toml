@@ -22,6 +22,10 @@ retry_seconds = 60          # how long to stay offline before trying the API aga
 [voice]
 keep_loaded = true          # with the brain in the cloud the TTS voice is never unloaded between turns
 
+[service]
+wake_hotkey = "<ctrl>+<alt>+j"   # leaves quiet mode (after "Julius, go to sleep"); also `python julius_service.py wake`
+log_transcripts = false         # JSON log in ~/Library/Logs/Julius redacts what you say and what he answers unless true
+
 [barge_in]
 hotkey = "<ctrl>+<alt>+s"      # global stop: silences Julius at once, whatever the microphone hears. macOS asks once to allow input monitoring for the terminal
 voice = false                  # spoken barge-in over the speakers; stays off until it meets the eval targets (evals/bargein_eval.py)

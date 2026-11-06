@@ -1,0 +1,78 @@
+{
+ "suite": "audio_regression",
+ "date": "2026-11-05 17:15",
+ "recorded_phrases": 20,
+ "typed_prompts": 9,
+ "mean_wer": 0.038,
+ "phrases_with_missed_terms": 0,
+ "mean_asr_s": 0.322,
+ "pipeline_ran": true,
+ "pipeline_exit_code": 0,
+ "pipeline_seconds": 397.4,
+ "routing_path_ok_pct": 89.7,
+ "routing_tool_ok_pct": 89.7,
+ "turn_ok_pct": 89.7,
+ "first_audio_median_s": 1.68,
+ "first_audio_max_s": 8.12,
+ "est_end_of_speech_to_first_audio_mean_s": 2.848,
+ "cost_per_turn_mean_usd": 0.00145,
+ "total_usd": 0.0421,
+ "by_path": {
+  "shortcut": {
+   "n": 9,
+   "first_audio_median_s": 1.41,
+   "cost_mean_usd": 1e-05
+  },
+  "direct": {
+   "n": 7,
+   "first_audio_median_s": 1.68,
+   "cost_mean_usd": 0.00013
+  },
+  "tool": {
+   "n": 8,
+   "first_audio_median_s": 2.21,
+   "cost_mean_usd": 0.0002
+  },
+  "escalate": {
+   "n": 5,
+   "first_audio_median_s": 2.09,
+   "cost_mean_usd": 0.00789
+  }
+ },
+ "repeats": 3,
+ "by_actual_path": {
+  "direct": {
+   "n": 30,
+   "first_audio_median_s": 1.68,
+   "cost_mean_usd": 0.00016
+  },
+  "shortcut": {
+   "n": 24,
+   "first_audio_median_s": 1.59,
+   "cost_mean_usd": 0.0
+  },
+  "tool": {
+   "n": 21,
+   "first_audio_median_s": 2.15,
+   "cost_mean_usd": 0.0002
+  },
+  "escalate": {
+   "n": 12,
+   "first_audio_median_s": 8.02,
+   "cost_mean_usd": 0.01163
+  }
+ },
+ "cost_per_turn_median_usd": 0.00148,
+ "haiku_calls": 88,
+ "haiku_cache_hit_pct": 92.8,
+ "haiku_cache_write_tokens_per_call": 421,
+ "haiku_cache_read_tokens_per_call": 5448,
+ "haiku_uncached_tokens_per_call": 4,
+ "regressions_vs_previous": {
+  "previous": "audio_20261105_153453.csv",
+  "newly_failing": [],
+  "newly_passing": [
+   "p04"
+  ]
+ }
+}

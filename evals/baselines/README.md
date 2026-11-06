@@ -82,3 +82,5 @@ Why the planner cost looks 5x higher than the first baseline: the same Tokyo-pla
 | Whole turn correct | 89.7% | 89.7% (p04 passes again; p13, p18, p20 still answered directly) |
 | First audio median / worst | 1.53 s / 16.2 s | 1.68 s / 8.1 s (by path: shortcut 1.41, direct 1.68, tool 2.21, escalate 2.09) |
 | Cost per turn | $0.00095 | $0.00145 |
+
+Re-run later the same day (2026-11-05 evening), after the self-echo, far-field wake and tool-history fixes (3 runs, nothing else running): WER 3.8% and 0 missed terms (unchanged), whole turn correct 89.7% (unchanged), first audio median 1.39 s (was 1.68 s; worst case 10.7 s vs 8.1 s), mean ASR 0.31 s, cost per turn $0.00164. `audio_baseline.json` is this run; the morning run is kept as `audio_baseline_2026-11-05_am.json`.

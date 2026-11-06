@@ -1,4 +1,8 @@
 """Julius main runtime: voice, vision, memory, tools, and file actions in one process."""
+import os as _os0
+if _os0.environ.get("JULIUS_SERVICE") == "1":
+    import julius_config as _jc0, julius_log
+    julius_log.install(bool((_jc0.load_config().get("service") or {}).get("log_transcripts", False)))
 import numpy as np, sounddevice as sd, mlx_whisper, time, re, threading
 import json as _json
 import os
@@ -229,6 +233,29 @@ def stop_now(source='hotkey'):
 if os.environ.get('JULIUS_VALIDATION_NO_DEVICES')!='1':
     import julius_hotkey,julius_config
     julius_hotkey.start(stop_now,(julius_config.load_config().get('barge_in') or {}).get('hotkey','<ctrl>+<alt>+s'))
+
+import julius_state,signal
+QUIET_HOTKEY=(julius_config.load_config().get('service') or {}).get('wake_hotkey','<ctrl>+<alt>+j') if os.environ.get('JULIUS_VALIDATION_NO_DEVICES')!='1' else None
+_wake_listener=None
+def wants_quiet(t):
+    """'go to sleep' means quiet mode (detector fully off until the wake hotkey) when that hotkey can be pressed; otherwise it stays an ordinary sleep."""
+    return _wake_listener is not None and re.sub(r'[^\w\s]','',(t or '').lower()).strip() in {'go to sleep','go back to sleep'}
+def sleep_line(t):
+    return f'Going quiet. Press {QUIET_HOTKEY.replace("<ctrl>","Control").replace("<alt>","Option").replace("+"," ").title().replace("J","J")} to wake me.' if wants_quiet(t) else 'Alright. Say Julius when you need me.'
+def enter_quiet():
+    microphone_gate.set_quiet(True);julius_state.set_quiet(True);print('  [quiet: detector off until the wake hotkey]',flush=True)
+    import julius_log;julius_log.event('quiet',on=True)
+def leave_quiet(source='hotkey'):
+    if not microphone_gate.quiet:return
+    microphone_gate.set_quiet(False);julius_state.set_quiet(False);print(f'  [listening again: {source}]',flush=True)
+    import julius_log;julius_log.event('quiet',on=False,source=source)
+    if wake_engine is not None:wake_engine.reset()
+if julius_state.is_quiet() and os.environ.get('JULIUS_VALIDATION_NO_DEVICES')!='1':
+    microphone_gate.set_quiet(True);print('  [starting in quiet mode: press the wake hotkey]',flush=True)
+if os.environ.get('JULIUS_VALIDATION_NO_DEVICES')!='1':
+    _wake_listener=julius_hotkey.start(lambda:leave_quiet('hotkey'),QUIET_HOTKEY)
+    try:signal.signal(signal.SIGUSR1,lambda *a:leave_quiet('signal'))
+    except Exception:pass
 
 # Cloud brain: Claude Haiku answers every turn, the planner (Sonnet) is reached through escalate_to_planner.
 cloud_brain = cloud_tracker = None
@@ -814,9 +841,10 @@ def _after_wake(ev):
     if control:
         globals()['awake_until'] = 0.0 if control == 'sleep' else time.time() + SESSION_SEC
         print(f"  [{ 'asleep' if control == 'sleep' else 'awake' }]", flush=True)
-        try:speak('Alright. Say Julius when you need me.' if control == 'sleep' else 'I am here.')
+        try:speak(sleep_line(text) if control == 'sleep' else 'I am here.')
         except TurnCancelled:print('  [response stopped]',flush=True)
         if control=='sleep':release_idle_models()
+        if control=='sleep' and wants_quiet(text):enter_quiet()
     elif len(text.split()) < 2:
         globals()['awake_until'] = time.time() + SESSION_SEC
         try:speak("Yeah?")
@@ -860,9 +888,11 @@ with microphone_stream():
                 if control:
                     awake_until = 0.0 if control == 'sleep' else time.time() + SESSION_SEC
                     print(f"  [{ 'asleep' if control == 'sleep' else 'awake' }]", flush=True)
-                    try:speak('Alright. Say Julius when you need me.' if control == 'sleep' else 'I am here.')
+                    try:speak(sleep_line(entry) if control == 'sleep' else 'I am here.')
                     except TurnCancelled:print('  [response stopped]',flush=True)
                     if control=='sleep':release_idle_models()
+                    if control=='sleep' and wants_quiet(entry):enter_quiet()
+                    if control=='wake':leave_quiet('typed')
                     q.clear()
                     continue
                 if _scripted and entry.startswith("/audio "):
@@ -970,9 +1000,10 @@ with microphone_stream():
                     if control:
                         awake_until = 0.0 if control == 'sleep' else time.time() + SESSION_SEC
                         print(f"  [{ 'asleep' if control == 'sleep' else 'awake' }]", flush=True)
-                        try:speak('Alright. Say Julius when you need me.' if control == 'sleep' else 'I am here.')
+                        try:speak(sleep_line(text) if control == 'sleep' else 'I am here.')
                         except TurnCancelled:print('  [response stopped]',flush=True)
                         if control=='sleep':release_idle_models()
+                        if control=='sleep' and wants_quiet(text):enter_quiet()
                         q.clear()
                         continue
                     if not utterance_awake:
