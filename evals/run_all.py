@@ -1,7 +1,7 @@
 """One command for every eval: unit tests, routing, file agent, recorded-audio regression. Prints one summary table.
 
 A suite is flagged REGRESSION when a case that passed last run fails now, or its headline score drops past a tolerance.
-Usage: python evals/run_all.py [--free] [--skip audio,routing] [--runs 3]
+Usage: python evals/run_all.py [--free] [--skip audio,routing,planner] [--runs 3]
   --free  runs only the suites that cost nothing (unit tests, deterministic routing stage, file agent); Haiku and audio are skipped
 Exit status is 1 when anything regressed or a suite failed to run."""
 import argparse, json, re, subprocess, sys, time
@@ -70,6 +70,8 @@ def main():
     if "wake" not in skip and not a.free and (ROOT / "diagnostics" / "wake_real" / "wake3").is_dir():
         rows.append(suite("wake cascade", "wake_eval.py", ["suite"], "wakecascade", "ok_pct", "ok", 3.4, False))
     if "file" not in skip: rows.append(suite("file agent", "file_eval.py", [], "file", "ok_pct", "pass", 0.0, False))
+    if "planner" not in skip and not a.free:
+        rows.append(suite("planner (paid)", "planner_eval.py", [], "planner", "ok_pct", "clean runs", 0.0, True))
     if "audio" not in skip and not a.free:
         rows.append(suite("recorded audio", "audio_regression.py", [], "audio", "turn_ok_pct", "turns ok", 3.0, True))
     if "memory" not in skip:

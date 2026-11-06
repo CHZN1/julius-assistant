@@ -84,3 +84,7 @@ Note on `native/apple/bridge.js`: it is not UI. It is the JavaScript-for-Automat
 ## Later
 
 Vision branch (beyond emotion detection), hosted version with subscriptions.
+
+
+### Planner eval (paid), 2026-11-06
+`evals/planner_eval.py` (in `run_all.py` as "planner (paid)"): real Sonnet planner, generated Downloads shaped like the user's, 5 requests x 5 runs, about $0.27 a run of 25. Result: 25/25 runs with no protected or recent item staged and the folder unchanged; 100% of runs proposed something; 70% of the old installers and duplicates were found on average; no overreach on datasets or archives; the planner itself named a protected item (an installer opened recently or downloaded this week, a new screenshot) in 6 runs, which the agent blocked. Cautious misses: Zoom.pkg missed in 22 runs, old screenshots in 10-14.
