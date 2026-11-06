@@ -885,6 +885,7 @@ with microphone_stream():
                 buf,recording,sil_t,spk_t=[],False,None,None
                 voiced_run=longest_voiced_run=0
                 pre_roll.clear()
+                if wake_engine is not None: wake_engine.reset()  # a gap (Julius speaking) must not stitch old audio to the echo tail
                 print('  [audio capture resumed; partial input discarded]',flush=True)
             if recording and len(buf)>=int(30*SR/CHUNK):
                 buf,recording,sil_t=[],False,None

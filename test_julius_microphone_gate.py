@@ -34,4 +34,10 @@ class GateTests(unittest.TestCase):
   exec(compile(ast.Module(body=[fn],type_ignores=[]),'speech','exec'),scope)
   with self.assertRaises(RuntimeError):scope['speak_sentence']('Hello.')
   self.assertFalse(gate.accepting());now[0]+=.36;self.assertTrue(gate.accepting())
+ def test_capture_gap_resets_wake_engine(self):
+  """Regression: audio around Julius's own playback must not be stitched into one wake candidate (the wake stream is reset on every capture gap)."""
+  tree=ast.parse(Path('julius_candidate.py').read_text())
+  hits=[n for n in ast.walk(tree) if isinstance(n,ast.If) and 'discontinuous' in ast.dump(n.test)]
+  self.assertTrue(hits)
+  for n in hits:self.assertIn('reset',ast.dump(ast.Module(body=n.body,type_ignores=[])))
 if __name__=='__main__':unittest.main()
