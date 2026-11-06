@@ -30,7 +30,7 @@ def main(kind):
         name = f"{kind}_{k:02d}"
         if (OUT / f"{name}_mic.wav").exists(): continue
         li = (k - 1) % 3; start = STARTS[(k - 1) // 3 % len(STARTS)]; seg = srcs[li][int(start * SR):int((start + TAKE_S) * SR)]
-        print(f"\n[{k}/12] SAY (about 4 s after Julius starts):   {text}", flush=True); input("   press Return when ready ...")
+        print(f"\n[{k}/12] SAY (about 4 s after Julius starts):   {text}", flush=True); print("   starting in 3 s ...", flush=True); time.sleep(3)
         time.sleep(0.5); x = np.concatenate([np.zeros(int(.5 * SR), np.float32), seg, np.zeros(int(.8 * SR), np.float32)]).reshape(-1, 1)
         rec = sd.playrec(x, samplerate=SR, channels=1, dtype="float32"); sd.wait()
         sf.write(OUT / f"{name}_mic.wav", rec[:, 0], SR, subtype="PCM_16"); sf.write(OUT / f"{name}_ref.wav", x[:, 0], SR, subtype="PCM_16")
