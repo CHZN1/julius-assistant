@@ -33,10 +33,10 @@ def parse(text):
     if m and not t.endswith("?"): return "correct", m.group(1).strip()  # only acts when it matches something already remembered
     return None, None
 
-FIRST_PERSON = re.compile(r"\b(?:i'?m|i am|i'?ve|i have|i live|i work|i like|i love|i prefer|i hate|i don'?t (?:like|eat|drink)|i always|i never|i usually|i grew up|i was born|call me|my (?:\w+ ){0,2}(?:is|are|was|name|birthday|wife|husband|partner|girlfriend|boyfriend|sister|brother|mom|mother|dad|father|kid|kids|son|daughter|dog|cat|car|job|boss|team|favorite))\b", re.I)
-EXTRACT_PROMPT = """From the user's message, extract lasting facts the user states about themselves or their life: who they are, where they live or work, family, pets, preferences, habits, allergies, routines, goals.
+FIRST_PERSON = re.compile(r"\b(?:i'?m|i am|i'?ve|i have|call me|i (?!want\b|need\b|think\b|wonder\b|guess\b|mean\b|meant\b|just\b|will\b|would\b|can\b|could\b|should\b|might\b|may\b|got\b|had\b|saw\b|ate\b|went\b|was\b|did\b|do\b|don'?t know\b|know\b|see\b|hear\b|said\b)\w+|my (?:\w+ ){0,2}(?:is|are|was|name|birthday|wife|husband|partner|girlfriend|boyfriend|sister|brother|mom|mother|dad|father|kid|kids|son|daughter|dog|cat|car|job|boss|team|favorite))\b", re.I)
+EXTRACT_PROMPT = """From the user's message, extract lasting facts the user states about themselves or their life: who they are, where they live or work, family, pets, preferences, habits, languages, hobbies, handedness, allergies and dietary restrictions, routines, goals.
 Only a fact the user stated directly, that will still be true in a month. NOT: questions, requests, plans for today, moods, hypotheticals, jokes, quotes, things about other topics, anything about Julius, anything the assistant said.
-Never record passwords, keys, account or card numbers, or health, money or legal details.
+Never record passwords, keys, account or card numbers, or money or legal details, or medical diagnoses, conditions, medications and treatment. Allergies and diet are fine.
 Write each fact as one short sentence starting with "the user". Empty is the right answer most of the time.
 Return ONLY JSON: {"facts": []}
 
@@ -166,7 +166,7 @@ class MemoryAssistant:
     # ---- automatic capture ----
     def worth_a_look(self, text):
         t = text.strip()
-        return len(t.split()) >= 4 and not t.endswith("?") and bool(FIRST_PERSON.search(t)) and not SECRET.search(t) and not SENSITIVE.search(t)
+        return len(t.split()) >= 3 and not t.endswith("?") and bool(FIRST_PERSON.search(t)) and not SECRET.search(t) and not SENSITIVE.search(t)
 
     def autocapture(self, user_text, llm):
         """llm(prompt) -> text. Returns the rows stored (source='auto'). Never raises."""

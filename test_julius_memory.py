@@ -82,4 +82,10 @@ class RetrievalTests(unittest.TestCase):
     def test_keyword_and_stem_matches(self):
         d,s,a,_=make();a.handle("remember I am allergic to peanuts");a.handle("remember my sister lives in Springfield");a.handle("remember I drive a blue Subaru")
         self.assertEqual(s.search('what are my allergies')[0]['text'].split()[-1],'peanuts');self.assertIn('Subaru',s.search('which car do I drive')[0]['text'])
+    def test_short_and_verb_first_statements_reach_the_extractor(self):
+        d,s,a,_=make()
+        for t in ["I'm left handed","I hate cilantro","I drive a blue Subaru","I play the drums on weekends","I speak Spanish at home"]:self.assertTrue(a.worth_a_look(t),t)
+        for t in ["I want to know how photosynthesis works","I think it might rain","what time is it","I need to finish this report","hi there"]:self.assertFalse(a.worth_a_look(t),t)
+    def test_system_prompt_says_julius_has_long_term_memory(self):
+        src=Path('julius_candidate.py').read_text();self.assertIn('You have long-term memory',src);self.assertIn('Never say you cannot remember',src)
 if __name__=='__main__':unittest.main()

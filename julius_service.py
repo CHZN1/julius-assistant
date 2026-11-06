@@ -6,7 +6,7 @@
   python julius_service.py restart
   python julius_service.py wake      leave quiet mode (same as the wake hotkey)
   python julius_service.py logs [-n 60] [--raw] [--no-follow]   recent log lines, then new ones as they arrive (Ctrl+C to stop)
-  python julius_service.py doctor    check, the way launchd starts Julius, whether macOS lets this Python see keys (the hotkeys)
+  python julius_service.py doctor    check, the way launchd starts Julius, whether the stop and wake hotkeys register
 No API key is written into the plist: Julius reads ANTHROPIC_API_KEY from the repo's .env like a normal run."""
 import json, os, plistlib, subprocess, sys, time
 from pathlib import Path
@@ -82,19 +82,22 @@ def show_logs(n=60, raw=False, follow=True, path=LOG, out=print, sleep=time.slee
                 f.seek(pos); chunk = f.read(); pos = f.tell()
             for l in chunk.splitlines(): out(l if raw else format_line(l))
 
-def doctor(runner=subprocess.run, sleep=time.sleep, workdir="/tmp"):
-    """Start a throwaway LaunchAgent that asks pynput, from the real Python binary, whether macOS trusts it for keyboard events."""
-    real = os.path.realpath(PY); label = "com.julius.doctor"; out_file = Path(workdir) / "julius_doctor.out"; out_file.unlink(missing_ok=True)
-    code = "import sys;from pynput import keyboard;print('trusted' if keyboard.Listener.IS_TRUSTED else 'NOT trusted', sys.executable)"
+def doctor(runner=subprocess.run, sleep=time.sleep, workdir="/tmp", binary=None, combos=("stop=ctrl+alt+s", "wake=ctrl+alt+j")):
+    """Start the hotkey helper the way launchd would and report whether both hotkeys registered (Carbon hotkeys need no Accessibility or Input Monitoring permission)."""
+    import julius_hotkey
+    label = "com.julius.doctor"; out_file = Path(workdir) / "julius_doctor.out"; out_file.unlink(missing_ok=True)
+    try: binary = binary or julius_hotkey.build()
+    except Exception as e: return f"cannot build the hotkey helper: {e}", ""
     pl = Path(workdir) / "julius_doctor.plist"
-    pl.write_bytes(plistlib.dumps({"Label": label, "ProgramArguments": [real, "-c", code], "RunAtLoad": True, "LimitLoadToSessionType": "Aqua", "StandardOutPath": str(out_file), "StandardErrorPath": str(Path(workdir) / "julius_doctor.err")}))
+    pl.write_bytes(plistlib.dumps({"Label": label, "ProgramArguments": [str(binary), *combos], "RunAtLoad": True, "LimitLoadToSessionType": "Aqua", "EnvironmentVariables": {"JULIUS_HOTKEYD_NOWATCH": "1"},
+                                   "StandardOutPath": str(out_file), "StandardErrorPath": str(Path(workdir) / "julius_doctor.err")}))
     run(["launchctl", "bootout", f"{domain()}/{label}"], runner); run(["launchctl", "bootstrap", domain(), str(pl)], runner)
     for _ in range(20):
         sleep(0.5)
-        if out_file.exists() and out_file.read_text().strip(): break
+        if out_file.exists() and "ready" in out_file.read_text(): break
     run(["launchctl", "bootout", f"{domain()}/{label}"], runner)
-    verdict = out_file.read_text().strip() if out_file.exists() else "no answer"
-    return verdict, real
+    verdict = " ".join(out_file.read_text().split()) if out_file.exists() and out_file.read_text().strip() else "no answer"
+    return verdict, str(binary)
 
 def main(argv):
     cmd = (argv[1:2] or ["status"])[0]
@@ -108,9 +111,9 @@ def main(argv):
         except KeyboardInterrupt: pass
         return 0
     if cmd == "doctor":
-        verdict, real = doctor(); print(f"launchd -> {verdict}")
-        if verdict.startswith("trusted"): print("The hotkeys will work after: python julius_service.py restart")
-        else: print(f"macOS does not trust this binary for keyboard events. In System Settings > Privacy & Security, add this exact file to BOTH Accessibility and Input Monitoring (+ button, Cmd+Shift+G, paste the path), switch them on, then run doctor again:\n  {real}\nIf an old entry for Python is already listed, remove it first and re-add this one.\nNo hotkey needed meanwhile: `python julius_service.py wake` does the same as the wake key.")
+        verdict, binary = doctor(); print(f"hotkey helper under launchd -> {verdict}")
+        if verdict.endswith("ready stop wake") and "failed" not in verdict: print("Both hotkeys register (no Accessibility or Input Monitoring needed): Ctrl+Option+S stops, Ctrl+Option+J wakes.")
+        else: print("A hotkey did not register (another app may already own that key combination, or the helper could not start). Details above; no hotkey needed meanwhile: `python julius_service.py wake` does the same as the wake key.")
         return 0
     print(status()); return 0
 if __name__ == "__main__": sys.exit(main(sys.argv))

@@ -34,12 +34,18 @@ class LogsCommandTests(unittest.TestCase):
         self.assertEqual(len(out),3);self.assertIn('[asleep]',out[0]);self.assertIn('quiet',out[1]);self.assertIn('on',out[1]);self.assertTrue(out[2].endswith('boom'))
     def test_missing_log_says_so(self):
         out=[];julius_service.show_logs(path=Path(tempfile.mkdtemp())/'none.jsonl',out=out.append);self.assertIn('no log yet',out[0])
-    def test_doctor_reports_launchd_verdict(self):
+    def test_doctor_reports_helper_verdict(self):
         d=tempfile.mkdtemp()
         def runner(args,**k):
-            if args[1]=='bootstrap':(Path(d)/'julius_doctor.out').write_text('NOT trusted /x/python3.12\n')
+            if args[1]=='bootstrap':(Path(d)/'julius_doctor.out').write_text('ready stop wake\n')
             return Result()
-        v,_=julius_service.doctor(runner,lambda s:None,d);self.assertTrue(v.startswith('NOT trusted'))
+        v,_=julius_service.doctor(runner,lambda s:None,d,binary='/x/h');self.assertEqual(v,'ready stop wake')
+    def test_doctor_reports_a_failed_combo(self):
+        d=tempfile.mkdtemp()
+        def runner(args,**k):
+            if args[1]=='bootstrap':(Path(d)/'julius_doctor.out').write_text('failed wake status=-9878\nready stop\n')
+            return Result()
+        v,_=julius_service.doctor(runner,lambda s:None,d,binary='/x/h');self.assertIn('failed wake',v)
 class QuietTests(unittest.TestCase):
     def test_quiet_gate_drops_all_audio_until_switched_off(self):
         g=MicrophoneGate(clock=lambda:100.);self.assertTrue(g.accepting());g.set_quiet(True);self.assertFalse(g.accepting());g.set_quiet(False);self.assertTrue(g.accepting())
