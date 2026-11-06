@@ -182,7 +182,7 @@ def build_command(task, api_key, *, claude="claude", config=None, sandbox=True):
             "--max-budget-usd", f"{task.cap_usd:.2f}", "--tools", TOOLS, "--allowedTools", *ALLOWED, "--disallowedTools", *DENIED,
             "--no-session-persistence", "--disable-slash-commands", "--strict-mcp-config", "--append-system-prompt", RULES]
     if sandbox: argv = ["/usr/bin/sandbox-exec", "-f", str(profile)] + argv
-    env = {"PATH": "/opt/miniconda3/envs/torch/bin:/usr/bin:/bin:/usr/sbin:/sbin", "HOME": str(task.dir / "home"), "TMPDIR": str(task.dir / "tmp"), "LANG": "en_US.UTF-8",
+    env = {"PATH": "/opt/miniconda3/envs/torch/bin:/usr/bin:/bin:/usr/sbin:/sbin", "HOME": str(task.dir / "home"), "TMPDIR": str(task.dir / "tmp"), "CLAUDE_CODE_TMPDIR": str(task.dir / "tmp"), "LANG": "en_US.UTF-8",
            "ANTHROPIC_API_KEY": api_key, "CLAUDE_CODE_SIMPLE": "1", "DISABLE_AUTOUPDATER": "1", "DISABLE_TELEMETRY": "1", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_TERMINAL_PROMPT": "0"}
     return argv, env, task.work
 
