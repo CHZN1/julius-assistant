@@ -20,7 +20,7 @@ model,refs=load_models()
 def terminate_worker(signum, frame):raise SystemExit(0)
 signal.signal(signal.SIGTERM,terminate_worker)
 print(json.dumps({'ready':True}),flush=True)
-with tempfile.TemporaryDirectory(prefix='julius_mlx_tts_') as directory:
+with tempfile.TemporaryDirectory(prefix='julius_mlx_tts_',dir=__import__('julius_state').tmp_dir()) as directory:
     for line in sys.stdin:
         req=json.loads(line)
         if req.get('op')=='close':break

@@ -8,7 +8,7 @@ from julius_tts import SpeechEngine
 with contextlib.redirect_stdout(sys.stderr):
     engine=SpeechEngine()
 print(json.dumps({'ready':True}),flush=True)
-with tempfile.TemporaryDirectory(prefix='julius_tts_') as directory:
+with tempfile.TemporaryDirectory(prefix='julius_tts_',dir=__import__('julius_state').tmp_dir()) as directory:
     for line in sys.stdin:
         try:
             req=json.loads(line)

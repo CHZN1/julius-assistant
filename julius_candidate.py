@@ -35,6 +35,7 @@ cancellation=Cancellation()
 microphone_gate=MicrophoneGate()
 from julius_selfecho import SelfEcho
 self_echo=SelfEcho()
+microphone_gate.on_begin=self_echo.begin;microphone_gate.on_end=self_echo.finish  # his own voice is judged from the END of playback
 
 if os.environ.get("JULIUS_MEMORY_DIR"):
     jm.MEM = Path(os.environ["JULIUS_MEMORY_DIR"])

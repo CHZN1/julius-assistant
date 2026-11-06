@@ -46,6 +46,15 @@ class LogsCommandTests(unittest.TestCase):
             if args[1]=='bootstrap':(Path(d)/'julius_doctor.out').write_text('failed wake status=-9878\nready stop\n')
             return Result()
         v,_=julius_service.doctor(runner,lambda s:None,d,binary='/x/h');self.assertIn('failed wake',v)
+class TempDirTests(unittest.TestCase):
+    def test_runtime_temp_lives_under_the_julius_state_dir_and_the_service_exports_it(self):
+        d=tempfile.mkdtemp();os.environ['JULIUS_STATE_DIR']=d
+        try:
+            self.assertEqual(julius_state.tmp_dir(),Path(d)/'tmp');self.assertTrue((Path(d)/'tmp').is_dir())
+            self.assertEqual(julius_service.plist_dict()['EnvironmentVariables']['TMPDIR'],str(Path(d)/'tmp')+'/')
+        finally:os.environ.pop('JULIUS_STATE_DIR',None)
+    def test_speech_workers_keep_their_scratch_folder_out_of_the_system_temp_dir(self):
+        for f in ('julius_mlx_tts_worker.py','julius_tts_worker.py'):self.assertIn("julius_state').tmp_dir()",Path(f).read_text())
 class QuietTests(unittest.TestCase):
     def test_quiet_gate_drops_all_audio_until_switched_off(self):
         g=MicrophoneGate(clock=lambda:100.);self.assertTrue(g.accepting());g.set_quiet(True);self.assertFalse(g.accepting());g.set_quiet(False);self.assertTrue(g.accepting())

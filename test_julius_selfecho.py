@@ -8,6 +8,22 @@ class SelfEchoTests(unittest.TestCase):
     def test_a_new_request_or_a_late_repeat_is_not_an_echo(self):
         t=[100.];e=SelfEcho(clock=lambda:t[0]);e.note('Yeah?');t[0]+=1;self.assertFalse(e.is_echo("what's the weather in Springfield?"))
         t[0]+=10;self.assertFalse(e.is_echo('Yeah?'))
+    def test_window_runs_from_the_end_of_playback_not_the_start_of_the_sentence(self):
+        """Live regression (22:13:09): 'Done, the Sharks note is gone.' took longer than 5 s from the start of speak() to the end of playback, so its echo 'This note is gone.' was answered."""
+        t=[100.];e=SelfEcho(clock=lambda:t[0]);e.begin();e.note('Done, the Sharks note is gone.');t[0]+=6;self.assertTrue(e.is_echo('This note is gone.'))
+        e.finish();t[0]+=1.5;self.assertTrue(e.is_echo('This note is gone.'))
+    def test_late_echo_of_a_long_reply_is_matched_against_every_sentence(self):
+        t=[100.];e=SelfEcho(clock=lambda:t[0]);e.begin()
+        for sent in ["Okay, the one you want gone is probably the Sharks one.","I need a topic to delete the right one.","Which should I forget, the Sharks or the file stuff?"]:e.note(sent);t[0]+=3
+        e.finish();t[0]+=6;self.assertTrue(e.is_echo('I need a topic to delete the right one'))
+        t[0]+=10;self.assertFalse(e.is_echo('I need a topic to delete the right one'))
+    def test_a_short_answer_to_his_question_is_not_an_echo_late(self):
+        t=[100.];e=SelfEcho(clock=lambda:t[0]);e.begin();e.note('Which should I forget, the Sharks or the file stuff?');e.finish();t[0]+=6
+        self.assertFalse(e.is_echo('The Sharks.'));self.assertFalse(e.is_echo('forget the Sharks one please'))
+    def test_gate_reports_playback_start_and_end(self):
+        calls=[];g=MicrophoneGate();g.on_begin=lambda:calls.append('b');g.on_end=lambda:calls.append('e')
+        with g.output():calls.append('play')
+        self.assertEqual(calls,['b','play','e'])
     def test_overlap_is_in_order(self):self.assertEqual(overlap('b a','a b c'),.5)
     def test_gate_settle_covers_the_output_device_latency(self):
         g=MicrophoneGate();g.cover_output_latency(.4);self.assertAlmostEqual(g.settle_seconds,.75)

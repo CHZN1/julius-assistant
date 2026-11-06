@@ -9,6 +9,7 @@
   python julius_service.py doctor    check, the way launchd starts Julius, whether the stop and wake hotkeys register
 No API key is written into the plist: Julius reads ANTHROPIC_API_KEY from the repo's .env like a normal run."""
 import json, os, plistlib, subprocess, sys, time
+import julius_state
 from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 LABEL = "com.julius.assistant"
@@ -20,7 +21,7 @@ def plist_dict(root=ROOT, log_dir=None):
     return {"Label": LABEL, "ProgramArguments": ["/bin/zsh", str(root / "run_julius.sh")], "WorkingDirectory": str(root),
             "RunAtLoad": True, "KeepAlive": {"SuccessfulExit": False},  # restart after a crash or kill, not after a clean exit (off, Ctrl+C, /quit)
             "ThrottleInterval": 15, "ProcessType": "Interactive", "LimitLoadToSessionType": "Aqua",
-            "EnvironmentVariables": {"JULIUS_SERVICE": "1", "JULIUS_PROFILE": "cloud", "PATH": "/opt/miniconda3/envs/torch/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"},
+            "EnvironmentVariables": {"JULIUS_SERVICE": "1", "JULIUS_PROFILE": "cloud", "TMPDIR": str(julius_state.tmp_dir()) + "/", "PATH": "/opt/miniconda3/envs/torch/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"},
             "StandardOutPath": str(log_dir / "launchd.out"), "StandardErrorPath": str(log_dir / "launchd.err")}
 
 def domain(): return f"gui/{os.getuid()}"
@@ -82,9 +83,10 @@ def show_logs(n=60, raw=False, follow=True, path=LOG, out=print, sleep=time.slee
                 f.seek(pos); chunk = f.read(); pos = f.tell()
             for l in chunk.splitlines(): out(l if raw else format_line(l))
 
-def doctor(runner=subprocess.run, sleep=time.sleep, workdir="/tmp", binary=None, combos=("stop=ctrl+alt+s", "wake=ctrl+alt+j")):
+def doctor(runner=subprocess.run, sleep=time.sleep, workdir=None, binary=None, combos=("stop=ctrl+alt+s", "wake=ctrl+alt+j")):
     """Start the hotkey helper the way launchd would and report whether both hotkeys registered (Carbon hotkeys need no Accessibility or Input Monitoring permission)."""
     import julius_hotkey
+    workdir = workdir or str(julius_state.tmp_dir())
     label = "com.julius.doctor"; out_file = Path(workdir) / "julius_doctor.out"; out_file.unlink(missing_ok=True)
     try: binary = binary or julius_hotkey.build()
     except Exception as e: return f"cannot build the hotkey helper: {e}", ""
