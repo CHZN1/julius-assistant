@@ -70,3 +70,15 @@ Known misses: r097, r101, r105 (Haiku answers with lookups instead of escalating
 | ASR vocabulary hint | **ON** (`julius.toml [asr] vocabulary_hint = true`). WER 8.0% -> 3.8% on the 20 recorded phrases (AcmeCorp, Pat Example, FER 2013 recognised, whole-turn correct back up). On 10 held-out phrases WER was 7.1% without and 8.3% with it: one word ("Ramirez's" -> "Ramirez'"), no hallucinated hint words; judged noise and kept. `audio_baseline.json` is the hint-on, 3-run result. |
 
 Why the planner cost looks 5x higher than the first baseline: the same Tokyo-plan turns cost the same ($0.0048 then, $0.0048-0.0052 now; 2 planner calls with about 3,200 vs 3,580 cached prefix tokens). The mean rose because two prompts that used to be mishandled for free ("Compare the weather in Springfield and Shelbyville", "Organize my downloads folder by file type") now correctly escalate; the downloads plan is 3 planner calls with a 1,100-token plan, about $0.023. A cold Sonnet cache (first escalation after 5 idle minutes) adds a 3,900-token cache write, about $0.01.
+
+## Refresh after the wake work (2026-11-05)
+
+`audio_baseline.json` is now the 3-run result of `python evals/audio_regression.py --repeats 3` on the current code (vocabulary hint on for requests, contrast hint for the wake check only); the 2026-10-30 file is kept as `audio_baseline_2026-10-30.json`. Nothing else was running during the run.
+
+| | 2026-10-30 | 2026-11-05 |
+|---|---|---|
+| ASR mean WER / missed terms | 3.8% / 0 | 3.8% / 0 (the 4.9% seen earlier was the wake hint leaking into requests; fixed) |
+| Mean ASR time per phrase | 0.297 s | 0.322 s |
+| Whole turn correct | 89.7% | 89.7% (p04 passes again; p13, p18, p20 still answered directly) |
+| First audio median / worst | 1.53 s / 16.2 s | 1.68 s / 8.1 s (by path: shortcut 1.41, direct 1.68, tool 2.21, escalate 2.09) |
+| Cost per turn | $0.00095 | $0.00145 |
