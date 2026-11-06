@@ -32,7 +32,10 @@ Work like this:
   with paths. Only loose files; folders, apps, music and audio files, anything in a code project, recently changed files, source code and
   installers in use are protected and are skipped automatically, so do not try to include them. Look first (list_files/find_files),
   propose only what is clearly junk, and tell the user what you left alone.
-- Coding and running code are not available; say so briefly if asked.
+- Coding: code_task stages a coding task for a stronger coding model that works on a sandboxed COPY of one project folder under the projects
+  folder. Use it only when the user clearly asks for code to be written, fixed or tested, with a clear goal and a named project; if the project is
+  unclear, ask which one. Never say it started or finished: it only starts after the user says yes, and changes reach the project only after a
+  separate merge yes. You cannot run code or edit code yourself.
 - Never invent results. If a tool failed or found nothing, say that plainly."""
 
 SUBAGENT_FOOTER = ("\n\nYou are a sub-agent. Use only your tools, stop as soon as the task is answered, and reply with the facts "
@@ -58,10 +61,18 @@ FILES_PROPOSE_SCHEMA = {"name": "files_propose", "description": "Stage a file ch
         "content": {"type": "string", "description": "Exact text for create"}},
         "required": ["action"]}}
 
-_STATE = {"file_session": None, "turn": lambda: 0, "user_text": ""}
+CODE_TASK_SCHEMA = {"name": "code_task", "description": "Stage a coding task (write, fix or test code) for the sandboxed coding agent. Nothing runs until the user says yes.",
+    "input_schema": {"type": "object", "properties": {
+        "goal": {"type": "string", "description": "What the coding agent should do, in one or two precise sentences"},
+        "project": {"type": "string", "description": "Name of the project folder under the projects folder"},
+        "criteria": {"type": "string", "description": "What done looks like, e.g. which tests must pass"},
+        "budget_usd": {"type": "number", "description": "Optional spend limit in dollars; the default is used when omitted and a hard maximum applies"}},
+        "required": ["goal", "project"]}}
+
+_STATE = {"file_session": None, "turn": lambda: 0, "user_text": "", "code_session": None}
 
 
-def configure(file_session=None, turn=None, user_text=None):
+def configure(file_session=None, turn=None, user_text=None, code_session=None):
     """The runtime supplies the human FileSession that owns confirmations, the turn number, and each turn's exact words."""
     if user_text is not None:
         _STATE["user_text"] = user_text
@@ -69,6 +80,8 @@ def configure(file_session=None, turn=None, user_text=None):
         _STATE["file_session"] = file_session
     if turn is not None:
         _STATE["turn"] = turn
+    if code_session is not None:
+        _STATE["code_session"] = code_session
 
 
 def _clip(text):
@@ -108,6 +121,15 @@ def files_propose(args):
         session.pending = session.last = out["data"]["plan"]["id"]
     session.last_result = out
     return out["message"] + (" (Staged only: the user must say yes to apply it.)" if out["ok"] else "")
+
+
+def code_task(args):
+    """Stage a coding task in the human CodeSession; never runs it."""
+    session = _STATE["code_session"]
+    if session is None:
+        return "Coding tasks are not available in this session."
+    out = session.stage(args.get("goal", ""), args.get("project", ""), criteria=args.get("criteria", ""), cap=args.get("budget_usd"), origin="planner")
+    return out["message"] + (" (Staged only: the user must say yes to start it.)" if out["ok"] and out["code"] == "preview" else "")
 
 
 class Loop:
@@ -171,7 +193,7 @@ class Planner:
         self.subagent_runs = []
 
     def tools(self):
-        return utility_tools() + [DELEGATE_SCHEMA, FILES_PROPOSE_SCHEMA]
+        return utility_tools() + [DELEGATE_SCHEMA, FILES_PROPOSE_SCHEMA, CODE_TASK_SCHEMA]
 
     def execute(self, name, args):
         import julius_tools as jt
@@ -179,6 +201,8 @@ class Planner:
             return self.delegate(args)
         if name == "files_propose":
             return files_propose(args)
+        if name == "code_task":
+            return code_task(args)
         return jt.call(name, args)
 
     def delegate(self, args):

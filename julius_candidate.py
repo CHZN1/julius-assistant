@@ -23,6 +23,8 @@ import julius_tools as jt
 import julius_files as jf
 from julius_vision_mode import create_vision, vision_capability_prompt
 from julius_file_session import FileSession
+from julius_code_session import CodeSession
+import julius_code_agent
 from julius_utility_session import UtilitySession
 from julius_apple import AppleProvider
 from julius_listening import has_wake, strip_wake, strip_leading_wake, listening_control,incomplete_fragment,CaptureClock
@@ -630,9 +632,12 @@ try:
     _trash_note = jf.agent().trash_notice()
     if _trash_note: print(f'  [trash:{_trash_note}]', flush=True)
 except Exception: pass
+_code_done = deque()   # finished coding tasks waiting to be announced (main loop speaks them when you are not talking)
+import julius_config as _code_cfg
+_code_session = CodeSession(config=_code_cfg.load_config().get("code"), tracker=cloud_tracker, api_key=_code_cfg.api_key, on_done=_code_done.append)
 if cloud_brain is not None:
     import julius_orchestrator
-    julius_orchestrator.configure(file_session=_file_session, turn=lambda: TURN["n"])
+    julius_orchestrator.configure(file_session=_file_session, turn=lambda: TURN["n"], code_session=_code_session)
 _utility_session = UtilitySession(jt.planner(), os.environ.get("JULIUS_TIMEZONE", "America/Los_Angeles"), AppleProvider(jt.planner()))
 
 def release_idle_models():
@@ -686,6 +691,19 @@ def handle_memory(text):
     try: return memory.handle(text)
     except Exception as exc:
         print(f"  [memory command failed: {type(exc).__name__}: {exc}]", flush=True); return None
+
+def handle_code(text):
+    """The coding agent's voice commands: stage, yes, status, cancel, show changes, merge (own yes), undo, discard. No model call."""
+    try:
+        out = _code_session.handle(text, TURN["n"])
+    except Exception as exc:
+        print(f"  [coding command failed: {type(exc).__name__}: {exc}]", flush=True); return None
+    if out is None: return None
+    _file_session.pending = None
+    intent_router.last = None
+    for line in (out.get("data") or {}).get("lines", [])[:40]: print(f"    {line}", flush=True)
+    print(f"  [coding agent: {out['code']}]", flush=True)
+    return out["message"]
 
 def handle_files(text):
     out = jt.dispatcher().human_utilities(_utility_session, text, TURN["n"])
@@ -742,7 +760,7 @@ def _process(text, lang):
                 print(f"  [speech unavailable: {exc}]", flush=True)
 
     discussion=authority_discussion_reply(text)
-    routed = (discussion or "I didn't catch the full thought. Could you say that again?") if discussion or incomplete_fragment(text) else (handle_memory(text) or handle_files(text))
+    routed = (discussion or "I didn't catch the full thought. Could you say that again?") if discussion or incomplete_fragment(text) else (handle_memory(text) or handle_code(text) or handle_files(text))
     if routed is not None:
         print(f"  JULIUS: {routed}\n", flush=True)
         try:
@@ -984,6 +1002,13 @@ with microphone_stream():
                     try: speak("Noted.")
                     except TurnCancelled: pass
                     q.clear(); continue
+            if _code_done and not recording and not q:
+                _finished = _code_done.popleft(); _said = julius_code_agent.spoken_result(_finished)
+                print(f"  JULIUS: {_said}", flush=True)
+                try: speak(_said)
+                except TurnCancelled: pass
+                except Exception as exc: print(f"  [speech unavailable: {exc}; result shown as text]", flush=True)
+                q.clear(); continue
             if not q:
                 time.sleep(0.01); continue
             chunk, now = q.popleft()

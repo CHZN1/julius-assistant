@@ -359,7 +359,7 @@ def _execute(run, api_key, tracker, cfg, claude, sandbox, on_done):
                     cost = max(cost, float(seen))
                     if cost > task.cap_usd * 1.25 and not run.over_budget: run.over_budget = True; _kill(run)   # the CLI's own limit failed to stop it
                 if event.get("type") == "result": result = event
-            rc = run.proc.wait()
+            rc = run.proc.wait(); run.proc.stdout.close()
     except Exception as exc:   # sandbox or launch problems must end the task cleanly, not leave it "running"
         result = {"is_error": True, "result": f"The coding task could not start: {type(exc).__name__}: {exc}"}
     finally:

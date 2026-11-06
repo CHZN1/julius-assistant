@@ -11,7 +11,7 @@ class TurnRecoveryTests(unittest.TestCase):
         ns={'time':time,'cancellation':Cancellation(),'TurnCancelled':TurnCancelled,
             'authority_discussion_reply':authority_discussion_reply,'incomplete_fragment':incomplete_fragment,'eyes':Mock(),'TURN':{'n':0},
             'jf':Mock(),'jt':Mock(),'jm':Mock(),'history':[], '_validation_output':None,
-            'handle_files':Mock(return_value=None),'handle_memory':Mock(return_value=None),'memory_autocapture':Mock(),'speak':Mock(),'speak_sentence':Mock(),
+            'handle_files':Mock(return_value=None),'handle_memory':Mock(return_value=None),'handle_code':Mock(return_value=None),'memory_autocapture':Mock(),'speak':Mock(),'speak_sentence':Mock(),
             'ask_streaming':Mock(return_value='A response.'),'close_backend':Mock(),
             'tts':Mock(backend='qwen-mlx')}
         ns['eyes'].snapshot.return_value={};ns['eyes'].describe.return_value=''
