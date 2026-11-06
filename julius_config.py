@@ -14,6 +14,7 @@ DEFAULTS = {
     "orchestrator": {"max_steps": 8, "subagent_max_steps": 6},
     "offline": {"model": "llama3.2:3b", "retry_seconds": 60},
     "voice": {"keep_loaded": True},
+    "memory": {"announce_auto": True},
     "service": {"wake_hotkey": "<ctrl>+<alt>+j", "log_transcripts": False},
     "barge_in": {"hotkey": "<ctrl>+<alt>+s", "voice": False},
     "wake": {"engine": "whisper", "threshold_low": 0.05, "level_floor": 0.0015, "speaker_threshold": 0.25, "verifier": "~/.julius/wake_verifier.pkl"},

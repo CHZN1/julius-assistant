@@ -72,6 +72,8 @@ def main():
     if "file" not in skip: rows.append(suite("file agent", "file_eval.py", [], "file", "ok_pct", "pass", 0.0, False))
     if "audio" not in skip and not a.free:
         rows.append(suite("recorded audio", "audio_regression.py", [], "audio", "turn_ok_pct", "turns ok", 3.0, True))
+    if "memory" not in skip:
+        rows.append(suite("memory" + (" (free parts)" if a.free else ""), "memory_eval.py", ["--free"] if a.free else [], "memory", "ok_pct", "sections ok", 0.0, not a.free))
     w = max(len(r["suite"]) for r in rows)
     print(f"\n{'suite'.ljust(w)}  {'score':22} {'time':>7} {'cost':>8}  status")
     for r in rows:

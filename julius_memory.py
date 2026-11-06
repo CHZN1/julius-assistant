@@ -40,9 +40,7 @@ def build_context():
     projs = _load("projects.json")["projects"]
     last  = _load("last_session.json")
     out = []
-    if facts:
-        out.append("WHAT YOU REMEMBER ABOUT THE USER")
-        out += [f"- {f['text']}" for f in facts]
+    # Facts are recalled per turn from memory.sqlite3 (julius_memcmd.MemoryAssistant.block), not pasted into every prompt.
     active = [p for p in projs if p.get("status") != "done"]
     if active:
         out.append("\nPROJECTS IN FLIGHT")
@@ -84,10 +82,8 @@ def promote(item_id):
                                   "updated": moved["added"]})
         _save("projects.json", p)
     else:
-        f = _load("facts.json")
-        f["facts"].append({"id": moved["id"], "text": moved["text"],
-                           "added": moved["added"]})
-        _save("facts.json", f)
+        import julius_memstore
+        julius_memstore.MemoryStore(MEM/"memory.sqlite3").add(moved["text"], "fact", "auto", "")
     return True
 
 def reject(item_id):

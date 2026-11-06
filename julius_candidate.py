@@ -270,6 +270,15 @@ if LLM_BACKEND == 'cloud':
 _BAD = ("frustrat", "no progress", "lack of progress", "unable to", "can't ",
         "cannot ", "failed", "impatient", "confrontational", "issue with",
         "struggling", "not completed", "resolve the issue")
+import julius_memstore, julius_memcmd
+memory_store = julius_memstore.MemoryStore(jm.MEM / "memory.sqlite3")
+try:  # one-time import of the old facts.json (it held 2 auto-extracted facts); the file is kept as facts.migrated.json
+    _old = jm.MEM / "facts.json"
+    if _old.exists() and _old.read_text().strip():
+        for _f in _json.loads(_old.read_text()).get("facts", []): memory_store.add(_f["text"], "fact", "auto", "")
+        _old.rename(jm.MEM / "facts.migrated.json")
+except Exception as _e: print(f"  [memory migration skipped: {type(_e).__name__}]", flush=True)
+memory = julius_memcmd.MemoryAssistant(memory_store, jm.SESS, show=lambda s: print(s, flush=True))
 _ctx = jm.build_context()
 if _ctx:
     _ctx = "\n".join(l for l in _ctx.splitlines()
@@ -371,8 +380,10 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
         user_text = f"[the user has looked {nudge} for a while. Check in once, briefly.]"
     if vision_line:
         user_text = f"{user_text}\n\n[you can see: {vision_line}]"
+    # Recalled notes go only to the model (router and tool hints keep seeing the plain request), and not into the stored history.
+    _notes = memory.block(user_text) if globals().get('memory') is not None else ''
 
-    msgs = list(history) + [{"role": "user", "content": user_text}]
+    msgs = list(history) + [{"role": "user", "content": user_text + (f"\n\n{_notes}" if _notes else "")}]
     globals()['_turn_msgs'] = (msgs, len(msgs))  # process() keeps this turn's tool exchange in the history
     # The cloud brain gets the full tool list on every turn: keyword hints can miss a garbled or oblique request
     # ("what's their eath at right now?"), and a text-only turn costs the same single call. Local models keep the hints.
@@ -641,6 +652,34 @@ def announce_reminder(message):
     speak(message)
 
 
+def memory_autocapture(text):
+    """Lasting facts you state about yourself are noted automatically (marked auto; say 'forget that' to remove one). Runs off the reply path."""
+    if globals().get('memory') is None or globals().get('cloud_brain') is None or not memory.worth_a_look(text): return
+    def run():
+        def llm(prompt):
+            r = llm_chat(messages=[{"role": "user", "content": prompt}], think=False, options={"temperature": 0.0, "num_predict": 200})
+            return r.message.content or ""
+        stored = memory.autocapture(text, llm)
+        for row in stored:
+            memory.last_added = row; print(f"  [noted: {row['text']}]", flush=True)
+            try:
+                import julius_log; julius_log.event("memory", "auto", id=row["id"])
+            except Exception: pass
+        if stored and (julius_config.load_config().get("memory") or {}).get("announce_auto", True):
+            globals()['_noted_pending'] = time.time()  # one short "Noted." per turn, spoken when you are not talking (main loop)
+            if _validation_no_devices:
+                globals()['_noted_pending'] = None
+                try: speak("Noted.")
+                except Exception: pass
+    if _validation_no_devices: run()
+    else: threading.Thread(target=run, daemon=True).start()
+
+def handle_memory(text):
+    """remember / forget / what do you remember: deterministic, no model call."""
+    try: return memory.handle(text)
+    except Exception as exc:
+        print(f"  [memory command failed: {type(exc).__name__}: {exc}]", flush=True); return None
+
 def handle_files(text):
     out = jt.dispatcher().human_utilities(_utility_session, text, TURN["n"])
     if out is not None:
@@ -668,6 +707,7 @@ def process(text,lang):
 
 def _process(text, lang):
     started = time.perf_counter()
+    globals()['_noted_pending'] = None
     globals()['_response_started']=started
     globals()['_first_audio_at']=None
     globals()['_reasoning_seconds']=None;globals()['_brain_first_token_seconds']=None
@@ -695,7 +735,7 @@ def _process(text, lang):
                 print(f"  [speech unavailable: {exc}]", flush=True)
 
     discussion=authority_discussion_reply(text)
-    routed = (discussion or "I didn't catch the full thought. Could you say that again?") if discussion or incomplete_fragment(text) else handle_files(text)
+    routed = (discussion or "I didn't catch the full thought. Could you say that again?") if discussion or incomplete_fragment(text) else (handle_memory(text) or handle_files(text))
     if routed is not None:
         print(f"  JULIUS: {routed}\n", flush=True)
         try:
@@ -755,6 +795,7 @@ def _process(text, lang):
         history.append({"role": "assistant", "content": reply})
         jm.log_turn(text, reply,
                     {"emotion": st.get("emotion"), "conf": st.get("conf")})
+        if turn_error is None: memory_autocapture(text)
 
     underflows = globals()['speech_player'].pop_events() if globals().get('speech_player') is not None else []
     if underflows:
@@ -806,7 +847,7 @@ def _kbd():
                 else:print('  [no response is active]',flush=True)
             elif command:
                 if command=='/quit':cancellation.request()
-                typed.append(command)
+                typed.append('what do you remember' if command=='/memories' else command)
         except (EOFError, KeyboardInterrupt):
             break
 threading.Thread(target=_kbd, daemon=True).start()
@@ -930,6 +971,12 @@ with microphone_stream():
                     jm.log_turn("(vision check-in)", reply, {"emotion": n_emo})
                     awake_until = time.time() + SESSION_SEC
 
+            if globals().get('_noted_pending') and not recording and not q:
+                _age = time.time() - globals()['_noted_pending']; globals()['_noted_pending'] = None
+                if _age < 10:
+                    try: speak("Noted.")
+                    except TurnCancelled: pass
+                    q.clear(); continue
             if not q:
                 time.sleep(0.01); continue
             chunk, now = q.popleft()

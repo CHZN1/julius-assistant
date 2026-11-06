@@ -22,6 +22,9 @@ retry_seconds = 60          # how long to stay offline before trying the API aga
 [voice]
 keep_loaded = true          # with the brain in the cloud the TTS voice is never unloaded between turns
 
+[memory]
+announce_auto = true             # say "Noted." once after a turn in which Julius saved a fact you stated (they are marked auto in `what do you remember`; say "forget that" to remove one)
+
 [service]
 wake_hotkey = "<ctrl>+<alt>+j"   # leaves quiet mode (after "Julius, go to sleep"); also `python julius_service.py wake`
 log_transcripts = false         # JSON log in ~/Library/Logs/Julius redacts what you say and what he answers unless true

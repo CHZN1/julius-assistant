@@ -1,0 +1,35 @@
+{
+ "_note": "Invented facts about a fictional person (Alex) for trying the memory feature without any real data. Load with: python julius_memstore.py init --sample",
+ "memories": [
+  {
+   "text": "Alex lives in Springfield.",
+   "kind": "fact",
+   "source": "said"
+  },
+  {
+   "text": "Alex's sister is called Sam.",
+   "kind": "person",
+   "source": "said"
+  },
+  {
+   "text": "Alex prefers window seats.",
+   "kind": "preference",
+   "source": "said"
+  },
+  {
+   "text": "Alex is allergic to shellfish.",
+   "kind": "fact",
+   "source": "auto"
+  },
+  {
+   "text": "Alex's dog is a beagle named Biscuit.",
+   "kind": "person",
+   "source": "said"
+  },
+  {
+   "text": "Alex drinks tea, not coffee.",
+   "kind": "preference",
+   "source": "auto"
+  }
+ ]
+}

@@ -220,7 +220,7 @@ class CandidateUtilityIntegrationTests(unittest.TestCase):
         from julius_cancellation import Cancellation,TurnCancelled
         from julius_listening import incomplete_fragment
         from julius_conversation import authority_discussion_reply
-        ns.update(cancellation=Cancellation(),TurnCancelled=TurnCancelled,incomplete_fragment=incomplete_fragment,authority_discussion_reply=authority_discussion_reply)
+        ns.update(handle_memory=Mock(return_value=None),memory_autocapture=Mock(),cancellation=Cancellation(),TurnCancelled=TurnCancelled,incomplete_fragment=incomplete_fragment,authority_discussion_reply=authority_discussion_reply)
         ns['eyes'].snapshot.return_value={};ns['eyes'].describe.return_value=''
         source=ast.parse(Path('julius_candidate.py').read_text())
         exec(compile(ast.Module(body=[n for n in source.body if isinstance(n,ast.FunctionDef) and n.name in {'handle_files','process','_process'}],type_ignores=[]),'<candidate>','exec'),ns)
