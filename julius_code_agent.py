@@ -12,7 +12,7 @@ Layers, outermost first (any one of them stops the dangerous cases on its own):
   4. a scrubbed environment: no keys except the one API key the CLI needs, HOME and TMPDIR inside the task folder
   5. `claude --bare` with an allow-list of tools and a deny-list that includes git push, remotes, curl, ssh, rm and package installs
 """
-import fnmatch, hashlib, json, os, re, shutil, subprocess, time, uuid
+import fnmatch, hashlib, json, os, re, shutil, signal, subprocess, threading, time, uuid
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 
@@ -56,6 +56,8 @@ class Task:
     summary: str = ""
     baseline: dict = field(default_factory=dict)   # relative path -> sha256 of the copy at the start
     merged: dict = field(default_factory=dict)
+    changes: str = ""      # one-line summary of what the work folder now differs by
+    stop_reason: str = ""
 
     @property
     def dir(self): return CODE_HOME / self.id
@@ -282,3 +284,113 @@ def all_tasks():
         try: out.append(Task(**json.loads(p.read_text())))
         except (ValueError, TypeError): continue
     return out
+
+
+# ---- running a task: one at a time, capped in dollars and minutes ----
+_RUNNING = {}
+_LOCK = threading.Lock()
+
+
+class Run:
+    def __init__(self, task):
+        self.task, self.proc, self.thread = task, None, None
+        self.cancelled = self.timed_out = self.over_budget = False
+        self.done = threading.Event()
+
+    def wait(self, timeout=None): return self.done.wait(timeout)
+
+
+def running():
+    with _LOCK: return [r for r in _RUNNING.values() if not r.done.is_set()]
+
+
+def _kill(run):
+    proc = run.proc
+    if proc is None or proc.poll() is not None: return
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        try: os.killpg(proc.pid, sig)
+        except (ProcessLookupError, PermissionError): return
+        try: proc.wait(timeout=3); return
+        except subprocess.TimeoutExpired: continue
+
+
+def cancel(task_id=None):
+    """Stop the running task (the stop hotkey and 'cancel the coding task' end up here). Returns True if one was running."""
+    live = [r for r in running() if task_id in (None, r.task.id)]
+    for r in live: r.cancelled = True; _kill(r)
+    return bool(live)
+
+
+def spent_today(tracker): return tracker.code_today() if tracker is not None else 0.0
+
+
+def start(task, *, api_key, tracker=None, config=None, claude=None, sandbox=True, on_done=None):
+    """Begin the task in the background. Raises CodeProblem when something else is running or the daily coding budget would be exceeded."""
+    cfg = {**DEFAULT_CONFIG, **(config or {})}
+    if not api_key: raise CodeProblem("no_key", "The coding agent needs the Anthropic API key, which isn't set.")
+    if task.status != "staged": raise CodeProblem("not_staged", "That coding task has already been started.")
+    with _LOCK:
+        if any(not r.done.is_set() for r in _RUNNING.values()): raise CodeProblem("busy", "A coding task is already running. Say cancel the coding task to stop it first.")
+        left = float(cfg["daily_cap_usd"]) - spent_today(tracker)
+        if left < task.cap_usd: raise CodeProblem("daily_cap", f"Today's coding budget has ${max(left, 0):.2f} left, which is less than this task's ${task.cap_usd:.2f} limit.")
+        run = Run(task); _RUNNING[task.id] = run
+        task.status = "running"; task.started = time.time(); save(task)
+    run.thread = threading.Thread(target=_execute, args=(run, api_key, tracker, cfg, claude or cfg["binary"], sandbox, on_done), daemon=True); run.thread.start()
+    return run
+
+
+def _execute(run, api_key, tracker, cfg, claude, sandbox, on_done):
+    task, result, cost, rc = run.task, {}, 0.0, None
+    try:
+        count, _ = prepare(task) if not task.baseline else (0, [])
+        argv, env, cwd = build_command(task, api_key, claude=claude, config=cfg, sandbox=sandbox)
+        with open(task.dir / "claude.err", "wb") as err, open(task.dir / "transcript.jsonl", "w") as transcript:
+            run.proc = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=err, text=True, start_new_session=True)
+            def watchdog():
+                if not run.done.wait(task.timeout_s) and run.proc.poll() is None: run.timed_out = True; _kill(run)
+            threading.Thread(target=watchdog, daemon=True).start()
+            for line in run.proc.stdout:
+                transcript.write(line); transcript.flush()
+                try: event = json.loads(line)
+                except ValueError: continue
+                if not isinstance(event, dict): continue
+                seen = event.get("total_cost_usd", event.get("cost_usd"))
+                if isinstance(seen, (int, float)):
+                    cost = max(cost, float(seen))
+                    if cost > task.cap_usd * 1.25 and not run.over_budget: run.over_budget = True; _kill(run)   # the CLI's own limit failed to stop it
+                if event.get("type") == "result": result = event
+            rc = run.proc.wait()
+    except Exception as exc:   # sandbox or launch problems must end the task cleanly, not leave it "running"
+        result = {"is_error": True, "result": f"The coding task could not start: {type(exc).__name__}: {exc}"}
+    finally:
+        _finish(run, result, cost, rc, tracker)
+        run.done.set()
+        if on_done is not None:
+            try: on_done(task)
+            except Exception: pass
+
+
+def _finish(run, result, cost, rc, tracker):
+    task = run.task
+    task.cost_usd = round(max(cost, float(result.get("total_cost_usd") or 0)), 4); task.finished = time.time()
+    subtype = str(result.get("subtype", "")); text = " ".join(str(result.get("result") or "").split())
+    if run.cancelled: task.status, task.stop_reason = "cancelled", "cancelled"
+    elif run.timed_out: task.status, task.stop_reason = "timeout", f"stopped after {task.timeout_s // 60} minutes"
+    elif run.over_budget or "budget" in subtype or task.cost_usd >= task.cap_usd * 0.98: task.status, task.stop_reason = "capped", f"reached its ${task.cap_usd:.2f} limit"
+    elif result.get("is_error") or rc not in (0, None) or not result: task.status, task.stop_reason = "failed", text[:160] or f"the agent exited with code {rc}"
+    else: task.status = "done"
+    task.summary = text[:300]
+    try: task.changes = summarize(task) if task.work.is_dir() else ""
+    except Exception: task.changes = ""
+    if tracker is not None and task.cost_usd: tracker.record_usd("code", task.cost_usd, note=f"code {task.id}")
+    save(task)
+
+
+def spoken_result(task):
+    """What Julius says when a task ends."""
+    cost = f"${task.cost_usd:.2f}"
+    if task.status == "done": return f"The coding task finished for {cost}. {task.changes}. Say show the changes, merge it, or discard it."
+    if task.status == "capped": return f"The coding task stopped because it {task.stop_reason}, after {cost}. {task.changes or 'Nothing changed.'}. Say show the changes or discard it."
+    if task.status == "timeout": return f"The coding task {task.stop_reason} and cost {cost}. {task.changes or 'Nothing changed.'}"
+    if task.status == "cancelled": return f"The coding task was cancelled after {cost}."
+    return f"The coding task failed after {cost}. {task.stop_reason or 'No details.'}"

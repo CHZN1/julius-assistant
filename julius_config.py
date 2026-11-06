@@ -16,6 +16,7 @@ DEFAULTS = {
     "voice": {"keep_loaded": True},
     "memory": {"announce_auto": True},
     "service": {"wake_hotkey": "<ctrl>+<alt>+j", "log_transcripts": False},
+    "code": {"model": "claude-opus-5-5", "default_cap_usd": 1.5, "max_cap_usd": 5.0, "timeout_minutes": 20, "daily_cap_usd": 5.0, "projects_root": "~/dev", "binary": "claude"},
     "files": {"folders": {"Documents": "write", "Desktop": "write", "Downloads": "write"}},
     "barge_in": {"hotkey": "<ctrl>+<alt>+s", "voice": False},
     "wake": {"engine": "whisper", "threshold_low": 0.05, "level_floor": 0.0015, "speaker_threshold": 0.25, "verifier": "~/.julius/wake_verifier.pkl"},
@@ -61,6 +62,11 @@ def load_config(path=None):
         raise ValueError("spend.daily_cap_usd must be positive")
     if not config["spend"]["offline_at_multiple"] > 1:
         raise ValueError("spend.offline_at_multiple must be greater than 1")
+    code = config["code"]
+    if not (0 < code["default_cap_usd"] <= code["max_cap_usd"]):
+        raise ValueError("code.default_cap_usd must be positive and not above code.max_cap_usd")
+    if not (code["timeout_minutes"] > 0 and code["daily_cap_usd"] > 0):
+        raise ValueError("code.timeout_minutes and code.daily_cap_usd must be positive")
     return config
 
 

@@ -31,6 +31,9 @@ def cost_of(tier, usage):
     return (fresh * card["in"] + write * card["write"] + read * card["read"] + out * card["out"]) / 1_000_000
 
 
+SEPARATE_TIERS = {"code"}   # coding-agent spend has its own daily budget and never counts toward the voice cap
+
+
 class CostTracker:
     def __init__(self, path, cap_usd, clock=time.time, offline_multiple=2.0):
         self.path, self.cap_usd, self._clock = Path(path), float(cap_usd), clock
@@ -53,7 +56,7 @@ class CostTracker:
                 except ValueError:
                     continue
                 if row.get("date") == self._day:
-                    self._total += row["usd"]
+                    if row["tier"] not in SEPARATE_TIERS: self._total += row["usd"]
                     self._by_tier[row["tier"]] = self._by_tier.get(row["tier"], 0.0) + row["usd"]
 
     def _roll(self):
@@ -82,6 +85,24 @@ class CostTracker:
             self._by_tier[tier] = self._by_tier.get(tier, 0.0) + usd
             self._turn_costs[tier] = self._turn_costs.get(tier, 0.0) + usd
             return row
+
+    def record_usd(self, tier, usd, note=""):
+        """Log a cost already priced elsewhere (the coding agent reports its own dollars)."""
+        with self._lock:
+            self._roll()
+            row = {"ts": round(self._clock(), 3), "date": self._day, "turn": self.turn, "tier": tier, "model": note, "input": 0, "output": 0,
+                   "cache_write": 0, "cache_read": 0, "usd": round(float(usd), 8), "note": note}
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with self.path.open("a") as handle:
+                handle.write(json.dumps(row) + "\n")
+            if tier not in SEPARATE_TIERS: self._total += float(usd)
+            self._by_tier[tier] = self._by_tier.get(tier, 0.0) + float(usd)
+            return row
+
+    def code_today(self):
+        with self._lock:
+            self._roll()
+            return sum(v for k, v in self._by_tier.items() if k in SEPARATE_TIERS)
 
     def today_total(self):
         with self._lock:

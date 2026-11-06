@@ -44,6 +44,16 @@ verifier = "~/.julius/wake_verifier.pkl"   # personal layer trained on your voic
 vocabulary_hint = true      # Whisper initial_prompt of names/teams: WER 8.0% -> 3.8% on the 20 recorded phrases (AcmeCorp, Example, FER 2013 recognised), +0.03 s; on 10 held-out phrases 7.1% -> 8.3% (one apostrophe, no hallucinated hint words), judged noise. Set false to disable
 # vocabulary, nhl_teams and nfl_teams (lists) can be overridden here; defaults live in julius_config.py
 
+[code]
+# The Opus coding agent (claude -p in a sandbox). It works on a COPY of a project under projects_root and never pushes; merging back is a separate voice yes.
+model = "claude-opus-5-5"
+default_cap_usd = 1.50     # per-task spend limit unless you ask for more
+max_cap_usd = 5.00         # hard maximum for any single task
+timeout_minutes = 20       # a task is stopped after this long
+daily_cap_usd = 5.00       # all coding tasks together per day; separate from [spend]
+projects_root = "~/dev"    # only folders directly inside this one can be worked on
+binary = "claude"
+
 [files.folders]
 # What the file agent may do in each folder: "write" (find, read, move, copy, rename, create, trash), "read" (find, list, read only) or "none" (invisible).
 # Add a folder by editing this file (absolute path or ~/path); it can never be added by voice or by the model. Restart Julius after editing.
