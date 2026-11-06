@@ -258,7 +258,7 @@ def take_list():
 
 def annotate_onset(res):
     """Energy annotation of when the user starts: the first run of 3 frames after 3 s that rises well above this take's own residual level (an annotation, not human-labelled)."""
-    e = env(res); base = e[50:150]; thr = max(6 * float(np.percentile(base, 95)), 0.004); j = first_active(e, thr, 150); return j
+    e = np.convolve(env(res), np.ones(3) / 3, mode="same"); base = e[50:120]; thr = max(5 * float(np.median(base)), 0.0012, 1.5 * float(np.percentile(base, 95))); return first_active(e, thr, 120)
 
 def stage1_fires(clean, onset_f, thr_list=(0.05, 0.2, 0.5)):
     """Highest stage-1 'Julius' score in the 2 s after the duck and the time it is first above each threshold (the detector alone, no Whisper)."""
@@ -268,7 +268,7 @@ def stage1_fires(clean, onset_f, thr_list=(0.05, 0.2, 0.5)):
     for i in range(0, len(x) - 1279, 1280):
         sc = float(st.model.predict(x[i:i + 1280])[st.name]); best = max(best, sc)
         for t in thr_list:
-            if first[str(t)] is None and sc >= t: first[t] = round((i + 1280 - t0) / SR * 1000)
+            if first[str(t)] is None and sc >= t: first[str(t)] = round((i + 1280 - t0) / SR * 1000)
     return best, first
 
 def real():
