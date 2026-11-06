@@ -5,6 +5,11 @@ from julius_file_agent import result, FileProblem
 class FileSession:
     def __init__(self, agent):
         self.agent=agent;self.pending=None;self.last=None;self.last_result=None
+        import julius_router
+        standard={agent.root/n for n in ('Documents','Desktop','Downloads')}
+        julius_router.EXTRA_FOLDERS.clear()
+        for folder,mode in agent.modes.items():  # a folder added in [files.folders] can be named by voice ("in sandbox")
+            if mode!='none' and folder not in standard and folder.is_dir():julius_router.EXTRA_FOLDERS[julius_router._key(folder.name)]=str(folder)
 
     def handle(self,text,turn):
         import re

@@ -160,6 +160,15 @@ class PermissionTests(Base):
         extra = self.root / 'Projects'; extra.mkdir(); (extra / 'n.txt').write_text('n')
         self.assertEqual(self.agent.list(str(extra))['code'], 'outside_scope')
         a = self.agent_with(Documents='write', **{str(extra): 'read'}); self.assertTrue(a.list(str(extra))['ok']); self.assertEqual(a.propose('trash', paths=[str(extra / 'n.txt')], turn=1)['code'], 'read_only')
+    def test_a_configured_extra_folder_can_be_named_by_voice(self):
+        from julius_file_session import FileSession
+        import julius_router
+        extra = self.root / 'Lab'; extra.mkdir(); (extra / 'old.txt').write_text('o')
+        a = self.agent_with(Documents='write', **{str(extra): 'write'}); session = FileSession(a)
+        try:
+            out = session.handle('trash old.txt in lab', 1)
+            self.assertTrue(out['ok'] and out['code'] == 'preview', out); self.assertEqual(Path(out['data']['plan']['ops'][0]['from']), (extra / 'old.txt').resolve())
+        finally: julius_router.EXTRA_FOLDERS.clear()
     def test_most_specific_folder_wins(self):
         sub = self.docs / 'Locked'; sub.mkdir(); (sub / 'k.txt').write_text('k'); self.file('f.txt', folder=self.docs)
         a = self.agent_with(Documents='write', **{'Documents/Locked': 'read'})
@@ -173,6 +182,6 @@ class PermissionTests(Base):
         self.assertFalse(u['ok']); self.assertFalse(p.exists()); self.assertEqual(len(list(ro.trash_dir.rglob('*__a.txt'))), 1)
     def test_shipped_config_table_matches_the_defaults(self):
         import julius_config
-        self.assertEqual(julius_config.load_config()['files']['folders'], {'Documents': 'write', 'Desktop': 'write', 'Downloads': 'write'})
+        self.assertEqual(julius_config.load_config()['files']['folders'], {'Documents': 'write', 'Desktop': 'write', 'Downloads': 'write', '~/dev/sandbox': 'write'})
 
 if __name__ == '__main__': unittest.main()

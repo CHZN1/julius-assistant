@@ -101,10 +101,22 @@ class SpeechPlayer:
                     seconds_written += len(audio) / sample_rate
                 for index, (audio, sample_rate) in enumerate(held):
                     put(audio, sample_rate, index)
-                for audio, sample_rate in it:
+                ahead, lead, exhausted = [], 0, False   # lead: chunks to keep queued ahead once a sentence has underflowed
+                while True:
                     if cancel_check is not None:
                         cancel_check()
+                    while not exhausted and len(ahead) < 1 + lead:
+                        try:
+                            ahead.append(next(it))
+                        except StopIteration:
+                            exhausted = True
+                    if not ahead:
+                        break
+                    before = sentence_underflows
+                    audio, sample_rate = ahead.pop(0)
                     put(audio, sample_rate, written)
+                    if sentence_underflows > before:  # the voice is falling behind: fewer, longer gaps beat a stutter on every chunk
+                        lead = min(self.max_prefill, lead + 1)
                 stream.write(np.zeros((int(self.tail_seconds * rate), 1), dtype=np.float32))  # clean end: the stream stays open on silence
                 seconds_written += self.tail_seconds
                 # write() returns once audio is queued, not once it has been heard. Wait for the queue to play out so the microphone

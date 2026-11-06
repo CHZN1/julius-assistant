@@ -48,6 +48,13 @@ class PlayerTests(unittest.TestCase):
         sd=FakeSD(underflow_at={3});p=player(sd);stats=p.play(chunks(6))
         self.assertEqual(stats['underflows'],1);events=p.pop_events();self.assertEqual(events[0]['chunk'],3);self.assertEqual(p.pop_events(),[])
         self.assertTrue(any('audio underflow at chunk 3' in m for m in p.logged));self.assertEqual(p.total_underflows,1);p.close()
+    def test_after_an_underflow_the_player_keeps_chunks_queued_ahead_and_still_plays_everything(self):
+        pulled=[];sd=FakeSD(underflow_at={3});sd.pending_chunks=pulled;p=player(sd);stats=p.play(chunks(10,pulled=pulled))
+        self.assertEqual(stats['chunks'],10)
+        counts=[e[2] for e in sd.log if isinstance(e,tuple) and e[1]==7680]   # chunks pulled from the voice when each write happened
+        lead=[c-(i+1) for i,c in enumerate(counts)]
+        self.assertEqual(lead[2:4],[0,0]);self.assertGreaterEqual(min(lead[5:9]),1);p.close()
+
     def test_play_returns_only_after_the_queued_audio_has_been_heard(self):
         # 3 chunks of 0.32 s written instantly: the microphone gate must not reopen until about 0.96 s + tail have played
         sd=FakeSD();now=[100.0];slept=[]

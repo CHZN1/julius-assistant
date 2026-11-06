@@ -45,9 +45,12 @@ def _clean_folder(phrase):
     text=re.sub(r'\s+(?:folder|directory)$','',text,flags=re.I)
     return text.strip().strip('"').strip("'")
 
+EXTRA_FOLDERS={}  # name -> absolute path of folders added in [files.folders] outside Documents/Desktop/Downloads; set by FileSession
+
 def match_dir(phrase,root,cutoff=.80):
     if not phrase:return None
     phrase=_clean_folder(phrase);root=Path(root);key=_key(phrase)
+    if key in EXTRA_FOLDERS:return EXTRA_FOLDERS[key]
     if key in {'documents','document','here','thisfolder','currentfolder','root'}:return 'Documents'
     if key in {'downloads','desktop'}:return 'Downloads' if key=='downloads' else 'Desktop'
     path=Path(phrase).expanduser()

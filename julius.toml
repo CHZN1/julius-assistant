@@ -50,3 +50,4 @@ vocabulary_hint = true      # Whisper initial_prompt of names/teams: WER 8.0% ->
 Documents = "write"
 Desktop = "write"
 Downloads = "write"
+"~/dev/sandbox" = "write"   # generated test folder for trying the file agent and the coding agent
