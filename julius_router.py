@@ -111,6 +111,38 @@ def parse(text,root):
             elif not re.search(r'\b(all|everything)\b',selection,re.I):return {'clarification':'Which files should I select? Name a file, file type, or say all files.'}
     return {'action':'copy' if re.search(r'\bcopy\b',selection,re.I) else 'move','pattern':pattern,'source':source,'destination':destination,'recursive':bool(re.search(r'\b(recursively|subfolders|subdirectories)\b',text,re.I))}
 
+EMPTY_TRASH=re.compile(r'^\s*(?:please\s+)?(?:empty|clear|clean out|permanently delete)(?: out)?\s+(?:the |my |everything in the )?(?:trash|bin|trash can|recycle bin)\s*[.!]?\s*$',re.I)
+TRASH_INFO=re.compile(r'^\s*(?:how (?:big|full|large) is|how much is in|what(?:\'s| is) in|show(?: me)?|check)\s+(?:the |my )?(?:trash|bin|trash can)\s*[.?!]?\s*$',re.I)
+FILE_HISTORY=re.compile(r'^\s*(?:what (?:files )?(?:did|have) you (?:change|changed|move|moved|trash|trashed|do)(?: with my files)?(?: today| recently| lately| so far)?|(?:show|list)(?: me)?(?: the)? (?:file )?(?:history|changes|recent file changes))\s*[.?!]?\s*$',re.I)
+TRASH_VERB=re.compile(r'^(?:trash|bin|delete|remove|throw away|get rid of)\s+(.+)$',re.I)
+MOVE_TO_TRASH=re.compile(r'^(?:move|put|send)\s+(.+?)\s+(?:to|in|into)\s+(?:the |my )?(?:trash|bin|trash can)$',re.I)
+
+def parse_trash(text,root):
+    """'trash notes.txt in Downloads', 'move the pdfs in Downloads to the trash': a named file, a quoted name or a file type; never 'everything'."""
+    body=re.sub(r'^(?:(?:please|can you|could you|would you)\s+)+','',text.strip(),flags=re.I).rstrip('.!')
+    m=MOVE_TO_TRASH.fullmatch(body) or TRASH_VERB.fullmatch(body)
+    if not m:return None
+    selection=m.group(1).strip()
+    if re.fullmatch(r'(?:the )?(?:memory|memories|note|notes|that|this|it|that memory|my memory)',selection,re.I):return None
+    folder=None
+    located=re.fullmatch(r'(.+?)\s+(?:in|inside|from|on)\s+(?:my |the )?(.+?)(?:\s+(?:folder|directory))?',selection,re.I)
+    if located:selection,folder=located.group(1).strip(),located.group(2).strip()
+    source=match_dir(folder,root) if folder else 'Downloads'
+    if folder and not source:return {'clarification':'Please give the full folder name or path.'}
+    names=re.findall(r'"([^"]+)"|\'([^\']+)\'',selection);pattern=None
+    if names:
+        name=next(a or b for a,b in names);pattern=name if '.' in name or any(c in name for c in '*?[') else f'*{name}*'
+    else:
+        explicit=re.search(r'(?<![\w/\'])([\w.-]+\.[a-z0-9]{1,8})\b',selection,re.I)
+        if explicit:pattern=explicit.group(1)
+        else:
+            for word,patterns in EXT.items():
+                if re.search(rf'\b{word}\b',selection,re.I):pattern=patterns;break
+    if pattern is None:return {'clarification':'Please name the exact files, a file type like PDFs, or a quoted name. I will not guess what to throw away.'}
+    if re.search(r'\b(?:everything|all)\b',selection,re.I) and not re.search(r'\.[a-z0-9]{1,8}\b|\b(?:csvs?|pdfs?|notebooks?|images?|scripts?|docs?)\b',selection,re.I):
+        return {'clarification':'Please name the exact files, a file type like PDFs, or a quoted name. I will not guess what to throw away.'}
+    return {'source':source,'pattern':pattern}
+
 def _in_folder(phrase):
     """'notes.txt in Downloads' -> 'Downloads/notes.txt' so a folder named after the file reaches the right place."""
     located=re.fullmatch(r'(.+?)\s+(?:in|inside|from)\s+(?:my |the )?(downloads|desktop|documents)(?:\s+(?:folder|directory))?',phrase.strip(),re.I)
@@ -153,7 +185,12 @@ def route(text,root,pending=False,has_last=False):
     if pending and CANCEL.fullmatch(text):return ('cancel',None)
     if has_last and RESUME.fullmatch(text):return ('resume',None)
     if pending and APPROVE.fullmatch(text):return ('approve',None)
+    if EMPTY_TRASH.fullmatch(text):return ('empty_trash',None)
+    if TRASH_INFO.fullmatch(text):return ('trash_info',None)
+    if FILE_HISTORY.fullmatch(text):return ('history',None)
     if PLANNING_RE.search(text):return None  # organize/sort/clean-up need a plan; the Sonnet planner takes them
+    trash=parse_trash(text,root)
+    if trash:return ('clarify',trash) if 'clarification' in trash else ('trash',trash)
     simple=parse_simple_request(text,root)
     if simple:return simple
     args=parse(text,root)

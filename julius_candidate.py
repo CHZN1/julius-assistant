@@ -626,6 +626,10 @@ def transcribe_input(audio, wake=False):
 
 
 _file_session = FileSession(jf.agent())
+try:
+    _trash_note = jf.agent().trash_notice()
+    if _trash_note: print(f'  [trash:{_trash_note}]', flush=True)
+except Exception: pass
 if cloud_brain is not None:
     import julius_orchestrator
     julius_orchestrator.configure(file_session=_file_session, turn=lambda: TURN["n"])

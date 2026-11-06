@@ -45,6 +45,20 @@ class FileSession:
             out=self.agent.propose(kind,source=args['source'],destination=args['destination'],pattern=args['pattern'],recursive=args.get('recursive',False),turn=turn)
             self.pending=out['data']['plan']['id'] if out['ok'] else None
             if self.pending:self.last=self.pending
+        elif kind=='trash':
+            if self.pending:self.agent.cancel(self.pending)
+            out=self.agent.propose('trash',source=args['source'],pattern=args['pattern'],origin='human',turn=turn)
+            self.pending=out['data']['plan']['id'] if out['ok'] else None
+            if self.pending:self.last=self.pending
+        elif kind=='empty_trash':
+            if self.pending:self.agent.cancel(self.pending)
+            out=self.agent.propose_empty_trash(turn=turn)
+            self.pending=out['data']['plan']['id'] if out['ok'] else None
+            if self.pending:self.last=self.pending
+        elif kind=='trash_info':
+            self.pending=None;out=self.agent.trash_info()
+        elif kind=='history':
+            self.pending=None;out=self.agent.history()
         elif kind=='approve':
             out=self.agent.execute(self.pending,confirmed=True,turn=turn);self.pending=None
         elif kind=='cancel':

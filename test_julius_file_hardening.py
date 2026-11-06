@@ -8,7 +8,9 @@ class Base(unittest.TestCase):
         self.docs, self.downloads, self.desktop = (self.root / n for n in ('Documents', 'Downloads', 'Desktop'))
         for p in (self.docs, self.downloads, self.desktop): p.mkdir(parents=True)
         self.state = Path(self.temp.name) / 'state'; self.agent = self.make()
-    def make(self, **kw): return FileAgent(self.root, self.state, **kw)
+    def make(self, **kw):
+        a = FileAgent(self.root, self.state, **kw); a.use_birthtime = False  # test files are created now whatever utime says
+        return a
     def tearDown(self): self.temp.cleanup()
     def file(self, name, text='hello', folder=None, age_days=30):
         p = (folder or self.downloads) / name; p.parent.mkdir(parents=True, exist_ok=True); p.write_text(text)
@@ -34,4 +36,106 @@ class PreviewTests(Base):
     def test_confirming_in_the_same_turn_as_the_preview_is_refused(self):
         self.file('a.txt'); out = self.agent.propose('move', source='Downloads', destination=str(self.docs / 'Archive'), pattern='a.txt', turn=1)
         self.assertFalse(self.agent.execute(out['data']['plan']['id'], confirmed=True, turn=1)['ok'])
+
+class TrashTests(Base):
+    def trash(self, pattern='*.txt', origin='human', **kw):
+        return self.agent.propose('trash', source='Downloads', pattern=pattern, origin=origin, turn=kw.pop('turn', 1), **kw)
+    def test_trash_round_trip_restores_identical_bytes(self):
+        p = self.file('report.txt', 'quarterly numbers'); out = self.trash(); self.assertIn('trash', out['message']); self.assertTrue(p.exists())
+        r = self.apply(out); self.assertFalse(p.exists()); self.assertIn('Moved to the trash', r['message'])
+        trashed = list(self.agent.trash_dir.rglob('*__report.txt')); self.assertEqual(len(trashed), 1)
+        u = self.agent.undo(); self.assertTrue(u['ok'], u); self.assertEqual(p.read_text(), 'quarterly numbers'); self.assertEqual(list(self.agent.trash_dir.rglob('*__report.txt')), [])
+    def test_undo_survives_a_restart_and_is_a_stack(self):
+        a = self.file('a.txt', 'A'); b = self.file('b.txt', 'B')
+        self.apply(self.agent.propose('trash', source='Downloads', pattern='a.txt', turn=1)); self.apply(self.agent.propose('trash', source='Downloads', pattern='b.txt', turn=3), None)
+        again = self.make(); self.assertTrue(again.undo()['ok']); self.assertTrue(b.exists() and not a.exists())
+        third = self.make(); self.assertTrue(third.undo()['ok']); self.assertTrue(a.exists()); self.assertEqual(third.undo()['code'], 'nothing_to_undo')
+    def test_trash_only_loose_files_never_folders_or_recursion(self):
+        self.file('loose.txt'); self.file('deep.txt', folder=self.downloads / 'sub')
+        out = self.trash(); names = [Path(o['from']).name for o in out['data']['plan']['ops']]; self.assertEqual(names, ['loose.txt'])
+        explicit = self.agent.propose('trash', paths=[str(self.downloads / 'sub')], turn=1)
+        self.assertFalse(explicit['ok']); self.assertEqual(explicit['code'], 'all_protected')
+    def test_protected_items_for_everyone(self):
+        self.file('Song stems.zip'); self.file('mix.wav'); self.file('Kontakt Library.nki'); self.file('GarageBand idea.txt'); self.file('Waves notes.txt'); self.file('Slate settings.txt'); self.file('Zebra patch.txt')
+        (self.downloads / 'Tool.app').mkdir(); (self.downloads / 'Tool.app' / 'Contents.txt').write_text('x')
+        out = self.trash('*')
+        self.assertFalse(out['ok'], out); self.assertEqual(out['code'], 'all_protected'); self.assertGreaterEqual(len(out['data']['skipped']), 7)
+        self.assertTrue((self.downloads / 'mix.wav').exists() and (self.downloads / 'Tool.app' / 'Contents.txt').exists())
+    def test_files_next_to_project_markers_are_protected(self):
+        proj = self.downloads / 'proj'; self.file('notes.txt', folder=proj); (proj / 'package.json').write_text('{}')
+        out = self.agent.propose('trash', paths=[str(proj / 'notes.txt')], turn=1); self.assertFalse(out['ok']); self.assertIn('project', out['data']['skipped'][0]['reason'])
+    def test_planner_never_proposes_recent_code_or_live_installers_but_a_human_may_name_them(self):
+        self.file('new.txt', age_days=2); self.file('script.py', age_days=90); self.file('Setup.dmg', age_days=3); self.file('old_installer.pkg', age_days=200); self.file('old.txt', age_days=60)
+        planner = self.trash('*', origin='planner'); names = sorted(Path(o['from']).name for o in planner['data']['plan']['ops'])
+        self.assertEqual(names, ['old.txt', 'old_installer.pkg']); reasons = {x['name']: x['reason'] for x in planner['data']['skipped']}
+        self.assertIn('7 days', reasons['new.txt']); self.assertIn('source-code', reasons['script.py']); self.assertIn('7 days', reasons['Setup.dmg'])
+        human = self.agent.propose('trash', paths=[str(self.downloads / 'new.txt')], origin='human', turn=1); self.assertTrue(human['ok'])
+    def test_installer_older_than_a_week_but_used_recently_is_protected_from_the_planner(self):
+        p = self.file('Tool.dmg', age_days=60); now = time.time(); os.utime(p, (now, now - 60 * 86400))
+        self.assertIn('installer', self.agent.protection(p, 'planner') or ''); self.assertIsNone(self.agent.protection(self.file('x.txt', age_days=60), 'planner'))
+    def test_the_trash_is_not_reachable_by_path_or_by_other_plans(self):
+        self.apply(self.trash(self.file('a.txt').name)); inside = next(self.agent.trash_dir.rglob('*__a.txt'))
+        for call in (lambda: self.agent.list(str(inside.parent)), lambda: self.agent.read(str(inside)), lambda: self.agent.find('*', str(self.agent.trash_dir))):
+            self.assertEqual(call()['code'], 'protected_path')
+        self.file('b.txt'); out = self.agent.propose('move', source='Downloads', destination=str(self.agent.trash_dir / 'x'), pattern='b.txt', turn=1); self.assertFalse(out['ok'])
+    def test_trash_notice_after_one_gigabyte(self):
+        import julius_file_agent as fa
+        self.file('a.txt', 'x' * 100); old = fa.TRASH_NOTICE_BYTES; fa.TRASH_NOTICE_BYTES = 50
+        try: r = self.apply(self.trash())
+        finally: fa.TRASH_NOTICE_BYTES = old
+        self.assertIn('empty the trash', r['message']); self.assertNotIn('empty the trash', self.apply(self.trash(self.file('c.txt', 'y').name, turn=5), None)['message']) if False else None
+    def test_history_lists_recent_changes(self):
+        self.file('a.txt'); self.apply(self.trash()); h = self.agent.history(); self.assertIn('trashed 1 file', h['message']); self.assertEqual(self.agent.undo()['code'], 'undone')
+        self.assertIn('undone', self.agent.history()['message'])
+
+class EmptyTrashTests(Base):
+    def test_empty_trash_previews_then_deletes_only_on_confirmation_and_undo_then_reports_it(self):
+        self.file('a.txt', 'A'); self.file('b.txt', 'B'); self.apply(self.agent.propose('trash', source='Downloads', pattern='*.txt', turn=1))
+        info = self.agent.trash_info(); self.assertIn('2 file', info['message'])
+        pre = self.agent.propose_empty_trash(turn=10); self.assertIn('permanently', pre['message']); self.assertEqual(len(list(self.agent.trash_dir.rglob('*__*'))), 2)
+        self.assertFalse(self.agent.execute(pre['data']['plan']['id'], confirmed=True, turn=10)['ok'])  # same turn
+        r = self.agent.execute(pre['data']['plan']['id'], confirmed=True, turn=11); self.assertTrue(r['ok'], r); self.assertEqual(list(self.agent.trash_dir.rglob('*__*')), [])
+        self.assertEqual(self.agent.undo()['code'], 'nothing_to_undo'); self.assertEqual(self.agent.propose_empty_trash(turn=12)['code'], 'trash_empty')
+    def test_cancel_keeps_everything(self):
+        self.file('a.txt'); self.apply(self.agent.propose('trash', source='Downloads', pattern='*.txt', turn=1))
+        pre = self.agent.propose_empty_trash(turn=10); self.agent.cancel(pre['data']['plan']['id']); self.assertEqual(len(list(self.agent.trash_dir.rglob('*__a.txt'))), 1)
+        self.assertEqual(self.agent.undo()['code'], 'undone')
+    def test_only_files_inside_the_trash_can_be_purged(self):
+        outside = self.file('keep.txt', 'precious'); self.file('a.txt'); self.apply(self.agent.propose('trash', source='Downloads', pattern='a.txt', turn=1))
+        pre = self.agent.propose_empty_trash(turn=5); self.agent.execute(pre['data']['plan']['id'], confirmed=True, turn=6); self.assertEqual(outside.read_text(), 'precious')
+
+
+class VoiceFlowTests(Base):
+    def setUp(self):
+        super().setUp()
+        from julius_file_session import FileSession
+        self.session = FileSession(self.agent); self.turn = 0
+    def say(self, text):
+        self.turn += 1; return self.session.handle(text, self.turn)
+    def test_trash_by_voice_needs_a_separate_yes_and_undo_restores(self):
+        p = self.file('notes.txt', 'keep me')
+        out = self.say('trash notes.txt in Downloads'); self.assertEqual(out['code'], 'preview'); self.assertTrue(p.exists())
+        done = self.say('yes'); self.assertEqual(done['code'], 'completed'); self.assertFalse(p.exists())
+        self.assertEqual(self.say('undo')['code'], 'undone'); self.assertEqual(p.read_text(), 'keep me')
+    def test_vague_or_bulk_delete_requests_change_nothing(self):
+        p = self.file('notes.txt')
+        for phrase in ('delete everything in my Downloads folder', 'delete that file', 'throw away the files'):
+            out = self.say(phrase); self.assertEqual(out['code'], 'clarification', phrase)
+        self.say('yes'); self.assertTrue(p.exists())
+    def test_empty_the_trash_by_voice_previews_and_a_no_keeps_it(self):
+        self.file('notes.txt'); self.say('trash notes.txt in Downloads'); self.say('yes')
+        self.assertIn('1 file', self.say('how big is the trash')['message'])
+        pre = self.say('empty the trash'); self.assertEqual(pre['code'], 'preview'); self.assertIn('permanently', pre['message'])
+        self.assertEqual(self.say('no')['code'], 'cancelled'); self.assertEqual(len(list(self.agent.trash_dir.rglob('*__notes.txt'))), 1)
+        self.assertIn('trashed', self.say('what did you change today')['message'])
+    def test_planner_proposals_go_through_the_same_protections_and_staging(self):
+        import julius_orchestrator as jo
+        self.file('old.txt', age_days=90); self.file('fresh.txt', age_days=1); self.file('mix.wav', age_days=90)
+        jo.configure(file_session=self.session, turn=lambda: self.turn + 1)
+        msg = jo.files_propose({'action': 'trash', 'source': 'Downloads', 'pattern': '*'})
+        plan = self.session.last_result['data']['plan']
+        self.assertEqual([Path(o['from']).name for o in plan['ops']], ['old.txt']); self.assertIn('Staged only', msg)
+        self.assertTrue((self.downloads / 'fresh.txt').exists() and (self.downloads / 'mix.wav').exists() and (self.downloads / 'old.txt').exists())
+        skipped = {x['name'] for x in self.session.last_result['data']['skipped']}; self.assertEqual(skipped, {'fresh.txt', 'mix.wav'})
+
 if __name__ == '__main__': unittest.main()

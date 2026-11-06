@@ -28,6 +28,10 @@ Work like this:
   incomplete, delegate once more with a sharper task, otherwise answer.
 - File changes: you can only propose them with files_propose. Nothing is applied until the user says yes, so never say a file was
   moved, copied, renamed or created; say what you proposed and ask the user to say yes or cancel.
+- Cleaning up: you may propose action trash (move loose files to the recoverable trash, never a permanent delete) with source and pattern, or
+  with paths. Only loose files; folders, apps, music and audio files, anything in a code project, recently changed files, source code and
+  installers in use are protected and are skipped automatically, so do not try to include them. Look first (list_files/find_files),
+  propose only what is clearly junk, and tell the user what you left alone.
 - Coding and running code are not available; say so briefly if asked.
 - Never invent results. If a tool failed or found nothing, say that plainly."""
 
@@ -44,7 +48,8 @@ DELEGATE_SCHEMA = {"name": "delegate", "description": "Run a sub-agent with its 
 
 FILES_PROPOSE_SCHEMA = {"name": "files_propose", "description": "Stage a file change for the user's confirmation. Nothing is applied until the user says yes.",
     "input_schema": {"type": "object", "properties": {
-        "action": {"type": "string", "enum": ["move", "copy", "rename", "create"]},
+        "action": {"type": "string", "enum": ["move", "copy", "rename", "create", "trash"]},
+        "paths": {"type": "array", "items": {"type": "string"}, "description": "Exact files to move to the trash (trash only)"},
         "source": {"type": "string", "description": "Source folder for move/copy"},
         "destination": {"type": "string", "description": "Destination folder (move/copy) or new name/path (rename)"},
         "pattern": {"type": "string", "description": "Glob such as *.csv for move/copy"},
@@ -89,6 +94,8 @@ def files_propose(args):
         if action in ("move", "copy"):
             out = agent.propose(action, source=args.get("source", "."), destination=args["destination"], pattern=args.get("pattern", "*"),
                                 recursive=bool(args.get("recursive", False)), turn=_STATE["turn"]())
+        elif action == "trash":
+            out = agent.propose("trash", source=args.get("source", "."), pattern=args.get("pattern", "*"), paths=args.get("paths"), origin="planner", turn=_STATE["turn"]())
         elif action == "rename":
             out = agent.propose("rename", path=args["path"], destination=args["destination"], turn=_STATE["turn"]())
         else:

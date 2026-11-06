@@ -3,7 +3,7 @@
 No model calls. Mutations require a confirmed, current-session preview.
 """
 from __future__ import annotations
-import contextlib, errno, fnmatch, hashlib, json, os, shutil, stat, tempfile, threading, time, uuid
+import contextlib, errno, fnmatch, hashlib, json, os, re, shutil, stat, tempfile, threading, time, uuid
 from pathlib import Path
 from functools import wraps
 import fcntl
@@ -11,6 +11,18 @@ import fcntl
 class FileProblem(Exception):
     def __init__(self, code, message, **data):
         super().__init__(message); self.code, self.data = code, data
+
+MOVELIKE = frozenset({'move', 'rename', 'trash'})   # operations that relocate one file and are undone by moving it back
+GB = 1024 ** 3
+TRASH_NOTICE_BYTES = 1 * GB
+MUSIC_EXT = frozenset('.logicx .band .wav .wave .aif .aiff .aifc .caf .mp3 .m4a .aac .flac .ogg .opus .wma .mid .midi .als .ptx .rpp .cpr .flp .nki .nkm .nkx .nkc .ncw .nmsv .exs .sf2 .sfz .fxp .fxb .vstpreset .component .vst .vst3 .aaxplugin .rex .rx2 .adg .adv .alc'.split())
+MUSIC_NAME = re.compile(r'(?<![a-z])(?:logic|garage[ _-]?band|waves|native[ _-]?instruments|kontakt|maschine|komplete|slate|zebra|stems?|ni)(?![a-z])', re.I)
+CODE_EXT = frozenset('.py .js .ts .tsx .jsx .swift .c .cc .cpp .h .hpp .m .mm .java .kt .go .rs .rb .php .sh .zsh .ipynb .sql .r .cs .lua .pl .scala .toml .yaml .yml .gradle .cmake .xcodeproj .xcworkspace'.split())
+PROJECT_MARKERS = frozenset(['.git', 'package.json', 'pyproject.toml', 'setup.py', 'requirements.txt', 'Cargo.toml', 'go.mod', 'Makefile', 'CMakeLists.txt', 'pom.xml', 'build.gradle', 'Package.swift', 'Gemfile'])
+INSTALLER_EXT = frozenset('.dmg .pkg .mpkg .iso .exe .msi .appimage .deb .rpm'.split())
+BUNDLE_EXT = ('.app', '.framework', '.bundle', '.kext', '.plugin', '.xpc', '.xcodeproj', '.xcworkspace', '.logicx', '.band')
+RECENT_SECONDS = 7 * 86400
+INSTALLER_SECONDS = 30 * 86400
 
 def human_size(n):
     for unit in ('bytes', 'KB', 'MB', 'GB'):
@@ -37,22 +49,24 @@ def response(method):
     return wrapped
 
 class FileAgent:
-    CAPABILITIES=('find','list','read','move','copy','rename','create','preview','cancel','undo')
+    CAPABILITIES=('find','list','read','move','copy','rename','create','trash','empty_trash','history','preview','cancel','undo')
     MAX_ENTRIES = 10000
     MAX_RESULTS = 200
     MAX_PLAN_FILES = 100
     MAX_PLAN_BYTES = 512 * 1024 * 1024
     PLAN_TTL = 15 * 60
-    def __init__(self, root=None, state_dir=None, allowed_roots=None):
+    def __init__(self, root=None, state_dir=None, allowed_roots=None, trash_dir=None):
         self.root = Path(root or Path.home()).resolve()
         self.allowed = tuple(Path(p).resolve() for p in ([self.root/'Documents', self.root/'Desktop', self.root/'Downloads'] if allowed_roots is None else allowed_roots))
         self.state_dir = Path(state_dir or Path(__file__).resolve().parent/'julius_memory').resolve()
+        self.use_birthtime = True
+        self.trash_dir = Path(trash_dir or self.root/'.julius'/'trash').resolve()
         self.state_path = self.state_dir/'file_agent_state.json'
         self.session = uuid.uuid4().hex
         self._mutex = threading.RLock()
         self.last_scan = {}
 
-    def resolve(self, value='.', *, new=False):
+    def resolve(self, value='.', *, new=False, internal=False):
         raw = str(value).strip().strip('"').strip("'")
         if not raw: raise FileProblem('missing_path', 'Please name the file or folder.')
         raw = os.path.expanduser(raw)
@@ -74,11 +88,13 @@ class FileAgent:
             if part.is_symlink(): raise FileProblem('symlink', 'Symbolic links are excluded from file operations. Please use the actual file path.')
             if part == self.root: break
         resolved = absolute.resolve()
-        if not any(absolute.is_relative_to(a) and resolved.is_relative_to(a) for a in self.allowed):
+        in_trash = absolute.is_relative_to(self.trash_dir) and resolved.is_relative_to(self.trash_dir)
+        if not in_trash and not any(absolute.is_relative_to(a) and resolved.is_relative_to(a) for a in self.allowed):
             raise FileProblem('outside_scope', 'That path is outside the folders Julius is allowed to use.', allowed=[str(a) for a in self.allowed])
         if resolved.is_relative_to(self.state_dir):
             raise FileProblem('protected_path', 'Julius file history is protected. Use the file-plan history interface to inspect it.')
         if not new and not resolved.exists(): raise FileProblem('not_found', f'I could not find {raw}.')
+        if in_trash and not internal: raise FileProblem('protected_path', 'The trash is managed with undo and the empty-the-trash command, not by path.')
         return resolved
 
     @contextlib.contextmanager
@@ -99,12 +115,12 @@ class FileAgent:
         if not isinstance(data.get('plans'),dict) or not isinstance(data.get('batches'),list):
             raise FileProblem('state_corrupt','The file history is incomplete. It was left unchanged for review.')
         for pid,plan in data['plans'].items():
-            if not isinstance(plan,dict) or plan.get('id')!=pid or not isinstance(plan.get('ops'),list) or not plan['ops'] or not isinstance(plan.get('created'),(int,float)) or not isinstance(plan.get('turn'),int) or not isinstance(plan.get('session'),str) or plan.get('action') not in {'move','copy','rename','create'} or plan.get('status') not in {'pending','cancelled','running','partial','completed','undo_partial','undone'}:
+            if not isinstance(plan,dict) or plan.get('id')!=pid or not isinstance(plan.get('ops'),list) or not plan['ops'] or not isinstance(plan.get('created'),(int,float)) or not isinstance(plan.get('turn'),int) or not isinstance(plan.get('session'),str) or plan.get('action') not in {'move','copy','rename','create','trash','purge'} or plan.get('status') not in {'pending','cancelled','running','partial','completed','undo_partial','undone','purged'}:
                 raise FileProblem('state_corrupt','A file-history record is invalid. It was left unchanged for review.')
             for op in plan['ops']:
                 if not isinstance(op,dict) or not isinstance(op.get('to'),str) or 'from' not in op or not isinstance(op.get('fingerprint'),dict) or not {'size','sha256'}<=op['fingerprint'].keys():
                     raise FileProblem('state_corrupt','An operation record is invalid. It was left unchanged for review.')
-                if plan['action'] in {'move','copy','rename'} and (not isinstance(op['from'],str) or not {'mtime_ns','device','inode'}<=op['fingerprint'].keys()):
+                if plan['action'] in MOVELIKE|{'copy'} and (not isinstance(op['from'],str) or not {'mtime_ns','device','inode'}<=op['fingerprint'].keys()):
                     raise FileProblem('state_corrupt','A source-file record is invalid. It was left unchanged for review.')
                 if plan['action']=='create' and plan['status']=='pending' and not isinstance(op.get('content'),str):
                     raise FileProblem('state_corrupt','The new-file preview is missing its content. It was left unchanged for review.')
@@ -125,7 +141,7 @@ class FileAgent:
             if os.path.exists(name): os.unlink(name)
 
     def _fingerprint(self, path):
-        p = self.resolve(path)
+        p = self.resolve(path, internal=True)
         before = p.stat()
         if not stat.S_ISREG(before.st_mode): raise FileProblem('not_file', f'{p.name} is not a regular file.')
         h = hashlib.sha256()
@@ -142,7 +158,7 @@ class FileAgent:
 
     def _matches(self, path, expected, *, identity=False):
         try:
-            p=self.resolve(path);info=p.stat()
+            p=self.resolve(path, internal=True);info=p.stat()
             if info.st_size!=expected.get('size'):return False
             if identity and (info.st_mtime_ns,info.st_dev,info.st_ino)!=(expected.get('mtime_ns'),expected.get('device'),expected.get('inode')):return False
             actual = self._fingerprint(p)
@@ -226,7 +242,8 @@ class FileAgent:
         return result(True,'read',f'Read {p.name}.'+(' Showing only the beginning.' if truncated else ''),path=str(p),text=text[:cap],truncated=truncated)
 
     @response
-    def propose(self, action, *, source='.', destination=None, pattern='*', recursive=False, path=None, content=None, turn=0):
+    def propose(self, action, *, source='.', destination=None, pattern='*', recursive=False, path=None, content=None, turn=0, paths=None, origin='human'):
+        if action == 'trash': return self._propose_trash(source, pattern, paths, origin, turn)
         if action not in {'move','copy','rename','create'}: raise FileProblem('unsupported_action','That file action is not supported.')
         if not destination: raise FileProblem('missing_destination','Which folder or filename should I use?')
         dst=self.resolve(destination,new=True)
@@ -255,7 +272,7 @@ class FileAgent:
         if not ops: raise FileProblem('no_change','The selected files are already in that location.')
         total=0
         for op in ops:
-            target=self.resolve(op['to'],new=True)
+            target=self.resolve(op['to'],new=True, internal=True)
             if target.exists(): raise FileProblem('collision',f'{target.name} already exists. Choose another destination; nothing will be overwritten.',path=str(target))
             if op['from'] and total + Path(op['from']).stat().st_size > self.MAX_PLAN_BYTES:
                 raise FileProblem('too_large','This selection exceeds the 512 MB batch limit. Split it into smaller requests.')
@@ -271,6 +288,139 @@ class FileAgent:
         else:message=f'I can create {dst.name} with the supplied text.'
         return result(True,'preview',message+' Nothing has changed. Say yes to confirm or cancel to discard.',plan=plan)
 
+    # ---- trash: recoverable deletion ------------------------------------------------------------------------------
+    def protection(self, path, origin='human'):
+        """Why this file must not be moved to the trash, or None. Music, app bundles and project folders are protected for everyone; the planner
+        (origin='planner') also never proposes anything touched in the last 7 days, installers used in the last 30 days, or source-code files."""
+        p = Path(path); name = p.name.casefold(); ext = p.suffix.casefold()
+        base = next((a for a in self.allowed if p.is_relative_to(a)), self.root)
+        parts = p.relative_to(base).parts if p.is_relative_to(base) else p.parts
+        if p.is_symlink(): return 'it is a link'
+        if not p.is_file(): return 'it is a folder, not a loose file'
+        if any(part.casefold().endswith(BUNDLE_EXT) for part in parts): return 'it is part of an app or package bundle'
+        if ext in MUSIC_EXT or any(MUSIC_NAME.search(part) for part in parts): return 'it looks music-related (Logic, GarageBand, plug-ins, samples, stems or audio)'
+        try:
+            siblings = {e.name for e in os.scandir(p.parent)}
+        except OSError:
+            return 'its folder could not be checked'
+        if siblings & PROJECT_MARKERS or any(n.endswith(('.xcodeproj', '.xcworkspace')) for n in siblings): return 'its folder contains a code or project file'
+        if origin == 'planner':
+            info = p.stat(); stamps = [info.st_mtime] + ([info.st_birthtime] if self.use_birthtime and hasattr(info, 'st_birthtime') else [])   # birth time catches a download that kept the server's old modified time
+            if time.time() - max(stamps) < RECENT_SECONDS: return 'it changed in the last 7 days'
+            if ext in CODE_EXT: return 'it is a source-code or project file'
+            if ext in INSTALLER_EXT and time.time() - max(stamps + [info.st_atime]) < INSTALLER_SECONDS: return 'it is an installer that was used in the last 30 days'
+        return None
+
+    def _propose_trash(self, source, pattern, paths, origin, turn):
+        pid = uuid.uuid4().hex[:12]; hits = []; skipped = []
+        if paths:
+            if not isinstance(paths, (list, tuple)) or len(paths) > self.MAX_PLAN_FILES: raise FileProblem('bad_paths', f'Give up to {self.MAX_PLAN_FILES} file paths.')
+            for raw in paths:
+                p = self.resolve(raw)
+                reason = self.protection(p, origin)
+                if reason: skipped.append({'name': p.name, 'path': str(p), 'reason': reason})
+                else: hits.append({'path': str(p)})
+        else:
+            src = self.resolve(source); found, scan = self._scan(src, pattern, False, limit=self.MAX_PLAN_FILES)   # loose files only: never recursive
+            if scan['truncated'] or scan['issues']: raise FileProblem('incomplete_selection', 'I could not check the complete selection. Narrow the search before changing files.', **scan)
+            for hit in found:
+                reason = self.protection(hit['path'], origin)
+                if reason: skipped.append({'name': hit['name'], 'path': hit['path'], 'reason': reason})
+                else: hits.append(hit)
+        if not hits:
+            if skipped: raise FileProblem('all_protected', f"Nothing was moved to the trash: {len(skipped)} matching file(s) are protected, for example {skipped[0]['name']} ({skipped[0]['reason']}).", skipped=skipped)
+            raise FileProblem('no_matches', 'No matching files were found. Nothing will change.')
+        ops = []; total = 0
+        for i, hit in enumerate(hits, 1):
+            old = Path(hit['path']); target = self.trash_dir / pid / f'{i:03d}__{old.name}'
+            fp = self._fingerprint(old); total += fp['size']
+            if total > self.MAX_PLAN_BYTES: raise FileProblem('too_large', 'This selection exceeds the 512 MB batch limit. Split it into smaller requests.')
+            ops.append({'from': str(old), 'to': str(target), 'fingerprint': fp, 'status': 'planned'})
+        plan = {'id': pid, 'session': self.session, 'turn': turn, 'created': time.time(), 'action': 'trash', 'status': 'pending', 'ops': ops, 'total_bytes': total, 'count': len(ops), 'origin': origin, 'skipped': skipped}
+        with self._locked():
+            state = self._load(); state['plans'][pid] = plan; self._save(state)
+        names = summarize_ops([{'to': o['from'], 'fingerprint': o['fingerprint']} for o in ops])
+        msg = f"I can move {len(ops)} file(s) to the trash: {names}. Nothing is deleted and you can say undo to put them back."
+        if skipped: msg += f" I left {len(skipped)} protected file(s) alone, for example {skipped[0]['name']}."
+        return result(True, 'preview', msg + ' Nothing has changed. Say yes to confirm or cancel to discard.', plan=plan, skipped=skipped)
+
+    def trash_size(self):
+        total = 0
+        if self.trash_dir.exists():
+            for root, _dirs, files in os.walk(self.trash_dir):
+                for f in files:
+                    try: total += os.lstat(os.path.join(root, f)).st_size
+                    except OSError: pass
+        return total
+
+    def trash_notice(self):
+        """Spoken reminder once the trash is over 1 GB, else ''."""
+        size = self.trash_size()
+        return f" The trash is now {human_size(size)}. Say empty the trash and I will show what is in it first." if size > TRASH_NOTICE_BYTES else ''
+
+    @response
+    def trash_info(self):
+        size = self.trash_size(); n = sum(len(fs) for _r, _d, fs in os.walk(self.trash_dir)) if self.trash_dir.exists() else 0
+        return result(True, 'trash_info', f"The trash holds {n} file(s), {human_size(size)}." + (self.trash_notice() if size > TRASH_NOTICE_BYTES else ''), count=n, bytes=size)
+
+    @response
+    def propose_empty_trash(self, turn=0):
+        """Permanent deletion of everything in the trash: preview first, confirm in a separate turn. The only operation that cannot be undone."""
+        files = []
+        if self.trash_dir.exists():
+            for root, _dirs, names in os.walk(self.trash_dir):
+                for n in sorted(names):
+                    f = Path(root) / n
+                    try: info = f.lstat()
+                    except OSError: continue
+                    if stat.S_ISREG(info.st_mode): files.append((f, info))
+        if not files: raise FileProblem('trash_empty', 'The trash is already empty.')
+        pid = uuid.uuid4().hex[:12]
+        ops = [{'from': str(f), 'to': str(f), 'fingerprint': {'size': i.st_size, 'sha256': ''}, 'status': 'planned'} for f, i in files]
+        total = sum(i.st_size for _f, i in files)
+        plan = {'id': pid, 'session': self.session, 'turn': turn, 'created': time.time(), 'action': 'purge', 'status': 'pending', 'ops': ops, 'total_bytes': total, 'count': len(ops)}
+        with self._locked():
+            state = self._load(); state['plans'][pid] = plan; self._save(state)
+        names = summarize_ops([{'to': re.sub(r'^\d+__', '', Path(o['from']).name), 'fingerprint': o['fingerprint']} for o in ops])
+        return result(True, 'preview', f"The trash holds {len(ops)} file(s), {human_size(total)}: {names}. Emptying it deletes them permanently and cannot be undone. Say yes to confirm or cancel to keep them.", plan=plan)
+
+    def _execute_purge(self, state, plan):
+        gone = 0; kept = 0
+        for op in plan['ops']:
+            f = self.resolve(op['from'], internal=True)
+            try:
+                if f.exists() and f.is_relative_to(self.trash_dir) and f.lstat().st_size == op['fingerprint']['size']: f.unlink(); gone += 1; op['status'] = 'purged'
+                else: kept += 1; op['status'] = 'skipped'
+            except OSError: kept += 1; op['status'] = 'skipped'
+        # earlier trash moves can no longer be undone for the files that were purged
+        purged = {op['from'] for op in plan['ops'] if op['status'] == 'purged'}
+        for other in state['plans'].values():
+            if other['action'] == 'trash':
+                for op in other['ops']:
+                    if op['to'] in purged: op['status'] = 'purged'
+                if all(op['status'] in ('purged', 'undone') for op in other['ops']) and other['status'] in ('completed', 'undo_partial'): other['status'] = 'purged'
+        for d in sorted((x for x in self.trash_dir.rglob('*') if x.is_dir()), key=lambda x: len(x.parts), reverse=True):
+            try: d.rmdir()
+            except OSError: pass
+        plan['status'] = 'completed'; self._save(state)
+        return result(True, 'purged', f"Emptied the trash: {gone} file(s) deleted permanently." + (f" {kept} could not be removed." if kept else ''), plan=plan)
+
+    @response
+    def history(self, limit=8):
+        with self._locked(): state = self._load()
+        rows = []
+        for pid in reversed(state['batches']):
+            plan = state['plans'][pid]
+            when = time.strftime('%b %d %H:%M', time.localtime(plan['created'])); verb = {'trash': 'trashed', 'move': 'moved', 'copy': 'copied', 'rename': 'renamed', 'create': 'created'}.get(plan['action'], plan['action'])
+            first = Path(plan['ops'][0]['from'] or plan['ops'][0]['to']).name
+            if plan['action'] == 'trash': first = re.sub(r'^\d+__', '', Path(plan['ops'][0]['to']).name)
+            rows.append({'id': pid, 'when': when, 'action': plan['action'], 'count': len(plan['ops']), 'status': plan['status'], 'first': first,
+                         'text': f"{when}: {verb} {len(plan['ops'])} file(s), {first}{' and others' if len(plan['ops']) > 1 else ''} ({plan['status']})"})
+            if len(rows) >= max(1, min(int(limit), 30)): break
+        if not rows: return result(True, 'history', 'I have not changed any files yet.', items=[])
+        spoken = '; '.join(r['text'] for r in rows[:3])
+        return result(True, 'history', f"Recent file changes: {spoken}." + (' The rest is on screen.' if len(rows) > 3 else ''), items=rows)
+
     @response
     def show(self, plan_id):
         with self._locked(): plan=self._load()['plans'].get(plan_id)
@@ -280,9 +430,10 @@ class FileAgent:
     def _preflight(self, plan):
         if plan['session']!=self.session: raise FileProblem('stale_session','This preview is from a previous session. Make a new plan before changing files.')
         if time.time()-plan['created']>self.PLAN_TTL: raise FileProblem('expired','That preview has expired. Please make a new plan.')
+        if plan['action']=='purge': return
         for op in plan['ops']:
             if op['from'] and not self._matches(op['from'],op['fingerprint'],identity=True): raise FileProblem('changed','A selected file changed or disappeared. Review a new plan before continuing.',path=op['from'])
-            d=self.resolve(op['to'],new=True)
+            d=self.resolve(op['to'],new=True, internal=True)
             if d.exists(): raise FileProblem('collision',f'{d.name} now exists. Nothing will be overwritten.')
 
     @staticmethod
@@ -292,10 +443,10 @@ class FileAgent:
         finally:os.close(fd)
 
     def _publish(self, op, action, journal=None):
-        dst=self.resolve(op['to'],new=True);dst.parent.mkdir(parents=True,exist_ok=True)
-        self.resolve(dst.parent)
-        src=self.resolve(op['from']) if op['from'] else None
-        if src and action in {'move','rename'} and src.stat().st_dev==dst.parent.stat().st_dev:
+        dst=self.resolve(op['to'],new=True, internal=True);dst.parent.mkdir(parents=True,exist_ok=True)
+        self.resolve(dst.parent, internal=True)
+        src=self.resolve(op['from'], internal=True) if op['from'] else None
+        if src and action in MOVELIKE and src.stat().st_dev==dst.parent.stat().st_dev:
             # Exclusive publication: unlike rename/shutil.move, a new target cannot be overwritten.
             op['publication_fingerprint']=op['fingerprint']
             if journal:journal()
@@ -320,13 +471,13 @@ class FileAgent:
                 op['publication_fingerprint']={'size':staged.st_size,'mtime_ns':staged.st_mtime_ns,'device':staged.st_dev,'inode':staged.st_ino,'sha256':h.hexdigest()}
                 if journal:journal()
                 os.link(temp,dst,follow_symlinks=False)
-                if src and action in {'move','rename'}:
+                if src and action in MOVELIKE:
                     if not self._matches(src,op['fingerprint'],identity=True): raise FileProblem('changed','The original changed and was retained. The copied destination needs review.')
                     src.unlink()
             finally:
                 Path(temp).unlink(missing_ok=True)
         self._sync_directory(dst.parent)
-        if src and action in {'move','rename'} and src.parent!=dst.parent:self._sync_directory(src.parent)
+        if src and action in MOVELIKE and src.parent!=dst.parent:self._sync_directory(src.parent)
         return self._fingerprint(dst)
 
     @response
@@ -338,6 +489,7 @@ class FileAgent:
             if plan['status']!='pending': raise FileProblem('already_processed','That plan has already been processed. Review its result or create a new plan.')
             if turn<=plan['turn']: raise FileProblem('confirmation_required','Preview the plan first, then confirm it in a separate turn.')
             self._preflight(plan)
+            if plan['action']=='purge':return self._execute_purge(state,plan)
             plan['status']='running';state['batches'].append(plan_id);self._save(state)
             for op in plan['ops']:
                 op['status']='applying';self._save(state)
@@ -349,8 +501,9 @@ class FileAgent:
                     return result(False,'partial',f"Stopped after {sum(o['status']=='completed' for o in plan['ops'])} successful changes. The remaining files need review.",plan=plan)
                 self._save(state)
             plan['status']='completed';self._save(state)
-        verbs={'move':'Moved','copy':'Copied','rename':'Renamed','create':'Created'}
-        return result(True,'completed',f"{verbs[plan['action']]} {len(plan['ops'])} file(s). Say undo to reverse the change.",plan=plan)
+        verbs={'move':'Moved','copy':'Copied','rename':'Renamed','create':'Created','trash':'Moved to the trash:'}
+        extra=self.trash_notice() if plan['action']=='trash' else ''
+        return result(True,'completed',f"{verbs[plan['action']]} {len(plan['ops'])} file(s). Say undo to reverse the change."+extra,plan=plan)
 
     @response
     def cancel(self, plan_id):
@@ -366,14 +519,16 @@ class FileAgent:
     def undo(self):
         with self._locked():
             state=self._load()
-            candidates=[state['plans'][pid] for pid in reversed(state['batches']) if state['plans'][pid]['status']!='undone']
+            candidates=[state['plans'][pid] for pid in reversed(state['batches']) if state['plans'][pid]['status'] not in ('undone','purged')]
             if not candidates: return result(True,'nothing_to_undo','There are no file changes to undo.')
             plan=candidates[0];reversed_count=0;issues=[]
             for op in reversed(plan['ops']):
                 if op['status']=='undone': continue
-                dst=self.resolve(op['to'],new=True)
+                if op['status']=='purged':
+                    issues.append({'path':op['from'],'reason':'It was deleted permanently when the trash was emptied.'});continue
+                dst=self.resolve(op['to'],new=True, internal=True)
                 if op['status']=='undoing':
-                    if plan['action'] in {'move','rename'} and not dst.exists() and self._matches(op['from'],op.get('result_fingerprint',op['fingerprint'])):
+                    if plan['action'] in MOVELIKE and not dst.exists() and self._matches(op['from'],op.get('result_fingerprint',op['fingerprint'])):
                         op['status']='undone';reversed_count+=1;self._save(state);continue
                     if plan['action'] in {'copy','create'} and not dst.exists():
                         op['status']='undone';reversed_count+=1;self._save(state);continue
@@ -381,10 +536,10 @@ class FileAgent:
                 if op['status'] in {'applying','needs_review'}:
                     src_exists=bool(op['from'] and Path(op['from']).exists())
                     if not dst.exists():op['status']='undone';self._save(state);continue
-                    publication=op.get('publication_fingerprint',op['fingerprint'] if plan['action'] in {'move','rename'} else {})
+                    publication=op.get('publication_fingerprint',op['fingerprint'] if plan['action'] in MOVELIKE else {})
                     if not publication or not self._matches(dst,publication,identity=True):
                         issues.append({'path':op['to'],'reason':'Interrupted operation cannot be resolved automatically.'});continue
-                    if src_exists and plan['action'] in {'move','rename'}:
+                    if src_exists and plan['action'] in MOVELIKE:
                         src=Path(op['from'])
                         if os.path.samefile(src,dst) and self._matches(src,op['fingerprint'],identity=True):
                             dst.unlink();op['status']='undone';reversed_count+=1;self._save(state);continue
@@ -393,8 +548,8 @@ class FileAgent:
                 expected=op.get('result_fingerprint',op.get('publication_fingerprint',op['fingerprint']))
                 if not dst.exists() or not self._matches(dst,expected,identity=True):
                     issues.append({'path':op['to'],'reason':'The result was changed or removed; it was left untouched.'});continue
-                if plan['action'] in {'move','rename'}:
-                    original=self.resolve(op['from'],new=True)
+                if plan['action'] in MOVELIKE:
+                    original=self.resolve(op['from'],new=True, internal=True)
                     if original.exists():
                         issues.append({'path':str(original),'reason':'The original location is occupied; nothing was overwritten.'});continue
                     reverse={'from':str(dst),'to':str(original),'fingerprint':self._fingerprint(dst)}
