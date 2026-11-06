@@ -257,8 +257,8 @@ def take_list():
     return out
 
 def annotate_onset(res):
-    """Energy annotation of when the user starts: the first run of 3 frames after 3 s that rises well above this take's own residual level (an annotation, not human-labelled)."""
-    e = np.convolve(env(res), np.ones(3) / 3, mode="same"); base = e[50:120]; thr = max(5 * float(np.median(base)), 0.0012, 1.5 * float(np.percentile(base, 95))); return first_active(e, thr, 120)
+    """Energy annotation of when the user starts: the first run of 3 frames after 3 s that rises well above this take's own residual level (an annotation, not human-labelled; 3 takes where nobody spoke are reported as skipped)."""
+    e = np.convolve(env(res), np.ones(3) / 3, mode="same"); base = e[30:60]; thr = max(5 * float(np.median(base)), 0.0012, 1.5 * float(np.percentile(base, 95))); return first_active(e, thr, 60)  # baseline: 0.6-1.2 s, before anyone has spoken
 
 def stage1_fires(clean, onset_f, thr_list=(0.05, 0.2, 0.5)):
     """Highest stage-1 'Julius' score in the 2 s after the duck and the time it is first above each threshold (the detector alone, no Whisper)."""
