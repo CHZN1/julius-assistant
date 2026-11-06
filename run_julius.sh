@@ -8,6 +8,7 @@ case "${JULIUS_PROFILE:-cloud}" in
   cloud) PROFILE_BACKEND=cloud; PROFILE_MODEL=claude-haiku-5-5; PROFILE_VOICE=qwen-mlx
     export JULIUS_KEEP_VOICE="${JULIUS_KEEP_VOICE:-1}"        # no local brain: the voice stays loaded between turns
     export JULIUS_MLX_KEEP_WORKER="${JULIUS_MLX_KEEP_WORKER:-1}" JULIUS_MLX_ASR_KEEP_VOICE="${JULIUS_MLX_ASR_KEEP_VOICE:-1}"
+    export JULIUS_ASR_RESIDENT="${JULIUS_ASR_RESIDENT:-1}"            # keep Whisper loaded: every transcription 0.48 s -> 0.21 s, and the first wake after sleep no longer reloads it (3.4 s)
     export JULIUS_SILENCE_SECONDS="${JULIUS_SILENCE_SECONDS:-0.6}"   # was 1.2: keeps pauses up to 0.5 s inside a sentence; your longest real in-sentence pause was 0.19 s (diagnostics/analyze_pauses.py)
     ;;
   cloud-torch) PROFILE_BACKEND=cloud; PROFILE_MODEL=claude-haiku-5-5; PROFILE_VOICE=qwen-clone   # slower Torch voice, kept as a fallback

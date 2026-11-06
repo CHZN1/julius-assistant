@@ -414,7 +414,7 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
     stalled = False
     def _stream(messages, allow_retry=True, tools=None):
         prepare_inference()
-        print("\r  JULIUS: ", end="", flush=True)
+        print("\r\033[K  JULIUS: ", end="", flush=True)
         full, pend, spoken = "", "", 0
         stream_calls.clear()
         kw = {"tools": tools} if tools is not None else {}
@@ -622,10 +622,10 @@ def release_idle_models():
     try:
         tts.suspend()
         close_backend()
-        with recognition_resources():pass
         import os as _os
+        with recognition_resources(_os.environ.get('JULIUS_ASR_RESIDENT')!='1'):pass
         if _os.environ.get('JULIUS_KEEP_VOICE') == '1' and globals().get('LLM_BACKEND') == 'cloud':
-            print('  [idle: speech recognition released; the voice stays loaded]',flush=True)
+            print('  [idle: the voice stays loaded'+('' if _os.environ.get('JULIUS_ASR_RESIDENT')=='1' else '; speech recognition released')+']',flush=True)
         else:
             print('  [idle model weights released]',flush=True)
         return True
@@ -831,6 +831,8 @@ def _wake_verify(clip):
     return bool(text) and nsp<=.6 and has_wake(text), text, time.perf_counter()-started
 import julius_wake
 wake_engine = None if _validation_no_devices else julius_wake.from_config(_wake_verify, jm.MEM)
+if not _validation_no_devices and os.environ.get('JULIUS_ASR_RESIDENT')=='1':  # load Whisper now so the first wake of the day is as fast as the rest
+    threading.Thread(target=lambda:mlx_whisper.transcribe(np.zeros(SR,np.float32),path_or_hf_repo=ASR,language='en'),daemon=True).start()
 _wake_prev_awake = True
 
 def _after_wake(ev):

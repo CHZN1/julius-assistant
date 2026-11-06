@@ -46,4 +46,17 @@ class LogTests(unittest.TestCase):
             def write(self,s):pass
             def flush(self):pass
         julius_log.Tee(Out(),log,'info',True).write("  YOU [en]: hi\n");self.assertIn('hi',(d/'j.jsonl').read_text())
+class LiveIssueTests(unittest.TestCase):
+    def test_the_thinking_remnant_is_erased_not_overprinted(self):
+        """Regression: '\\r  JULIUS: ' left the tail of '...thinking' on screen, which looked like a spoken 'ing' before tool calls."""
+        src=Path('julius_candidate.py').read_text();self.assertIn('print("\\r\\033[K  JULIUS: "',src)
+    def test_cloud_profile_keeps_whisper_resident(self):
+        self.assertIn('JULIUS_ASR_RESIDENT="${JULIUS_ASR_RESIDENT:-1}"',Path('run_julius.sh').read_text())
+        self.assertIn("recognition_resources(_os.environ.get('JULIUS_ASR_RESIDENT')!='1')",Path('julius_candidate.py').read_text())
+    def test_log_strips_terminal_escapes(self):
+        d=Path(tempfile.mkdtemp());log=julius_log.make_logger(d/'j.jsonl')
+        class Out:
+            def write(self,s):pass
+            def flush(self):pass
+        julius_log.Tee(Out(),log,'info').write("\r\x1b[K  [asleep]\n");self.assertIn('"msg": "[asleep]"',(d/'j.jsonl').read_text())
 if __name__=='__main__':unittest.main()

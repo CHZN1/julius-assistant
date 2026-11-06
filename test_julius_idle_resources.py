@@ -6,7 +6,7 @@ class IdleReleaseTests(unittest.TestCase):
   fn=next(n for n in ast.parse(Path('julius_candidate.py').read_text()).body if isinstance(n,ast.FunctionDef) and n.name=='release_idle_models')
   events=[];tts=Mock();tts.suspend.side_effect=lambda:events.append('voice')
   @contextlib.contextmanager
-  def recognition():events.append('recognition');yield
+  def recognition(release=True):events.append('recognition' if release else 'recognition-kept');yield
   ns={'tts':tts,'close_backend':lambda:events.append('brain'),'recognition_resources':recognition,'print':Mock()}
   exec(compile(ast.Module(body=[fn],type_ignores=[]),'idle','exec'),ns)
   return ns,events
@@ -25,4 +25,9 @@ class IdleReleaseTests(unittest.TestCase):
   ns,events=self.runtime();ns['LLM_BACKEND']='cloud'
   with unittest.mock.patch.dict('os.environ',{'JULIUS_KEEP_VOICE':'1'}):ns['release_idle_models']()
   said=ns['print'].call_args.args[0];self.assertIn('speech recognition released',said);self.assertIn('voice stays loaded',said);self.assertNotIn('model weights released',said)
+
+ def test_resident_whisper_stays_loaded_while_sleeping(self):
+  ns,events=self.runtime();ns['LLM_BACKEND']='cloud'
+  with unittest.mock.patch.dict('os.environ',{'JULIUS_KEEP_VOICE':'1','JULIUS_ASR_RESIDENT':'1'}):ns['release_idle_models']()
+  self.assertIn('recognition-kept',events);self.assertNotIn('speech recognition released',ns['print'].call_args.args[0])
 if __name__=='__main__':unittest.main()

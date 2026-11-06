@@ -9,6 +9,7 @@ from pathlib import Path
 LOG_DIR = Path(os.environ.get("JULIUS_LOG_DIR", "~/Library/Logs/Julius")).expanduser()
 _KEY = re.compile(r"(sk-[A-Za-z0-9_-]{16,}|[A-Fa-f0-9]{32,})")
 _SPEECH = re.compile(r"^\s*(YOU\b|JULIUS:|\[heard\b|\[ignored: Julius heard)")
+_ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 _NOISE = re.compile(r"%\||Download complete|Reconstruction complete|^\s*$")
 
 def make_logger(path=None, max_bytes=5_000_000, backups=5):
@@ -28,7 +29,7 @@ class Tee(io.TextIOBase):
     def write(self, s):
         try: self.inner.write(s)
         except Exception: pass
-        self.buf += s.replace("\r", "\n")
+        self.buf += _ANSI.sub("", s).replace("\r", "\n")
         while "\n" in self.buf:
             line, self.buf = self.buf.split("\n", 1)
             if line.strip() and not _NOISE.search(line): self.log.info(record(self.level, "console", line.strip(), self.log_transcripts))
