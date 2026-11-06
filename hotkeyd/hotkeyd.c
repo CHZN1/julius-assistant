@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+extern void RunApplicationEventLoop(void);
 static char names[64][64];
 static const struct { const char *k; int code; } KEYS[] = {
  {"a",0},{"s",1},{"d",2},{"f",3},{"h",4},{"g",5},{"z",6},{"x",7},{"c",8},{"v",9},{"b",11},{"q",12},{"w",13},{"e",14},{"r",15},{"y",16},{"t",17},
@@ -50,6 +51,6 @@ int main(int argc, char **argv) {
         else printf("failed %s status=%d\n", name, (int)st);
     }
     puts(ready); fflush(stdout);
-    CFRunLoopRun();
+    RunApplicationEventLoop();
     return 0;
 }
