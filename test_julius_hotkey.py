@@ -12,5 +12,11 @@ class HotkeyTests(unittest.TestCase):
     def test_unavailable_listener_is_reported_not_fatal(self):
         out=[]
         def factory(m):raise RuntimeError('no permission')
-        self.assertIsNone(julius_hotkey.start(lambda:None,say=out.append,factory=factory));self.assertIn('/stop',out[0])
+        self.assertIsNone(julius_hotkey.start(lambda:None,say=out.append,factory=factory));self.assertIn('unavailable',out[0])
+    def test_untrusted_macos_listener_counts_as_unavailable(self):
+        out=[]
+        class Untrusted(Fake):
+            IS_TRUSTED=False
+            def stop(self):self.stopped=True
+        self.assertIsNone(julius_hotkey.start(lambda:None,say=out.append,factory=Untrusted));self.assertIn('Accessibility',out[0])
 if __name__=='__main__':unittest.main()

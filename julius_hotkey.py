@@ -7,6 +7,9 @@ def start(stop, combo="<ctrl>+<alt>+s", say=print, factory=None):
         if factory is None:
             from pynput import keyboard
             factory = keyboard.GlobalHotKeys
-        listener = factory({combo: stop}); listener.start(); say(f"  [stop hotkey: {combo}]"); return listener
+        listener = factory({combo: stop}); listener.start()
+        if getattr(listener, "IS_TRUSTED", True) is False:  # macOS lets the listener start but delivers no keys until Accessibility is granted
+            listener.stop(); raise PermissionError("allow this Python under System Settings > Privacy & Security > Accessibility")
+        say(f"  [hotkey {combo} active]"); return listener
     except Exception as e:
-        say(f"  [stop hotkey unavailable: {e}; type /stop instead]"); return None
+        say(f"  [hotkey {combo} unavailable: {e}]"); return None
