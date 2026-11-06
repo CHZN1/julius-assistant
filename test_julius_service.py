@@ -23,6 +23,23 @@ class ServiceTests(unittest.TestCase):
         out="\tstate = running\n\tpid = 123\n\tlast exit code = (never exited)\n\truns = 2\n"
         st=julius_service.status(lambda args,**k:Result(0,out));self.assertEqual(st['state'],'running');self.assertEqual(st['pid'],'123')
         self.assertFalse(julius_service.status(lambda args,**k:Result(113))['loaded'])
+class LogsCommandTests(unittest.TestCase):
+    def test_recent_lines_are_shown_readably_then_new_ones_follow(self):
+        d=Path(tempfile.mkdtemp());f=d/'j.jsonl';f.write_text(julius_log.record('info','console','[asleep]')+"\n"+julius_log.record('info','quiet','',on=True)+"\n")
+        out=[];n=[0]
+        def sleep(_):
+            n[0]+=1
+            if n[0]==1:f.write_text(f.read_text()+julius_log.record('error','console','boom')+"\n")
+        julius_service.show_logs(10,path=f,out=out.append,sleep=sleep,stop=lambda:n[0]>=2)
+        self.assertEqual(len(out),3);self.assertIn('[asleep]',out[0]);self.assertIn('quiet',out[1]);self.assertIn('on',out[1]);self.assertTrue(out[2].endswith('boom'))
+    def test_missing_log_says_so(self):
+        out=[];julius_service.show_logs(path=Path(tempfile.mkdtemp())/'none.jsonl',out=out.append);self.assertIn('no log yet',out[0])
+    def test_doctor_reports_launchd_verdict(self):
+        d=tempfile.mkdtemp()
+        def runner(args,**k):
+            if args[1]=='bootstrap':(Path(d)/'julius_doctor.out').write_text('NOT trusted /x/python3.12\n')
+            return Result()
+        v,_=julius_service.doctor(runner,lambda s:None,d);self.assertTrue(v.startswith('NOT trusted'))
 class QuietTests(unittest.TestCase):
     def test_quiet_gate_drops_all_audio_until_switched_off(self):
         g=MicrophoneGate(clock=lambda:100.);self.assertTrue(g.accepting());g.set_quiet(True);self.assertFalse(g.accepting());g.set_quiet(False);self.assertTrue(g.accepting())
