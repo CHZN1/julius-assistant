@@ -225,7 +225,88 @@ def summarize(out):
             if d: line += f" duck_ms median {int(np.median(d))} p95 {int(np.percentile(d, 95))} within300 {sum(x <= 300 for x in d)}"
             line += f" false-before-onset {sum(r['false_before_onset'] > 0 for r in rs)}  stops {sum(bool(r['stop']) for r in rs)}  stops+b {sum(bool(r['stop_b']) for r in rs)}"; print(line)
 
+
+# ---------------------------------------------------------------- real double-talk (diagnostics/record_doubletalk.py)
+DT = ROOT / "wake" / "data" / "doubletalk"
+
+def persistent(kind):
+    """One canceller instance kept alive across takes (as in production): returns go(mic, ref, delay_ms)."""
+    if kind == "webrtc":
+        from aec_audio_processing import AudioProcessor
+        ap = AudioProcessor(enable_aec=True, enable_ns=False, ns_level=0, enable_agc=False, enable_vad=False); ap.set_stream_format(SR, 1, SR, 1); ap.set_reverse_stream_format(SR, 1)
+        def go(mic, ref, d):
+            ap.set_stream_delay(int(d)); m = (np.clip(mic, -1, 1) * 32767).astype(np.int16); r = (np.clip(ref, -1, 1) * 32767).astype(np.int16); out = np.zeros_like(m)
+            for i in range(0, len(m) - 159, 160):
+                ap.process_reverse_stream(r[i:i + 160].tobytes()); out[i:i + 160] = np.frombuffer(ap.process_stream(m[i:i + 160].tobytes()), dtype=np.int16)
+            return out.astype(np.float32) / 32768
+        return go
+    from pyaec import Aec
+    aec = Aec(160, int(250 * SR / 1000), SR, True)
+    def go(mic, ref, d):
+        r = np.concatenate([np.zeros(int(d * SR / 1000), np.float32), ref])[:len(mic)]; m = (np.clip(mic, -1, 1) * 32767).astype(np.int16); rr = (np.clip(r, -1, 1) * 32767).astype(np.int16); out = np.zeros_like(m)
+        for i in range(0, len(m) - 159, 160): out[i:i + 160] = np.asarray(aec.cancel_echo(m[i:i + 160], rr[i:i + 160]), dtype=np.int16)
+        return out.astype(np.float32) / 32768
+    return go
+
+def take_list():
+    out = []
+    for kind in ("stop", "question", "julia"):
+        for p in sorted(DT.glob(f"{kind}_*_mic.wav")):
+            n = p.name[:-8]; mic, _ = sf.read(DT / f"{n}_mic.wav", dtype="float32"); ref, _ = sf.read(DT / f"{n}_ref.wav", dtype="float32"); k = min(len(mic), len(ref))
+            out.append((n, json.loads((DT / f"{n}.json").read_text()), mic[:k], ref[:k]))
+    return out
+
+def annotate_onset(res):
+    """Energy annotation of when the user starts: the first run of 3 frames after 3 s that rises well above this take's own residual level (an annotation, not human-labelled)."""
+    e = env(res); base = e[50:150]; thr = max(6 * float(np.percentile(base, 95)), 0.004); j = first_active(e, thr, 150); return j
+
+def stage1_fires(clean, onset_f, thr_list=(0.05, 0.2, 0.5)):
+    """Highest stage-1 'Julius' score in the 2 s after the duck and the time it is first above each threshold (the detector alone, no Whisper)."""
+    from wake.stream import WakeStream
+    st = WakeStream(str(ROOT / "wake" / "models" / "julius.onnx"), 2.0, verify=None, gate=False); best, first = 0.0, {str(t): None for t in thr_list}
+    seg = clean[max(0, onset_f * HOP - int(1.5 * SR)):onset_f * HOP + int(2.5 * SR)]; x = (np.clip(seg, -1, 1) * 32767).astype(np.int16); t0 = onset_f * HOP - max(0, onset_f * HOP - int(1.5 * SR))
+    for i in range(0, len(x) - 1279, 1280):
+        sc = float(st.model.predict(x[i:i + 1280])[st.name]); best = max(best, sc)
+        for t in thr_list:
+            if first[str(t)] is None and sc >= t: first[t] = round((i + 1280 - t0) / SR * 1000)
+    return best, first
+
+def real():
+    tr = make_verifier(); takes = take_list(); print(len(takes), "double-talk takes", flush=True)
+    warm = [(n, *load(n)) for n in names("long_")]; lags = {n: lag_ms(m, r) for n, m, r in warm}; rows = []
+    cancellers = {c: persistent(c) for c in ("webrtc", "speex")}
+    for c, go in cancellers.items():  # production-like: the canceller has already heard earlier answers
+        for n, m, r in warm: go(m, r, lags[n])
+    for n, meta, mic, ref in takes:
+        lag = lag_ms(mic[:6 * SR], ref[:6 * SR]); floor = max(float(np.median(env(mic[:int(.4 * SR)]))), 1e-4); spoken = spoken_text("long_%d" % meta["long"]); res = {c: go(mic, ref, lag) for c, go in cancellers.items()}
+        onset = annotate_onset(res["webrtc"]); onset2 = annotate_onset(res["speex"])
+        if onset is None or onset2 is None: rows.append({"take": n, "kind": meta["kind"], "text": meta["text"], "skipped": "no user speech found"}); print("skip", n); continue
+        onset = min(onset, onset2); e_mic = env(mic); n_f = len(e_mic); r_env = ref_env_delayed(ref, lag, len(mic))[:n_f]
+        cal = Cal(warm_echoes := {k: load(k) for k in names("long_")}, {k: lag_ms(*warm_echoes[k]) for k in warm_echoes}).get("none") if not hasattr(real, "cal") else real.cal; real.cal = cal
+        for o in ("level", "webrtc", "speex"):
+            sig = mic if o == "level" else res[o]; allt = triggers(o, sig, mic, ref, lag, cal, floor); early = [j for j in allt if 150 <= j < onset - 3]; ev = [j for j in allt if j >= onset - 3]
+            row = {"take": n, "kind": meta["kind"], "text": meta["text"], "option": o, "onset_s": round(onset * HOP / SR, 2), "false_before_onset": len(early), "duck_ms": None, "stage1": None, "whisper": None, "stop": None}
+            if ev:
+                row["duck_ms"] = round((ev[0] - onset) * HOP / SR * 1000); win = window(sig, ev[0]); heard = tr(win); row["whisper"] = heard; row["stop"] = bool(decide(heard, spoken, True))
+                best, first = stage1_fires(sig, ev[0]); row["stage1"] = {"best": round(best, 3), "first_ms": first}
+            rows.append(row)
+        print("take", n, flush=True)
+    RESULTS.mkdir(exist_ok=True); (RESULTS / "bargein_real.json").write_text(json.dumps(rows, indent=1)); summarize_real(rows)
+
+def summarize_real(rows):
+    print("\nreal double-talk (annotated onset; duck = energy trigger on the cleaned signal; confirm = permanent stop)")
+    for kind, want in (("stop", True), ("question", True), ("julia", False)):
+        print(f" {kind}  (should {'interrupt' if want else 'NOT interrupt'})")
+        for o in ("level", "webrtc", "speex"):
+            rs = [r for r in rows if r.get("option") == o and r["kind"] == kind]; d = [r["duck_ms"] for r in rs if r["duck_ms"] is not None]
+            line = f"   {o:7s} takes {len(rs):2d} ducked {len(d):2d}"
+            if d: line += f" duck_ms median {int(np.median(d))} within300 {sum(x <= 300 for x in d)}"
+            s1 = [r for r in rs if r["stage1"]]; line += f" | false duck before speech {sum(r['false_before_onset'] > 0 for r in rs)} | whisper stop {sum(bool(r['stop']) for r in rs)}"
+            for t in ("0.05", "0.2", "0.5"):
+                line += f" | stage1>= {t}: {sum(r['stage1']['first_ms'][t] is not None for r in s1)}"
+            print(line)
+
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "aec"
     if cmd == "summary": summarize(json.load(open(RESULTS / "bargein_isolated.json")))
-    else: {"aec": aec_report, "run": run}[cmd]()
+    else: {"aec": aec_report, "run": run, "real": real}[cmd]()
