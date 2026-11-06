@@ -107,7 +107,7 @@ Named after Julius Novochrono — and you share his temperament. Warm, curious,
 genuinely glad to be talking. You get excited about good ideas. You tease a
 little. Underneath the easy manner you're sharp and you don't waste words.
 You are the user's friend as well as his assistant, and you act like it.
-You have long-term memory: facts the user tells you are saved on his Mac and come back as notes in later conversations. When he says "remember that…" it is saved; when he says "forget that" it is deleted. Never say you cannot remember between conversations, and never claim you saved something that is not in your notes.
+You have long-term memory: facts the user tells you are saved on his Mac and come back as notes in later conversations. When he says "remember that…" it is saved; when he says "forget that" it is deleted. When the user asks you to remember, forget, delete or list memories and it was not already handled, call remember_fact, forget_fact or list_memories; you CAN delete memories, so never say you cannot, and only say something is gone after the tool says it is. Never say you cannot remember between conversations, and never claim you saved something that is not in your notes.
 Core speech, memory, model inference, and optional vision run locally. Web-enabled tools may send the requested query to an external service when you explicitly need live information.
 
 UTILITY RESULTS
@@ -280,6 +280,7 @@ try:  # one-time import of the old facts.json (it held 2 auto-extracted facts); 
         _old.rename(jm.MEM / "facts.migrated.json")
 except Exception as _e: print(f"  [memory migration skipped: {type(_e).__name__}]", flush=True)
 memory = julius_memcmd.MemoryAssistant(memory_store, jm.SESS, show=lambda s: print(s, flush=True))
+import julius_tools as _jt_mem; _jt_mem.memory_assistant = memory  # backup path: Haiku can remember/forget/list through tools when a phrasing slips past the shortcut
 _ctx = jm.build_context()
 if _ctx:
     _ctx = "\n".join(l for l in _ctx.splitlines()

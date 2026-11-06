@@ -325,6 +325,41 @@ SCHEMAS += [
     _utility_schema('cancel_reminder', "Cancel an active reminder by its title when the person asks to cancel or delete it.", {'title': 'string'}, ['title']),
 ]
 
+# Memory tools: a backup for when a phrasing slips past the memory shortcut. They only act on what the user said this turn, so text from a web page or a file cannot write or erase memory.
+memory_assistant = None
+
+def _said_this_turn():
+    import julius_orchestrator
+    return julius_orchestrator._STATE.get("user_text") or ""
+
+def _grounded(text, utterance, need):
+    from julius_memstore import words
+    w = set(words(text)); u = set(words(utterance))
+    return bool(w) and len(w & u) / len(w) >= need
+
+def remember_fact(text):
+    if memory_assistant is None: return "Memory is not available."
+    if not _grounded(text, _said_this_turn(), .6): return "Not saved: that is not something the user said just now."
+    return memory_assistant._remember(text, _said_this_turn())
+
+def forget_fact(topic=""):
+    if memory_assistant is None: return "Memory is not available."
+    topic = (topic or "").strip()
+    if not topic: return memory_assistant._forget_that()
+    if not _grounded(topic, _said_this_turn(), .01): return "Not deleted: that topic is not what the user just asked to forget. Ask him what to forget."
+    return memory_assistant._forget(topic)
+
+def list_memories(topic=""):
+    if memory_assistant is None: return "Memory is not available."
+    return memory_assistant._list((topic or "").strip() or None)
+
+REGISTRY.update(remember_fact=remember_fact, forget_fact=forget_fact, list_memories=list_memories)
+SCHEMAS += [
+    _utility_schema('remember_fact', "Save a lasting fact the user just told you or asked you to remember (his own words, short, e.g. 'my favorite team is the Sharks'). Use it when he says remember/note/keep in mind. Never for passwords, keys or card numbers.", {'text': 'string'}, ['text']),
+    _utility_schema('forget_fact', "Permanently delete a saved memory when the user asks to forget, delete or remove it. 'topic' is what it is about, e.g. 'Sharks'; leave empty for 'forget that' (the most recent one). You CAN delete memories with this tool: never say you cannot.", {'topic': 'string'}, []),
+    _utility_schema('list_memories', "List what you remember about the user, optionally about one topic.", {'topic': 'string'}, []),
+]
+
 _dispatcher = None
 
 def dispatcher():
@@ -371,6 +406,7 @@ _SCHEMA_GROUPS = (
     (r"\bread\b|\bopen\b|contents|\bfile\b", ("read_file",)),
     (r"\bfind\b|where|locate|named|search for", ("find_files",)),
     (r"document|\bpdf\b|\bdocx?\b", ("read_document", "read_file")),
+    (r"remember|forget|memor|\bdelete (?:that|it|the)\b|\berase\b|\bnoted?\b|\bsaved?\b", ("remember_fact", "forget_fact", "list_memories")),
     (r"remind|\btimer\b|\balarm\b|\btasks?\b|calendar|\bevents?\b|to-?do|schedule", ("list_planner_items", "set_reminder", "list_reminders", "cancel_reminder")),
 )
 

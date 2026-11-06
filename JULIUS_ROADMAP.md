@@ -1,6 +1,6 @@
 # Julius roadmap
 
-Updated October 29, 2026. Current priority order; older milestone documents (JULIUS_TEST_RESULTS.md, JULIUS_*.md) keep the historical measurements.
+Updated November 5, 2026. Current priority order; older milestone documents (JULIUS_TEST_RESULTS.md, JULIUS_*.md) keep the historical measurements.
 
 ## Completed
 
@@ -11,7 +11,7 @@ Updated October 29, 2026. Current priority order; older milestone documents (JUL
 - Router shortcuts with filler stripping and follow-up carry-forward; one round trip for simple tools.
 - Sonnet-controlled file agent with confirmation.
 - Cloud profile is the default everywhere (`python julius.py` and `run_julius.sh` use the same defaults; `--help` prints usage).
-- 399 tests passing (394 plus the default-profile and eval-tooling tests).
+- 496 tests passing.
 
 ## Phase A: Evaluation harness (now)
 
@@ -26,26 +26,36 @@ First baseline (2026-10-29): routing eval 89.5% (94/105); recorded audio mean WE
 
 **Phase A complete (2026-10-30).** Routing 97.5-98.3% (119 cases), file agent eval 100%, scores tool handles weekdays/dates/last week, tool-turn first audio 1.66 s. ASR vocabulary hint stays on (held-out difference was one apostrophe, no hallucinated hint words; details in `evals/baselines/README.md`).
 
-## Phase B: Daily driver for me
+## Phase B: Daily driver for me: complete (2026-11-05)
 
-- [x] **Dedicated wake-word engine** (done 2026-11-05): `[wake] engine = "cascade"` in `julius.toml`. A noise-gated openWakeWord "Julius" detector (0.03% of a core idle) fires at a low threshold, then one Whisper run on the whole utterance checks the wake word (hint names Julius beside Julia/Julian/Julie/Jules) and gives the request; `engine = "whisper"` is the fallback. Optional personal speaker verifier in `~/.julius/` (currently off, see below). Every fire is logged to `julius_memory/wake_log.jsonl` with near-miss clips for retraining. Details: `wake/`, `julius_wake.py`, `evals/wake_eval.py`.
-  - Measured on 60 fresh recordings (wake3 + wake4), 3.4 min of ordinary talk and 18 held-out Julius-voice lines: miss 3.3% (2/60), 0 false wakes per hour, Julius's own voice woke it 6 of 18 in isolation (live, `MicrophoneGate` also drops audio while he speaks). Previous model: 8.3% misses. The verifier cut Julius-voice wakes to 3 of 18 but added a miss (5.0%), so it ships off.
-  - Open: retrain the detector and verifier on the real-usage log (`wake_log.jsonl` near-miss clips); make Julius's own voice a harder negative; longer ordinary-talk sets to tighten the false-wake estimate (3.4 min is a small sample).
-- [x] **Barge-in: stop hotkey shipped** (2026-11-05): `[barge_in] hotkey` (default Ctrl+Option+S) and typed `/stop` silence Julius at once (`SpeechPlayer.abort()` plus cancellation). macOS needs your terminal allowed under Privacy & Security > Accessibility / Input Monitoring. Live fixes found on the way: the mic gate now covers the 0.4 s output latency, Julius's own words heard right after he speaks are ignored (`julius_selfecho.py`), the wake stream resets on capture gaps.
-- [ ] **Voice barge-in: parked, off** (`[barge_in] voice = false`). Evaluated in isolation (`evals/bargein_eval.py`, speakers, one persistent AEC across turns, 3 long answers, 18 Julius-voice lines, 36 real double-talk takes; onsets are an energy annotation, 3 takes had no speech):
-  - Energy only or a level check cannot separate your voice from his echo (your speech is about the level of his echo peaks). Self-transcript rejection removed most self-triggers (15 stops to 4).
-  - WebRTC AEC (31.5/12.6/29.3 dB on the long answers, 1.4% real time) is best: it ducked 7 of 8 stop takes within 300 ms (median 20-40 ms), with 6 of 7 questions; but 1 of 8 Julia/Julian sentences still confirmed as a stop (earlier scoring 2 of 9), the stage-1 "Julius" detector confirms only ~1.1 s after the duck and also fires on Julia sentences, and the first 3 s of each playback are unreliable. Scoring moved between runs because the onset annotation is unstable.
-  - Needs before it ships: a small "stop" keyword model (bare "Stop." is invisible to the Julius detector) plus a Julia-aware confirm step, then re-run the eval on more takes with human-labelled onsets. Revisit with the Phase F orb UI. Headphone detection (skip AEC, allow direct barge-in) is a cheap follow-up.
-- [ ] **Always-on launchd service** (built 2026-11-05, not yet installed; `python julius_service.py on|off|status|restart|wake|logs`): LaunchAgent `com.julius.assistant` (RunAtLoad, KeepAlive on crash only, 15 s throttle, no keys in the plist); structured JSON log in `~/Library/Logs/Julius/julius.jsonl` (5 MB x 5, speech redacted unless `[service] log_transcripts`); quiet mode: "Julius, go to sleep" turns the detector fully off (persisted across restarts) until the wake hotkey (`[service] wake_hotkey`, Ctrl+Option+J), `julius_service.py wake` or typed `wake`. Still to verify after install: microphone permission for the launchd-started Python (the hotkeys no longer need Accessibility or Input Monitoring: Carbon RegisterEventHotKey via the `hotkeyd/hotkeyd.c` helper, built into `~/.julius/bin` on first use; `julius_service.py doctor` checks it), idle CPU/memory over a day, restart-after-crash.
-- [x] **Long-term memory** (built 2026-11-05): local SQLite+FTS5 store `julius_memory/memory.sqlite3` (`julius_memstore.py`, `julius_memcmd.py`). Voice or typed: "remember that…", "forget that", "forget <topic>", "forget everything", "what do you remember (about X)", "what did you just remember", "undo that"; `/memories`. Corrections that match an existing fact supersede it. Durable facts you state are captured automatically (regex prefilter, Haiku extraction, marked auto, "Noted." once per turn); passwords/keys/cards and sensitive health/finance are never stored; forgetting hard-deletes and scrubs session logs. Notes ride after the cached prompt, capped at 400 tokens with newer facts winning, framed as data. Eval: `evals/memory_eval.py` (suite "memory" in run_all). Open source: ignore `julius_memory/`; `julius_memory.example/` has the empty schema, a fictional sample and a README (`python julius_memstore.py init --sample`).
-- Also: reminders/calendar polish.
+Julius runs all day as a login service, wakes on his name, can be silenced or put to sleep without any macOS permission, and remembers what you tell him. 496 unit tests pass.
 
-## Phase C: Agents
+- [x] **Wake word, cascade v2** (`[wake] engine = "cascade"`): a noise-gated openWakeWord "Julius" detector (0.03% of a core idle) fires at a low threshold, then one resident Whisper small.en run over the whole utterance checks the wake word (hint names Julius beside Julia/Julian/Julie/Jules) and gives the request. Final numbers (`evals/wake_eval.py suite`, 60 fresh recordings, 3.4 min of ordinary talk, 18 held-out Julius-voice lines): **misses 0/60 (0.0%), false wakes 0 per hour** (3.4 min is a small sample), Julius's own voice woke it 6 of 18 in isolation (live, the mic gate and self-echo check stop this in practice). Previous model: 8.3% misses. Every fire is logged to `julius_memory/wake_log.jsonl` with near-miss clips for retraining.
+- [x] **Hotkeys, no permissions**: Ctrl+Option+S stops generation and speech at once (`SpeechPlayer.abort()` plus cancellation, also typed `/stop`); Ctrl+Option+J wakes from quiet mode. Both use Carbon `RegisterEventHotKey` through a small C helper (`hotkeyd/hotkeyd.c`, built on first use into `~/.julius/bin`, exits with Julius), so neither Accessibility nor Input Monitoring is needed (pynput could not be trusted under launchd). `julius_service.py doctor` checks both register. Verified live on the running service: stop mid-answer, "go to sleep" then the wake key.
+- [x] **Always-on launchd service with quiet mode** (`python julius_service.py on|off|status|restart|wake|doctor|logs`): LaunchAgent `com.julius.assistant` (starts at login, restarts on crash only, 15 s throttle, no keys in the plist); structured JSON log `~/Library/Logs/Julius/julius.jsonl` (5 MB x 5, speech redacted unless `[service] log_transcripts`); `logs` shows recent lines and follows. "Julius, go to sleep" turns the detector fully off (persisted across restarts) until Ctrl+Option+J, `julius_service.py wake` or SIGUSR1. Still unmeasured: idle CPU/memory over a full day, restart-after-crash.
+- [x] **Long-term memory** (`julius_memstore.py`, `julius_memcmd.py`, `julius_memory/memory.sqlite3`): "remember that…", "forget that / forget <topic> / forget everything", "what do you remember (about X)", "what did you just remember", "undo that", `/memories`; corrections supersede facts; automatic capture of durable facts (regex prefilter, Haiku extraction, marked auto, "Noted." once per turn; facts about Julius or secrets are never stored); forgetting hard-deletes and scrubs session logs; notes ride after the cached prompt, 400-token cap with newer facts winning, framed as data. Natural forget phrasings are caught before Haiku, a "forget that" with no target asks which one and takes the answer, and Haiku has `remember_fact` / `forget_fact` / `list_memories` tools as a backup (they only act on what the user said that turn). Eval `evals/memory_eval.py` (suite "memory" in run_all): **7/7 sections pass**: 70 command phrasings incl. negatives 100%, forgetting 0 residue, recall 100% (40 questions, 30 facts), auto-capture precision 96.2% / recall 100% (60 labelled sentences), 8 headless restart/forget/injection scripts all pass. Empty schema, fictional sample and README for open source in `julius_memory.example/`.
+- [ ] **Voice barge-in: parked, off** (`[barge_in] voice = false`; the hotkey covers stopping). Evaluated in isolation (`evals/bargein_eval.py`, speakers, persistent AEC, 36 real double-talk takes): WebRTC AEC ducked 7 of 8 stop takes within 300 ms but 1 of 8 Julia/Julian sentences still confirmed as a stop, and the first 3 s of each playback are unreliable; energy cannot separate your voice from his echo. **Needs before it ships:** a small "stop" keyword model (bare "Stop." is invisible to the Julius detector), a Julia-aware confirm step, then a re-run on more takes with human-labelled onsets (revisit with the Phase F orb UI). Headphone detection is a separate low-effort item.
 
-Julius is the orchestrator; agents are sub-agents dispatched and supervised by the Sonnet planner.
+Known open items:
+- Wake verifier: built but **off** (it cut Julius-voice wakes from 6 to 3 of 18 but added a miss); retrain on the real-usage log.
+- Julius's own voice waking him in isolation (6 of 18); live it is blocked by the mic gate and self-echo check, but a harder negative in the detector training set is the real fix.
+- One auto-capture false positive in the eval ("I have to pick up the kids at four" is stored as a fact); tighten the extraction prompt on plans and errands.
+- Unmeasured: service idle CPU/memory over a day, restart-after-crash, live Whisper-wake timing after sleep.
+- Reminders/calendar polish.
 
-- File agent hardening: preview of changes, undo log/recoverable trash, per-folder permissions, its own eval set.
-- Coding agent: Opus 5.5 as a sub-agent (compare the Agent SDK vs `claude -p`), with a per-task cost cap.
+## Phase C: Agents (next)
+
+Julius is the orchestrator; agents are sub-agents dispatched and supervised by the Sonnet planner. Build order:
+
+1. **File agent hardening** (do first: it touches the user's files)
+   1. Change preview: every move/rename/delete shows exactly what will happen before confirmation.
+   2. Undo log and recoverable trash: nothing is permanently deleted; every change is journaled and reversible.
+   3. Per-folder permissions: read/write/none per folder, defaults to Documents, Desktop and Downloads only.
+   4. Its own eval set: sandbox scenarios for preview accuracy, undo round trips, permission denials and prompt-injection from file contents; added to `run_all.py`.
+2. **Coding agent**: Opus 5.5 as a sub-agent of the Sonnet planner.
+   1. Compare the Claude Agent SDK against `claude -p` (tool control, streaming, session resume, permission model, cost reporting); pick one.
+   2. Per-task cost cap enforced by Julius, with a spoken warning and a hard stop.
+   3. Eval suite: small repo tasks with tests as the oracle, cost and time per task, refusal/stop behavior, no writes outside the project folder.
 
 ## Phase D: Sports analytics agent (differentiator)
 

@@ -8,13 +8,27 @@ from julius_memstore import MemoryStore, SECRET, SENSITIVE, clean, words
 
 NOT_A_FACT = r"(?:to|when|how|what|where|why|who|if|whether|me|us|him|her|them|it|that you|the time|the way)\b"
 REMEMBER = re.compile(r"^(?:please\s+)?(?:remember|make a note|take a note|note that|keep in mind|bear in mind)(?:\s+that)?[\s,:]+(?!" + NOT_A_FACT + r")(.{4,})$", re.I)
-FORGET_THAT = re.compile(r"^(?:please\s+)?forget\s+(?:that|this|the last (?:thing|one)|what i (?:just )?(?:said|told you))$", re.I)
+PRE = r"(?:(?:please|can you|could you|will you|would you|go ahead and|you can|you should|i want you to|i need you to|i'd like you to)\s+)*"
+FORGET_VERB = r"(?:forget|delete|remove|erase|drop|clear|wipe|scrap)"   # delete & co. only ever mean memory when a memory noun or "from memory" says so (files go to the file agent)
+NOUN = r"(?:memory|memories|note|fact|entry)"
+FORGET_THAT = re.compile("^" + PRE + r"(?:forget\s+(?:that|this|the last (?:thing|one)|what i (?:just )?(?:said|told you))|" + FORGET_VERB + r"\s+(?:that|this|the last|the|my last) " + NOUN + r"(?: you (?:just )?(?:saved|made|noted|remembered))?)(?:\s+(?:please|now))?$", re.I)
 FORGET_ALL = re.compile(r"^(?:please\s+)?forget\s+everything(?:\s+(?:you (?:know|remember)|i(?:'ve)? (?:told|said)(?: you)?))?$", re.I)
-FORGET_X = re.compile(r"^(?:please\s+)?forget\s+(?!about\s+(?:it|that|this)\b)(?:about\s+|everything (?:about|i(?:'ve)? (?:told|said)(?: you)? about)\s+)?(?!it\b|that\b|this\b)(.{3,})$", re.I)
+FORGET_X = re.compile("^" + PRE + r"forget\s+(?!about\s+(?:it|that|this)\b)(?:about\s+|everything (?:about|i(?:'ve)? (?:told|said)(?: you)? about)\s+)?(?!it\b|that\b|this\b)(.{3,})$", re.I)
 LIST = re.compile(r"^(?:what|which)(?: (?:things|facts|else))?\s+(?:do|did|have) you (?:remember|know|have saved|have stored|saved)(?: about (.+))?$|^(?:list|show)(?: me)?(?: (?:everything|all))?(?: (?:you remember|your memor(?:y|ies)|what you remember|what you know))(?: about (.+))?$|^what do you know about (?:me|(.+))$", re.I)
 CORRECTION = re.compile(r"^(?:actually|correction|no actually|no wait|no|that'?s (?:not right|wrong|incorrect)|that is (?:not right|wrong|incorrect)|scratch that|i meant)[\s,:.-]+(.{6,})$", re.I)
 RECENT = re.compile(r"^what (?:did|have) you (?:just )?(?:remember(?:ed)?|note[d]?|save[d]?|store[d]?|learn(?:ed)?)(?: just now| so far| today| this session)?$", re.I)
 UNDO = re.compile(r"^(?:please\s+)?(?:undo(?: that| the last forget)?|bring (?:that|it) back|restore (?:that|it))$", re.I)
+
+# "forget that my favorite team is the Sharks", "forget what I told you about the Sharks", "delete the memory about X", "remove X from memory", "stop remembering X"
+FORGET_TOPIC = (
+    re.compile("^" + PRE + r"forget\s+(?:that|this)\s+(?!" + NOUN + r"\b)(.{3,})$", re.I),
+    re.compile("^" + PRE + r"forget\s+(?:what|everything|anything|all) (?:i|we)(?:'ve| have)? (?:told|said|mentioned|shared|talked)(?: to)?(?: you)?(?: about)\s+(.{3,})$", re.I),
+    re.compile("^" + PRE + FORGET_VERB + r"\s+(?:the |that |this |any |your |my |all )?" + NOUN + r"\s+(?:about|on|of|regarding|that|where|saying)\s+(.{3,})$", re.I),
+    re.compile("^" + PRE + r"(?:forget|delete|remove|erase|wipe)\s+(?:everything |anything |what )?(?:you (?:know|remember|have|saved|stored) )?about\s+(.{3,})$", re.I),
+    re.compile("^" + PRE + FORGET_VERB + r"\s+(.{3,}?)\s+(?:from|out of) (?:your |the |my )?(?:memory|memories|notes)$", re.I),
+    re.compile("^" + PRE + r"stop remembering\s+(?:that\s+|about\s+)?(.{3,})$", re.I),
+)
+NOT_A_TOPIC = re.compile(r"^(?:it|that|this|about it|about that|about this|everything|all|them)$", re.I)
 
 def parse(text):
     """-> (action, argument) or (None, None). Reminders ("remember to call mom") and idioms ("forget it") are not memory commands."""
@@ -27,6 +41,9 @@ def parse(text):
     if m: return "list", next((g for g in m.groups() if g), None)
     m = REMEMBER.match(t)
     if m: return "remember", m.group(1).strip()
+    for pat in FORGET_TOPIC:
+        m = pat.match(t)
+        if m and not NOT_A_TOPIC.match(m.group(1).strip()): return "forget", m.group(1).strip()
     m = FORGET_X.match(t)
     if m: return "forget", m.group(1).strip()
     m = CORRECTION.match(t)
@@ -108,7 +125,9 @@ class MemoryAssistant:
         target = [self.last_added] if self.last_added else self.store.get(self.last_used) if len(self.last_used) == 1 else None
         if target is None and len(self.last_used) > 1:
             rows = self.store.get(self.last_used); self.pending = ("choose", rows); return self._ask(rows)
-        if not target: return "I'm not sure what to forget. Say forget, then what it was about."
+        if not target:
+            if not self.store.all(): return "I don't have anything stored."
+            self.pending = ("forget_what", None); return "Which one? Tell me what it was about."
         rows = self.store.forget([target[0]["id"]], self.sessions_dir); self._gone(rows)
         return f"Forgotten: {rows[0]['text'].rstrip('.')}." if rows else "That's already gone."
 
@@ -126,6 +145,16 @@ class MemoryAssistant:
 
     def _resolve_pending(self, text):
         kind, rows = self.pending; t = re.sub(r"[^\w\s]", "", text.lower()).strip(); self.pending = None
+        if kind == "forget_what":
+            if re.fullmatch(r"(?:no|nope|cancel|never ?mind|stop|leave it|nothing|forget it)", t): return "Okay, I'll keep everything."
+            topic = re.sub(r"^(?:(?:well|um|uh|so|okay|ok|actually|yeah|yes|i mean|i meant)\s+)*(?:(?:this|that|it|they)\s+(?:is|was|were|are)\s+|the one\s+)?(?:about|regarding|on)?\s*(?:the |my |a )?", "", t).strip()
+            parsed = parse(text)
+            if parsed[0] == "forget": topic = parsed[1]
+            elif parsed[0] is not None: return None  # a different memory command: handle it normally
+            if not topic or len(topic) < 3:
+                self.pending = ("forget_what", None); return "About what?"
+            if not self.store.search(topic, 1) and (len(topic.split()) > 4 or text.strip().endswith('?')): return None  # an unrelated request, not an answer
+            return self._forget(topic)
         if re.fullmatch(r"(?:yes|yeah|yep|sure|do it|go ahead|all|all of them|forget (?:them )?all(?: of them)?|everything|forget everything|forget them)", t):
             gone = self.store.forget([r["id"] for r in rows], self.sessions_dir); self._gone(gone); return f"Okay, I've forgotten {len(gone)} things." if len(gone) != 1 else f"Forgotten: {gone[0]['text'].rstrip('.')}."
         if re.fullmatch(r"(?:no|nope|cancel|never ?mind|stop|leave it|keep (?:it|them))", t): return "Okay, I'll keep it."
@@ -175,7 +204,7 @@ class MemoryAssistant:
             raw = llm(EXTRACT_PROMPT + user_text); m = re.search(r"\{.*\}", raw or "", re.S); facts = json.loads(m.group())["facts"] if m else []
         except Exception: return []
         stored = []
-        for f in [x for x in facts if isinstance(x, str) and not SENSITIVE.search(x) and not SECRET.search(x)][:2]:
+        for f in [x for x in facts if isinstance(x, str) and x.strip().lower().startswith('user') and not re.search(r'\b(?:julius|assistant|the model|tool|tools|instruction|instructions)\b', x, re.I) and not SENSITIVE.search(x) and not SECRET.search(x)][:2]:
             row, status = self.store.add(f, "fact", "auto", user_text)
             if status == "new": stored.append(row)
         if stored:

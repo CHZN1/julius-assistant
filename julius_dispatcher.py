@@ -15,6 +15,7 @@ OWNERS = {
     'get_datetime': 'time', 'get_weather': 'weather', 'get_forecast': 'weather',
     'get_scores': 'sports', 'get_quote': 'markets', 'calculate': 'calculator',
     'web_search': 'research', 'get_news': 'news',
+    'remember_fact': 'memory', 'forget_fact': 'memory', 'list_memories': 'memory',
     'list_files': 'files', 'read_file': 'files', 'find_files': 'files',
 }
 

@@ -88,4 +88,34 @@ class RetrievalTests(unittest.TestCase):
         for t in ["I want to know how photosynthesis works","I think it might rain","what time is it","I need to finish this report","hi there"]:self.assertFalse(a.worth_a_look(t),t)
     def test_system_prompt_says_julius_has_long_term_memory(self):
         src=Path('julius_candidate.py').read_text();self.assertIn('You have long-term memory',src);self.assertIn('Never say you cannot remember',src)
+    def test_natural_forget_phrasings_are_commands_and_file_deletes_are_not(self):
+        for t,exp in [("forget that","forget_that"),("delete that memory","forget_that"),("forget that my favorite team is the Sharks","forget"),("forget what I told you about the Sharks","forget"),("delete the memory about the Sharks","forget"),("remove the Sharks from your memory","forget"),("stop remembering the Sharks","forget"),("you can forget the Sharks","forget"),("delete that file",None),("delete that",None),("forget it",None),("remove the folder from downloads",None)]:
+            self.assertEqual(mc.parse(t)[0],exp,t)
+    def test_forget_that_with_no_target_asks_then_takes_the_topic_even_after_a_fragment(self):
+        d,s,a,_=make();s.add("my favorite team is the Sharks");s.add("my sister is called Ana")
+        self.assertIn("Which one",a.handle("forget that."));self.assertEqual(a.handle("This is about."),"About what?")
+        self.assertIn("Forgotten",a.handle("Well, the Sharks."));self.assertEqual([r['text'] for r in s.all()],["my sister is called Ana"])
+    def test_pending_forget_lets_other_requests_through(self):
+        d,s,a,_=make();s.add("my sister is called Ana");a.handle("forget that");self.assertIsNone(a.handle("what's the weather in Springfield"))
+        self.assertEqual(len(s.all()),1)
+    def test_autocapture_ignores_facts_about_julius(self):
+        d,s,a,_=make()
+        rows=a.autocapture("you are responsible for moving files and I like tools",lambda p:'{"facts": ["Julius is responsible for moving files.", "the user prefers specific tools for file management with the assistant."]}')
+        self.assertEqual(rows,[])
+    def test_memory_tools_only_act_on_what_roy_said_this_turn(self):
+        import julius_tools as jt, julius_orchestrator as jo
+        d,s,a,_=make();s.add("my favorite team is the Sharks");s.add("my sister is called Ana");old=jt.memory_assistant;jt.memory_assistant=a
+        try:
+            jo._STATE["user_text"]="please get rid of what you know about the Sharks"
+            self.assertIn("Not deleted",jt.forget_fact("my sister"));self.assertEqual(len(s.all()),2)
+            self.assertIn("Forgotten",jt.forget_fact("Sharks"));self.assertEqual(len(s.all()),1)
+            jo._STATE["user_text"]="what's the weather";self.assertIn("Not saved",jt.remember_fact("my password manager is Bitwarden and my cat is Miso"))
+            jo._STATE["user_text"]="note that I like jazz";self.assertIn("remember",jt.remember_fact("I like jazz"))
+            self.assertIn("jazz",jt.list_memories())
+        finally:jt.memory_assistant=old
+    def test_memory_tools_are_offered_for_memory_requests_and_registered(self):
+        import julius_tools as jt
+        names=lambda t:{x["function"]["name"] for x in jt.select_schemas(t)}
+        self.assertTrue({"forget_fact","remember_fact","list_memories"}<=names("please forget the note about the Sharks"))
+        self.assertTrue({"forget_fact"}<=names("Well, the Sharks."))
 if __name__=='__main__':unittest.main()

@@ -37,6 +37,7 @@ with tempfile.TemporaryDirectory(prefix='julius_mlx_tts_') as directory:
                 raise ValueError('Speech requires 1–4096 characters')
             if model is None:model,refs=load_models()
             text=normalize_speech(text)
+            Path(directory).mkdir(parents=True,exist_ok=True)  # something outside (a temp cleaner) removed it once and every later reply went silent
             for path in Path(directory).glob('*.npy'):path.unlink()
             mode=req.get('delivery_mode') or delivery_mode(text)
             if mode not in refs:raise ValueError('Unknown delivery mode')
