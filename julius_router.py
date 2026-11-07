@@ -45,6 +45,14 @@ def _clean_folder(phrase):
     text=re.sub(r'\s+(?:folder|directory)$','',text,flags=re.I)
     return text.strip().strip('"').strip("'")
 
+_GLUED_VERB=re.compile(r'^((?i:trash|delete|remove|move|copy|rename|show|list|find|read|open|put|send))(?=[A-Z])')
+def clean_asr(text):
+    """Repair common transcription artefacts before a second routing attempt: commas between words ("trash, report.txt, in sandbox"), a command verb glued to the
+    next word ("TrashReport.txt"), runs of spaces. The original text is always tried first."""
+    out=_GLUED_VERB.sub(lambda m:m.group(1)+' ',text.strip())
+    out=re.sub(r'\s*[,;]\s+',' ',out)
+    return re.sub(r'\s+',' ',out).strip()
+
 EXTRA_FOLDERS={}  # name -> absolute path of folders added in [files.folders] outside Documents/Desktop/Downloads; set by FileSession
 
 def match_dir(phrase,root,cutoff=.80):

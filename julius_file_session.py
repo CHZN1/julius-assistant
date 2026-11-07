@@ -1,5 +1,5 @@
 """Human-command controller for file previews, confirmations, and results."""
-from julius_router import route
+from julius_router import route, clean_asr
 from julius_file_agent import result, FileProblem
 
 class FileSession:
@@ -17,6 +17,11 @@ class FileSession:
             self.pending=None
             return None
         action=route(text,self.agent.root/'Documents',pending=self.pending is not None,has_last=self.last is not None)
+        if not action:
+            repaired=clean_asr(text)
+            if repaired and repaired!=text:
+                action=route(repaired,self.agent.root/'Documents',pending=self.pending is not None,has_last=self.last is not None)
+                if action:text=repaired
         if not action:
             # A generic yes after an unrelated topic must not execute an old plan.
             self.pending=None

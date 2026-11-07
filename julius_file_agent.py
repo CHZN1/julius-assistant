@@ -92,6 +92,17 @@ class FileAgent:
             name = found[0].name if found else Path(path).parent.name
             raise FileProblem('read_only', f'{name} is read-only for Julius, so I will not change anything there. You can change this in the [files.folders] section of julius.toml.')
 
+    def _extra_folder(self, p):
+        """A configured folder outside Documents/Desktop/Downloads named anywhere in a relative path ("sandbox", "sand box/a.txt", "Documents/dev/Sandbox") -> that folder plus the rest."""
+        standard = {self.root/n for n in ('Documents', 'Desktop', 'Downloads')}
+        key = lambda x: re.sub(r'[^a-z0-9]', '', str(x).casefold())
+        extras = {key(f.name): f for f, mode in self.modes.items() if mode != 'none' and f not in standard and f.is_dir()}
+        words = list(p.parts)
+        for i in range(len(words)):
+            for j in (i + 2, i + 1):   # "sand box" may arrive as two path words
+                if j <= len(words) and key(''.join(words[i:j])) in extras: return extras[key(''.join(words[i:j]))].joinpath(*words[j:])
+        return None
+
     def resolve(self, value='.', *, new=False, internal=False):
         raw = str(value).strip().strip('"').strip("'")
         if not raw: raise FileProblem('missing_path', 'Please name the file or folder.')
@@ -101,7 +112,10 @@ class FileAgent:
             if raw in {'.', 'here', 'Documents'}: p = self.root/'Documents'
             elif p.parts[0].casefold() in {'documents','desktop','downloads'}:
                 names={'documents':'Documents','desktop':'Desktop','downloads':'Downloads'}
-                p=self.root/names[p.parts[0].casefold()]/Path(*p.parts[1:])
+                rest = Path(*p.parts[1:]); p=self.root/names[p.parts[0].casefold()]/rest
+                if rest.parts and not (p.exists() or p.is_symlink()) and self._extra_folder(rest) is not None: p = self._extra_folder(rest)   # "Documents/dev/Sandbox": a guessed path to a configured folder
+            elif self._extra_folder(p) is not None:
+                p = self._extra_folder(p)
             else:
                 options = [self.root/'Documents'/p, self.root/p]
                 existing = [q for q in options if q.exists() or q.is_symlink()]

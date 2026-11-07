@@ -36,8 +36,10 @@ def normalize_request(text,keep_and=False):
     core,punct=re.match(r'^(.*?)([?.!\s]*)$',current,re.S).groups()
     while TRAILING.search(core):core=TRAILING.sub('',core,count=1)
     return core+punct
+WAKE_GLUED=re.compile(r'^\s*(?i:julius|juliet)(?=[A-Z][a-z])')   # Whisper sometimes writes "Julius trash report.txt" as "JuliusTrashReport.txt"
 def strip_leading_wake(text):
     """Drop a leading wake word from a request spoken while already awake; a bare wake word is left as is."""
+    if WAKE_GLUED.match(text):return WAKE_GLUED.sub('',text,count=1).strip()
     return strip_wake(text) if has_wake(text) and strip_wake(text) else text
 def incomplete_fragment(text):
     return re.sub(r'[^\w\s]','',text.lower()).strip() in {'you','the','and','but','because','so i','i was','can you','could you'}

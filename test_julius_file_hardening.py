@@ -174,6 +174,20 @@ class PermissionTests(Base):
             out = session.handle('trash old.txt in lab', 1)
             self.assertTrue(out['ok'] and out['code'] == 'preview', out); self.assertEqual(Path(out['data']['plan']['ops'][0]['from']), (extra / 'old.txt').resolve())
         finally: julius_router.EXTRA_FOLDERS.clear()
+    def test_configured_folders_are_found_by_name_however_it_was_transcribed_or_guessed(self):
+        from julius_file_session import FileSession
+        import julius_router
+        extra = self.root / 'sandbox'; extra.mkdir(); (extra / 'report.txt').write_text('r')
+        a = self.agent_with(Documents='write', **{str(extra): 'write'})
+        try:
+            for said in ('trash report.txt in sandbox', 'trash report.txt in sand box', 'Trash Report.txt in Sandbox.', 'trash, report.txt, in sandbox.', 'TrashReport.txt in sandbox', 'trash report dot txt in the sandbox folder'):
+                session = FileSession(a); out = session.handle(said, 1)
+                self.assertTrue(out and out['code'] == 'preview', (said, out)); self.assertEqual(Path(out['data']['plan']['ops'][0]['from']).name.lower(), 'report.txt', said); a.cancel(session.pending)
+        finally: julius_router.EXTRA_FOLDERS.clear()
+        for guess in ('sandbox', 'Sandbox', 'sand box', 'Documents/dev/Sandbox', 'dev/sandbox', 'sandbox/report.txt', 'Documents/sand box/report.txt'):
+            self.assertTrue(str(a.resolve(guess)).startswith(str(extra.resolve())), guess)
+        self.assertEqual(a.list('Documents/dev/Sandbox')['code'], 'listed')
+
     def test_most_specific_folder_wins(self):
         sub = self.docs / 'Locked'; sub.mkdir(); (sub / 'k.txt').write_text('k'); self.file('f.txt', folder=self.docs)
         a = self.agent_with(Documents='write', **{'Documents/Locked': 'read'})

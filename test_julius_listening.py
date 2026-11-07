@@ -35,6 +35,10 @@ class LeadingWakeWhileAwakeTests(unittest.TestCase):
         self.assertEqual(strip_leading_wake("Hey Julius, what's 17 percent of 2480?"),"what's 17 percent of 2480?")
         router=LiveIntentRouter();router.record('get_weather',{'location':'Springfield, Illinois'},'out')
         self.assertEqual(router.resolve(strip_leading_wake("Julius, what about tomorrow?"))[0],'get_forecast')
+    def test_a_wake_word_glued_to_the_request_is_dropped_too(self):
+        from julius_listening import strip_leading_wake
+        self.assertEqual(strip_leading_wake("JuliusTrashReport.txt in sandbox"),"TrashReport.txt in sandbox")
+        self.assertEqual(strip_leading_wake("Juliusville is a town"),"Juliusville is a town")
     def test_bare_wake_word_and_ordinary_speech_are_unchanged(self):
         from julius_listening import strip_leading_wake
         self.assertEqual(strip_leading_wake('Julius?'),'Julius?');self.assertEqual(strip_leading_wake('what about tomorrow?'),'what about tomorrow?')
