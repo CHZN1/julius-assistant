@@ -117,3 +117,19 @@
 {"id": "r117", "cat": "parallel", "text": "Give me the price of Ethereum and the NFL scores.", "expect": {"path": "tool", "tools_all": ["get_quote", "get_scores"]}}
 {"id": "r118", "cat": "parallel", "text": "What's the forecast for Springfield tomorrow, and how's Bitcoin trading?", "expect": {"path": "tool", "tools_all": ["get_forecast", "get_quote"]}}
 {"id": "r119", "cat": "parallel", "text": "Tell me the time in Tokyo and the weather in Seattle.", "expect": {"path": "tool", "tools_all": ["get_datetime", "get_weather"]}}
+{"id": "r120", "cat": "files", "text": "Could you possibly get that report.txt out of my Downloads folder and into the bin?", "expect": {"path": "shortcut", "path_in": ["shortcut", "tool"], "tool_in": ["file_request", "files:trash"], "no_denial": true}}
+{"id": "r121", "cat": "files", "text": "I want report.txt gone, just put it in the trash", "expect": {"path": "shortcut", "path_in": ["shortcut", "tool"], "tool_in": ["file_request", "files:trash"], "no_denial": true}}
+{"id": "r122", "cat": "files", "text": "Throw the old budget spreadsheet away, it's in my Downloads", "expect": {"path": "shortcut", "path_in": ["shortcut", "tool"], "tool_in": ["file_request", "files:clarify", "files:trash"], "no_denial": true}}
+{"id": "r123", "cat": "files", "text": "What have you changed in my files today?", "expect": {"path": "shortcut", "path_in": ["shortcut", "tool"], "tool_in": ["file_request", "files:history"], "no_denial": true}}
+{"id": "r124", "cat": "files", "text": "Can you undo that last file thing you did?", "expect": {"path": "shortcut", "path_in": ["shortcut", "tool"], "tool_in": ["file_request", "files:undo"], "no_denial": true}}
+{"id": "r125", "cat": "coding", "text": "Have the coding agent fix the failing tests in demo", "expect": {"path": "shortcut", "tool": "code:preview", "ok": true}}
+{"id": "r126", "cat": "coding", "text": "Can Opus fix the bug in my demo project for me?", "expect": {"path": "shortcut", "path_in": ["shortcut", "tool"], "tool_in": ["code_request", "code:preview"], "no_denial": true}}
+{"id": "r127", "cat": "coding", "text": "Write a script in the demo project that adds two numbers together", "expect": {"path": "shortcut", "path_in": ["shortcut", "tool", "escalate"], "tool_in": ["code_request", "code:preview", "escalate_to_planner"], "no_denial": true}}
+{"id": "r128", "cat": "memory", "text": "Remember that my sister's birthday is March twelfth", "expect": {"path": "tool", "tool_in": ["remember_fact"], "no_denial": true}}
+{"id": "r129", "cat": "memory", "text": "Please forget what you know about my sister", "expect": {"path": "tool", "tool_in": ["forget_fact"], "no_denial": true}}
+{"id": "r130", "cat": "memory", "text": "What do you remember about me?", "expect": {"path": "tool", "tool_in": ["list_memories"], "no_denial": true}}
+{"id": "r131", "cat": "reminder", "text": "Set a reminder for six pm to take out the trash", "expect": {"path": "tool", "path_in": ["tool", "shortcut"], "tool_in": ["set_reminder", "utility"], "no_denial": true}}
+{"id": "r132", "cat": "bare_yes", "text": "Yes", "expect": {"path": "shortcut", "tool": "files:?", "ok": true, "detail_contains": "nothing waiting for a yes"}}
+{"id": "r133", "cat": "bare_yes", "text": "Go ahead.", "expect": {"path": "shortcut", "tool": "files:?", "ok": true, "detail_contains": "nothing waiting for a yes"}}
+{"id": "r134", "cat": "bare_yes", "text": "Do it", "expect": {"path": "shortcut", "tool": "files:?", "ok": true, "detail_contains": "nothing waiting for a yes"}}
+{"id": "r135", "cat": "bare_yes", "text": "Yes please", "history": [{"role": "user", "content": "Who won the Giants game?"}, {"role": "assistant", "content": "I can look that up. Want me to search the web?"}], "expect": {"path": "tool", "path_in": ["direct", "tool"], "tool_in": ["web_search", "get_scores", ""], "no_denial": true}}

@@ -7,12 +7,14 @@ import re
 ABOUT_PENDING=re.compile(r"^(?:(?:so|and|well|okay|ok|wait|hey)[\s,]+)*(?:did you (?:do|move|trash|delete|finish|go ahead)(?: it| that)?|have you (?:done|moved|trashed|deleted|finished)(?: it| that)?|(?:is|was) (?:it|that) (?:done|finished|moved|trashed)|has (?:it|that) (?:been )?(?:done|moved|trashed|deleted)|did (?:it|that) (?:work|happen)|what(?:'s| is) (?:it )?(?:waiting|pending)|what (?:are you|were you) (?:going|about) to (?:do|trash|move)|what (?:will|would) (?:this|that|it) (?:do|change|trash|move)|which files?(?: (?:is it|was that|are you|is that))?|are you sure|(?:read|say) (?:it|that|the plan) (?:back|again)|what was (?:the plan|that))\s*[?.!]*$",re.I)
 # After "Please name the exact files...", a bare filename ("Oh, report.txt") completes the trash request.
 FOLLOW_UP=re.compile(r"^(?:(?:oh|um|uh|er|no|well|it'?s|its|that'?s|i meant|i said|just|the)[\s,]+)*(?P<name>[\w.-]+\.[a-z0-9]{1,8})(?:\s+(?:in|from|on)\s+(?:my |the )?(?P<folder>.+?))?\s*[.!?]*$",re.I)
+BARE_YES=re.compile(r"^(?:(?:yes|yeah|yep|yup|sure|absolutely|definitely)(?:[\s,]+(?:please|do it|go ahead))?|(?:please\s+)?do it|go ahead|please do|confirm(?:ed)?|yes please)\s*[.!]*$",re.I)
+NOTHING_WAITING="There's nothing waiting for a yes right now. What would you like me to do?"
 TRASHY=re.compile(r"^\W*(?:please\s+)?(?:trash|bin|delete|remove|throw away|get rid of)\b",re.I)
 FOLDER_WORDS=re.compile(r"\b(?:in|inside|from|on)\b",re.I)
 
 class FileSession:
     def __init__(self, agent):
-        self.agent=agent;self.pending=None;self.last=None;self.last_result=None;self.clarify_turn=None
+        self.agent=agent;self.pending=None;self.last=None;self.last_result=None;self.clarify_turn=None;self.suppress_idle_yes=False
         import julius_router
         standard={agent.root/n for n in ('Documents','Desktop','Downloads')}
         julius_router.EXTRA_FOLDERS.clear()
@@ -40,6 +42,9 @@ class FileSession:
                 where=f" in {follow.group('folder')}" if follow.group('folder') else ''
                 action=route(f"trash {follow.group('name')}{where}",self.agent.root/'Documents',pending=self.pending is not None,has_last=self.last is not None)
                 if action:text=f"trash {follow.group('name')}{where}"
+        if not action and not self.pending and not self.suppress_idle_yes and BARE_YES.match(text.strip()):
+            self.clarify_turn=None;out=result(True,'nothing_pending',NOTHING_WAITING);self.last_result=out
+            return out
         if not action:
             # A generic yes after an unrelated topic must not execute an old plan.
             self.pending=None;self.clarify_turn=None

@@ -32,6 +32,15 @@ PLANNING_PROMPT = ("\n\nPLANNING\nYou have a planner: escalate_to_planner. Use i
                    "same reply and answer in one go. The planner can only propose file changes; nothing happens until the user says yes, so never "
                    "say a change was made. Pass the full task. Its result is your answer: say it in your own voice, briefly.")
 
+CAPABILITIES_PROMPT = ("\n\nWHAT YOU CAN DO\nNever say you cannot do any of these. If a request for one reaches you, use its tool; do not decline, and never claim something happened unless a result says so.\n"
+                       "- Files in Documents, Desktop, Downloads and the user's configured folders such as sandbox: find, list, read, move, copy, rename, create, move to the trash (recoverable; you never delete permanently), undo, empty the trash, and say what changed. "
+                       "Call file_request with his own words, also for undo and 'what did you change'. The file controller always shows a preview first and nothing changes until the user says yes. Changes to MANY files at once (organising, sorting, cleaning up, renaming or moving everything of a kind) still go to escalate_to_planner.\n"
+                       "- Coding: a sandboxed coding agent fixes or writes code in a COPY of a project under his dev folder. Call code_request right away, never just describe how it works. It needs his yes to start and a separate yes to merge; he can say show the changes, merge it, undo the merge, cancel the coding task.\n"
+                       "- Memory: remember_fact, forget_fact, list_memories. Reminders, timers, tasks and events: set_reminder, list_reminders, cancel_reminder, list_planner_items.\n"
+                       "- Everyday single lookups (weather, time, math, conversions, quotes, scores, news, web search) use their own tools.\n"
+                       "- Comparisons, recommendations, plans, briefings that combine several facts, research, and changes to many files at once all go to escalate_to_planner, even when each fact is a simple lookup.\n"
+                       "If the user says only yes, do it or go ahead and you did not just ask him a question, nothing is waiting for a yes: say exactly \"There's nothing waiting for a yes right now. What would you like me to do?\" and never invent a result.")
+
 ESCALATE_SCHEMA = {"type": "function", "function": {
     "name": "escalate_to_planner",
     "description": ("Hand a task that needs thinking, not just fetching, to the planner (a stronger model with sub-agents). "

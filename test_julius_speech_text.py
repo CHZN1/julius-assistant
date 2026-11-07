@@ -136,7 +136,7 @@ class PolicyPromptTests(unittest.TestCase):
         from julius_speech_text import BREVITY_PROMPT
         for phrase in ('one to three sentences','core idea in two or three sentences','Want more detail?','only when the user asks','about 2,305 dollars','exact price'):self.assertIn(phrase,BREVITY_PROMPT)
     def test_cloud_system_prompt_includes_both_and_local_prompts_do_not(self):
-        src=Path('julius_candidate.py').read_text();self.assertIn('SYSTEM += julius_cloud.PLANNING_PROMPT + SPOKEN_STYLE_PROMPT + TOOL_POLICY_PROMPT + BREVITY_PROMPT',src)
+        src=Path('julius_candidate.py').read_text();self.assertIn('SYSTEM += julius_cloud.CAPABILITIES_PROMPT + julius_cloud.PLANNING_PROMPT + SPOKEN_STYLE_PROMPT + TOOL_POLICY_PROMPT + BREVITY_PROMPT',src)
         from julius_conversation import conversation_messages
         with patch.dict(os.environ,{'JULIUS_BACKEND':'cloud'}):
             said=conversation_messages([{'role':'user','content':'hi'}])[0]['content'];self.assertIn('spoken aloud',said);self.assertIn('Want more detail?',said)

@@ -167,7 +167,7 @@ class RoutingTests(Fixture):
         self.session.handle('move "note.txt" to Archive',1)
         self.assertEqual(self.session.handle('yes but only the PDFs',2)['code'],'clarification');self.assertTrue((self.docs/'note.txt').exists())
     def test_unrelated_topic_invalidates_generic_confirmation(self):
-        self.session.handle('move "note.txt" to Archive',1);self.assertIsNone(self.session.handle('what is the weather?',2));self.assertIsNone(self.session.handle('yes',3));self.assertTrue((self.docs/'note.txt').exists())
+        self.session.handle('move "note.txt" to Archive',1);self.assertIsNone(self.session.handle('what is the weather?',2));self.assertEqual(self.session.handle('yes',3)['code'],'nothing_pending');self.assertTrue((self.docs/'note.txt').exists())
         self.assertEqual(self.session.handle('show the last plan',4)['code'],'preview');self.assertEqual(self.session.handle('yes',5)['code'],'completed')
     def test_unknown_source_and_destination_do_not_guess(self):
         for text in ['move PDFs from TypoFolder to Archive','move PDFs from Documents to TypoFolder','move the files','move the files to Archive']:
@@ -248,7 +248,7 @@ class ExtendedWorkflowTests(Fixture):
         self.assertEqual(self.agent.show(old)['data']['plan']['status'],'cancelled');self.assertTrue((self.docs/'note.txt').exists())
     def test_acknowledgement_with_unrelated_request_never_confirms(self):
         self.session.handle('move "note.txt" to Archive',1)
-        self.assertIsNone(self.session.handle("okay what's the weather?",2));self.assertIsNone(self.session.handle('yes',3))
+        self.assertIsNone(self.session.handle("okay what's the weather?",2));self.assertEqual(self.session.handle('yes',3)['code'],'nothing_pending')
     def test_protected_history_excluded_from_user_operations(self):
         agent=FileAgent(self.root,self.docs/'Internal');agent.state_dir.mkdir();(agent.state_dir/'private.txt').write_text('history')
         self.assertEqual(agent.read(str(agent.state_dir/'private.txt'))['code'],'protected_path')

@@ -12,7 +12,7 @@ class SchemaSelectionTests(unittest.TestCase):
   self.assertEqual(names("What's Bitcoin trading at?"),{'get_quote'})
   self.assertIn('get_scores',names('Who won the Giants game yesterday?'))
   self.assertIn('get_datetime',names('What time is it in Tokyo?'))
-  self.assertEqual(names('List the files in my Downloads folder'),{'list_files'})
+  self.assertEqual(names('List the files in my Downloads folder'),{'list_files','file_request'})
   self.assertIn('read_file',names('Read the file notes.txt'))
   self.assertIn('find_files',names('Find the file named budget'))
  def test_multiple_intents_union(self):

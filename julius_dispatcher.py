@@ -16,6 +16,7 @@ OWNERS = {
     'get_scores': 'sports', 'get_quote': 'markets', 'calculate': 'calculator',
     'web_search': 'research', 'get_news': 'news',
     'remember_fact': 'memory', 'forget_fact': 'memory', 'list_memories': 'memory',
+    'file_request': 'files', 'code_request': 'code',
     'list_files': 'files', 'read_file': 'files', 'find_files': 'files',
 }
 

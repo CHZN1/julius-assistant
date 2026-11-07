@@ -214,7 +214,7 @@ eyes = create_vision(show_window=SHOW_WINDOW,
 SYSTEM += vision_capability_prompt(eyes.enabled)
 if LLM_BACKEND == 'cloud':
     import julius_cloud
-    SYSTEM += julius_cloud.PLANNING_PROMPT + SPOKEN_STYLE_PROMPT + TOOL_POLICY_PROMPT + BREVITY_PROMPT
+    SYSTEM += julius_cloud.CAPABILITIES_PROMPT + julius_cloud.PLANNING_PROMPT + SPOKEN_STYLE_PROMPT + TOOL_POLICY_PROMPT + BREVITY_PROMPT
 if not eyes.enabled:
     print("  [vision disabled — camera and perception models not loaded]", flush=True)
 if os.environ.get('JULIUS_MLX_BRAIN_PREPARE')=='1':
@@ -634,7 +634,9 @@ try:
 except Exception: pass
 _code_done = deque()   # finished coding tasks waiting to be announced (main loop speaks them when you are not talking)
 import julius_config as _code_cfg
+import julius_tools as _jt_cmd
 _code_session = CodeSession(config=_code_cfg.load_config().get("code"), tracker=cloud_tracker, api_key=_code_cfg.api_key, on_done=_code_done.append)
+_jt_cmd.file_session = _file_session; _jt_cmd.code_session = _code_session   # backup path: Haiku can hand a file or coding request to these sessions when a phrasing slips past the routers
 if cloud_brain is not None:
     import julius_orchestrator
     julius_orchestrator.configure(file_session=_file_session, turn=lambda: TURN["n"], code_session=_code_session)
@@ -706,6 +708,10 @@ def handle_code(text):
     return out["message"]
 
 def handle_files(text):
+    try:   # a bare yes right after a question Julius asked belongs to the conversation, not to a controller
+        _last = [m for m in (globals().get('history') or []) if m.get('role') == 'assistant'][-1]['content']
+        _file_session.suppress_idle_yes = str(_last).rstrip().endswith('?')
+    except Exception: _file_session.suppress_idle_yes = False
     out = jt.dispatcher().human_utilities(_utility_session, text, TURN["n"])
     if out is not None:
         _file_session.pending = None

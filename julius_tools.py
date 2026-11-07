@@ -353,11 +353,44 @@ def list_memories(topic=""):
     if memory_assistant is None: return "Memory is not available."
     return memory_assistant._list((topic or "").strip() or None)
 
-REGISTRY.update(remember_fact=remember_fact, forget_fact=forget_fact, list_memories=list_memories)
+# File and coding backup tools: when a phrasing slips past the deterministic routers, Haiku hands the user's request to the same human sessions instead of declining.
+# They stage previews only (the sessions own every yes), and they act on what the user said this turn.
+file_session = None
+code_session = None
+
+def _norm_name(s):
+    import re
+    return re.sub(r'[^a-z0-9.]', '', str(s).casefold().replace(' dot ', '.'))
+
+def file_request(request):
+    import re
+    if file_session is None: return "File commands are not available."
+    said, req = _said_this_turn().strip(), (request or '').strip()
+    names = re.findall(r"[\w][\w.-]*\.[A-Za-z0-9]{1,8}\b", req)
+    if not req or any(_norm_name(n) not in _norm_name(said) for n in names): req = said   # file names must be ones the user actually said
+    turn = jf._TURN['n']
+    out = file_session.handle(req, turn)
+    if out is None and req != said and said: out = file_session.handle(said, turn)
+    if out is None: return "That is not a file command the controller understood. Ask the user which file and folder, e.g. 'trash report.txt in Downloads'. Do not say you cannot do file work."
+    return out['message'] + (" (Preview only: nothing changes until the user says yes.)" if out.get('code') in ('preview', 'pending_status') else "")
+
+def code_request(request="", goal="", project=""):
+    if code_session is None: return "The coding agent is not available."
+    said, turn = _said_this_turn().strip(), jf._TURN['n']
+    if goal and project:
+        out = code_session.stage(goal, project)
+    else:
+        out = code_session.handle((request or said).strip(), turn) or (code_session.handle(said, turn) if said else None)
+    if out is None: return "That is not a coding-agent command I understood. the user can say 'have the coding agent fix the failing tests in <project>', then yes to start; later 'show the changes', 'merge it', 'undo the merge' or 'cancel the coding task'."
+    return out['message'] + (" (Staged only: nothing runs or merges until the user says yes.)" if out.get('code') == 'preview' else "")
+
+REGISTRY.update(remember_fact=remember_fact, forget_fact=forget_fact, list_memories=list_memories, file_request=file_request, code_request=code_request)
 SCHEMAS += [
     _utility_schema('remember_fact', "Save a lasting fact the user just told you or asked you to remember (his own words, short, e.g. 'my favorite team is the Sharks'). Use it when he says remember/note/keep in mind. Never for passwords, keys or card numbers.", {'text': 'string'}, ['text']),
     _utility_schema('forget_fact', "Permanently delete a saved memory when the user asks to forget, delete or remove it. 'topic' is what it is about, e.g. 'Sharks'; leave empty for 'forget that' (the most recent one). You CAN delete memories with this tool: never say you cannot.", {'topic': 'string'}, []),
     _utility_schema('list_memories', "List what you remember about the user, optionally about one topic.", {'topic': 'string'}, []),
+    _utility_schema('file_request', "Hand the user's file request to the file controller: find, list, read, move, copy, rename, create, move to the trash (recoverable), undo, empty the trash, or what changed. 'request' is his own words, with the real file and folder names. The controller shows a preview and nothing changes until the user says yes. Also for 'undo that' and 'what did you change'. NOT for changes to many files at once (organise, sort, clean up, rename or move everything of a kind): use escalate_to_planner for those. You CAN do file work: never say you cannot.", {'request': 'string'}, ['request']),
+    _utility_schema('code_request', "Use the sandboxed coding agent. For a new task pass 'goal' and 'project' (a folder under the dev folder); for show the changes, merge it, undo the merge, status or cancel the coding task pass 'request' with the user's words. Call it immediately when the user asks for code work; never just describe it. It needs the user's yes to start and a separate yes to merge. You CAN do this: never say you cannot code.", {'request': 'string', 'goal': 'string', 'project': 'string'}, []),
 ]
 
 _dispatcher = None
@@ -407,6 +440,8 @@ _SCHEMA_GROUPS = (
     (r"\bfind\b|where|locate|named|search for", ("find_files",)),
     (r"document|\bpdf\b|\bdocx?\b", ("read_document", "read_file")),
     (r"remember|forget|memor|\bdelete (?:that|it|the)\b|\berase\b|\bnoted?\b|\bsaved?\b", ("remember_fact", "forget_fact", "list_memories")),
+    (r"trash|\bbin\b|delete|remove|\bmove\b|\bcopy\b|rename|undo|empty the|get rid|throw away|folder|\bfiles?\b|sandbox|downloads|desktop|documents|what did you change", ("file_request",)),
+    (r"\bcod(?:e|ing)\b|\bbugs?\b|\btests?\b|refactor|\bscripts?\b|opus|merge|\bprojects?\b|programming|\bfix (?:the|my|this)\b", ("code_request",)),
     (r"remind|\btimer\b|\balarm\b|\btasks?\b|calendar|\bevents?\b|to-?do|schedule", ("list_planner_items", "set_reminder", "list_reminders", "cancel_reminder")),
 )
 

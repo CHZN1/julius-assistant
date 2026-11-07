@@ -129,7 +129,7 @@ class VoiceFlowTests(Base):
             out = self.say(q); self.assertEqual(out['code'], 'pending_status', q); self.assertTrue(out['message'].startswith('Not yet. I can move')); self.assertTrue(p.exists())
         self.assertEqual(self.say('Yes.')['code'], 'completed'); self.assertFalse(p.exists()); self.assertEqual(self.say('undo')['code'], 'undone')
     def test_an_unrelated_request_still_drops_the_waiting_plan(self):
-        p = self.file('report.txt', 'r'); self.say('trash report.txt in Downloads'); self.assertIsNone(self.say("what's the weather")); self.assertIsNone(self.say('yes')); self.assertTrue(p.exists())
+        p = self.file('report.txt', 'r'); self.say('trash report.txt in Downloads'); self.assertIsNone(self.say("what's the weather")); self.assertEqual(self.say('yes')['code'], 'nothing_pending'); self.assertTrue(p.exists())
     def test_a_bare_filename_answers_the_please_name_the_files_question(self):
         p = self.file('report.txt', 'r', folder=self.desktop)
         self.assertEqual(self.say('TrashReport.')['code'], 'clarification')   # "trash report in sandbox" heard without the file name or folder

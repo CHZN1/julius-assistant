@@ -29,7 +29,7 @@ def system_prompt():
     for n in ast.parse((ROOT / "julius_candidate.py").read_text()).body:
         if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "SYSTEM" for t in n.targets):
             exec(compile(ast.Module(body=[n], type_ignores=[]), "<candidate>", "exec"), ns)
-    return ns["SYSTEM"] + vision_capability_prompt(False) + jc.PLANNING_PROMPT
+    return ns["SYSTEM"] + vision_capability_prompt(False) + jc.CAPABILITIES_PROMPT + jc.PLANNING_PROMPT
 
 class Sandbox:
     """Fresh file area + planner state per run; nothing outside a temp directory is read or written."""
@@ -48,24 +48,36 @@ class Sandbox:
         self.utility = UtilitySession(Planner(self.dir / "planner"), "America/Los_Angeles", None)
         from julius_intents import LiveIntentRouter
         self.new_router = LiveIntentRouter
+        from julius_code_session import CodeSession
+        (self.dir / "dev" / "demo").mkdir(parents=True); (self.dir / "dev" / "demo" / "calc.py").write_text("def add(a, b):\n    return a - b\n")
+        self.code = CodeSession(config={"projects_root": str(self.dir / "dev")}, projects_root=str(self.dir / "dev"), sandbox=False)   # stages previews only; nothing here ever starts a run
 
-def shortcut(text, sb, ctx, turn):
+def shortcut(text, sb, ctx, turn, case_history=None):
     """What julius_candidate does before the brain: utility session, file session, then the live intent router."""
     out = sb.utility.handle(text, turn)
     if out is not None:
         return {"path": "shortcut", "tool": "utility", "args": "", "ok": bool(out.get("ok")), "detail": f"{out.get('code')}: {out.get('message', '')[:90]}"}
+    code = sb.code.handle(text, turn)
+    if code is not None:
+        if sb.code.pending: sb.code.handle("cancel", turn)   # the eval never starts a coding task
+        return {"path": "shortcut", "tool": f"code:{code.get('code')}", "args": "", "ok": bool(code.get("ok")), "detail": code.get("message", "")[:200]}
     from julius_router import route
     kind = route(text, sb.agent.root / "Documents", pending=False, has_last=False)
+    hist = case_history or []
+    sb.files.suppress_idle_yes = bool(hist and hist[-1].get("role") == "assistant" and str(hist[-1].get("content", "")).rstrip().endswith("?"))
     out = sb.files.handle(text, turn)
     if out is not None:
         label = kind[0] if kind else "?"
-        return {"path": "shortcut", "tool": f"files:{label}", "args": "", "ok": bool(out.get("ok")) or out.get("code") in ("preview",), "detail": f"{out.get('code')}: {out.get('message', '')[:90]}"}
+        return {"path": "shortcut", "tool": f"files:{label}", "args": "", "ok": bool(out.get("ok")) or out.get("code") in ("preview",), "detail": f"{out.get('code')}: {out.get('message', '')[:200]}"}
     router = sb.new_router()
     for c in ctx or []: router.record(c["fn"], c["args"], "")
     direct = router.resolve(text)
     if direct:
         return {"path": "shortcut", "tool": direct[0], "args": json.dumps(direct[1]), "ok": True, "detail": ""}
     return None
+
+import re
+DENIAL = re.compile(r"\b(?:can't|cannot|can not|unable to|not able to|am not able|don't have (?:the )?(?:ability|access|a way)|isn't something i can|no way for me)\b")
 
 def judge(case, got):
     e = case["expect"]
@@ -79,6 +91,9 @@ def judge(case, got):
     args = (got.get("args") or "").lower()
     args_ok = all(a.lower() in args for a in e.get("args_contain", []))
     success_ok = e.get("ok") is None or got.get("ok") == e["ok"]
+    detail = str(got.get("detail") or "").lower()
+    if "detail_contains" in e: success_ok = success_ok and e["detail_contains"].lower() in detail
+    if e.get("no_denial") and got["path"] == "direct" and DENIAL.search(detail): success_ok = False   # a capability Julius has must never be declined
     return path_ok, tool_ok, args_ok, success_ok
 
 def brain_turn(case, brain, tracker, system):
@@ -93,7 +108,7 @@ def brain_turn(case, brain, tracker, system):
         seconds = time.perf_counter() - t0
         usd = sum(tracker.today_by_tier().values()) - before
         if c is None:
-            return {"path": "direct", "tool": "", "args": "", "detail": (r.message.content or "")[:90].replace("\n", " "), "seconds": seconds, "usd": usd}
+            return {"path": "direct", "tool": "", "args": "", "detail": (r.message.content or "")[:220].replace("\n", " "), "seconds": seconds, "usd": usd}
         path = "escalate" if c.name == "escalate_to_planner" else "tool"
         return {"path": path, "tool": c.name, "tools": names, "args": json.dumps(dict(c.arguments)), "detail": "", "seconds": seconds, "usd": usd}
     except Exception as exc:
@@ -111,7 +126,7 @@ def main():
     sb = Sandbox()
     rows, pending = {}, []
     for i, case in enumerate(cases, 1):
-        got = shortcut(case["text"], sb, case.get("ctx"), i)
+        got = shortcut(case["text"], sb, case.get("ctx"), i, case.get("history"))
         if got: got.update(seconds=0.0, usd=0.0); rows[case["id"]] = got
         else: pending.append(case)
     skipped = set()

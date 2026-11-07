@@ -131,7 +131,9 @@ MOVE_TO_TRASH=re.compile(r'^(?:move|put|send)\s+(.+?)\s+(?:to|in|into)\s+(?:the 
 
 def parse_trash(text,root):
     """'trash notes.txt in Downloads', 'move the pdfs in Downloads to the trash': a named file, a quoted name or a file type; never 'everything'."""
-    body=re.sub(r'^(?:(?:please|can you|could you|would you)\s+)+','',text.strip(),flags=re.I).rstrip('.!')
+    body=re.sub(r'^(?:(?:please|can you|could you|would you|just|now|go ahead and|hey)[\s,]+)+','',text.strip(),flags=re.I).rstrip('.!')
+    gone=re.match(r"^(?:i (?:want|need|would like)|i'd like)\s+(.+?)\s+(?:gone|deleted|trashed|in the trash|in the bin)\b",body,re.I)
+    if gone:body='trash '+gone.group(1)
     m=MOVE_TO_TRASH.fullmatch(body) or TRASH_VERB.fullmatch(body)
     if not m:return None
     selection=m.group(1).strip()
@@ -203,6 +205,8 @@ def route(text,root,pending=False,has_last=False):
     if PLANNING_RE.search(text):return None  # organize/sort/clean-up need a plan; the Sonnet planner takes them
     trash=parse_trash(text,root)
     if trash:return ('clarify',trash) if 'clarification' in trash else ('trash',trash)
+    if re.search(r'\b(?:in|into|to)\s+(?:the |my )?(?:trash|bin|trash can)\b',text,re.I) and re.match(r'^(?:\W*(?:please|just|now|can you|could you)\s+)*(?:move|put|send|throw|drop)\b',text,re.I):
+        return ('clarify',{'clarification':'Please name the exact files, a file type like PDFs, or a quoted name. I will not guess what to throw away.'})   # the trash is never "a folder to move into"
     simple=parse_simple_request(text,root)
     if simple:return simple
     args=parse(text,root)
