@@ -83,7 +83,7 @@ class MemoryAssistant:
         if act == "undo":
             if self.undo_correction:
                 rid, old_text = self.undo_correction; self.undo_correction = None; self.store.replace(rid, old_text); self._export(); return "Okay, I've changed it back."
-            if not self.undo_rows: return "There's nothing to bring back."
+            if not self.undo_rows: return None   # nothing to restore in memory: "undo" belongs to the file agent (or the coding agent) that ran after it
             self.store.restore(self.undo_rows); n = len(self.undo_rows); self.undo_rows = None; self._export(); return "Okay, I've put it back." if n == 1 else f"Okay, I've put those {n} back."
         return None
 
