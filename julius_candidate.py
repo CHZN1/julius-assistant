@@ -959,7 +959,7 @@ q = deque(maxlen=int(30 * SR / CHUNK))
 PRE_ROLL_CHUNKS = max(4, int(round(0.50 * SR / CHUNK)))
 pre_roll = deque(maxlen=PRE_ROLL_CHUNKS)
 
-_recent_gated = deque(maxlen=int(1.0 * SR / CHUNK))   # last ~0.6 s of microphone audio while the gate was shut, so the start of what he says over Julius is not lost
+_recent_gated = deque(maxlen=int(4.0 * SR / CHUNK))   # last ~4 s (detection can lag his first words by seconds when he speaks quietly) of microphone audio while the gate was shut, so the start of what he says over Julius is not lost
 def _talked_over():
     """the user started speaking while Julius was talking: cut the speech now and listen to him."""
     if cancellation.busy.is_set():
