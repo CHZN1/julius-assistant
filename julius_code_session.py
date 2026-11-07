@@ -19,6 +19,8 @@ SHOW = re.compile(r"^(?:show|give)\s+(?:me\s+)?(?:the\s+)?(?:coding\s+)?(?:chang
 MERGE = re.compile(r"^(?:merge|apply)\s+(?:it|that|them|the\s+(?:coding\s+)?(?:changes|task|result|work)|the (?:coding|code) agent'?s? (?:changes|work))", re.I)
 UNDO_MERGE = re.compile(r"^undo\s+(?:the\s+)?(?:coding\s+)?merge", re.I)
 DISCARD = re.compile(r"^(?:discard|throw away|delete|drop)\s+(?:the\s+)?(?:coding\s+)?(?:task|changes|result|work|copy)", re.I)
+LOOSE_STATUS = re.compile(r"^(?:and\s+|so\s+|okay\s+|ok\s+)?(?:what(?:'s| is| was) (?:the )?(?:status|progress)|how(?:'s| is) (?:it|that|he|the (?:fix|task|job))(?: going| doing| coming along)|is (?:it|that|he|the (?:coding )?(?:task|agent|job)) (?:done|finished|ready|still (?:working|running))|(?:are you|is he) (?:done|finished)|any (?:news|progress|update)|how much longer)\b", re.I)
+PENDING_TTL = 90.0   # a start question stays open this long through a garbled or unrelated utterance
 FINISHED = {"done", "capped", "timeout", "failed", "cancelled"}
 
 
@@ -74,7 +76,7 @@ class CodeSession:
             task = ca.create_task(goal, name, criteria=criteria, cap_usd=cap, config=self.config, projects_root=str(self.root))
         except ca.CodeProblem as exc:
             return self._out(False, exc.code, exc.message)
-        self.task, self.pending = task, ("start", task.id)
+        self.task, self.pending, self.pending_at = task, ("start", task.id), time.monotonic()
         asked = f" You asked for ${float(cap):.2f}, which is above the limit, so I capped it." if cap and float(cap) > float(self.config["max_cap_usd"]) else ""
         message = (f"I can start a coding task on {name}: {task.goal}. It works on a copy, spends at most ${task.cap_usd:.2f} and stops after {task.timeout_s // 60} minutes. "
                    f"Nothing in the project changes unless you merge it later.{asked} Say yes to start or cancel.")
@@ -87,11 +89,13 @@ class CodeSession:
             kind, task_id = self.pending
             if YES.match(lowered): return self._confirm(kind, task_id)
             if NO.match(lowered): self.pending = None; return self._decline(kind, task_id)
+            fresh = time.monotonic() - getattr(self, "pending_at", 0.0) <= PENDING_TTL
+            if kind == "start" and fresh and len(lowered.split()) >= 7 and not text.endswith("?") and not (START.match(lowered) or CANCEL.match(lowered)): return None   # garbled / stray speech (his own preview heard back) must not lose the question; merge and discard stay strict
             self.pending = None   # an unrelated request cancels the question, as with files
         m = START.match(lowered)
         if m: return self._start_command(m.group("goal").strip())
         if CANCEL.match(lowered): return self._cancel()
-        if STATUS.search(lowered): return self._status()
+        if STATUS.search(lowered) or (LOOSE_STATUS.match(lowered) and ca.running()): return self._status()
         if UNDO_MERGE.match(lowered): return self._undo_merge()
         if SHOW.match(lowered): return self._show()
         if MERGE.match(lowered): return self._merge_preview()

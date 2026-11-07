@@ -40,6 +40,21 @@ class StageTests(FlowBase):
     def test_an_unrelated_request_drops_the_question(self):
         self.s.handle("have the coding agent FIXIT make add work in demo"); self.assertIsNone(self.s.handle("what time is it")); self.assertIsNone(self.s.handle("yes")); self.assertEqual(ca.running(), [])
 
+    def test_long_garbled_speech_does_not_lose_the_start_question_but_a_clear_question_does(self):
+        """Live regression (18:11): his own preview heard back as 18 garbled words went to Haiku and the next 'yes' found nothing pending."""
+        self.s.handle("have the coding agent FIXIT make add work in demo")
+        self.assertIsNone(self.s.handle("airlines pay differhee tickets available online via Sending eval 5000 TF spices Amtrak tickets")); self.assertEqual(self.s.handle("yes")["code"], "started")
+        ca.cancel(); [r.wait(10) for r in list(ca._RUNNING.values())]; ca._RUNNING.clear()
+        self.s.handle("have the coding agent FIXIT make add work in demo"); self.s.pending_at -= cs.PENDING_TTL + 1
+        self.assertIsNone(self.s.handle("airlines pay differhee tickets available online via Sending eval 5000 TF spices Amtrak tickets")); self.assertIsNone(self.s.handle("yes"))   # too old
+
+    def test_spoken_status_questions_reach_the_running_task(self):
+        self.s.handle("have the coding agent SLOW make add work in demo"); self.s.handle("yes")
+        for said in ("What's the status?", "How's it going?", "Is it done?", "How much longer?"): self.assertEqual(self.s.handle(said)["code"], "status", said)
+        ca.cancel()
+    def test_status_words_without_a_running_task_are_left_alone(self):
+        for said in ("What's the status?", "How's it going?"): self.assertIsNone(self.s.handle(said))
+
     def test_a_spoken_budget_is_used_and_clamped(self):
         out = self.s.handle("have the coding agent FIXIT make add work in demo with a 3 dollar limit"); self.assertIn("$3.00", out["message"])
         out = self.s.handle("have the coding agent FIXIT make add work in demo with 50 dollars"); self.assertIn("$5.00", out["message"]); self.assertIn("capped", out["message"])

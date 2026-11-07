@@ -99,8 +99,9 @@ def snapshot(folder):
     """relative path -> sha256 of every ordinary file (no git internals, no symlinks)."""
     out, folder = {}, Path(folder)
     for dirpath, dirnames, filenames in os.walk(folder):
-        dirnames[:] = [d for d in dirnames if d != ".git"]
+        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]   # caches the agent's own test runs create are not changes
         for name in filenames:
+            if name.endswith((".pyc", ".pyo")) or name == ".DS_Store": continue
             p = Path(dirpath) / name
             if not p.is_symlink() and p.is_file(): out[str(p.relative_to(folder))] = _sha(p)
     return out

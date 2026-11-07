@@ -178,3 +178,10 @@ class MergeTests(Base):
 
 
 if __name__ == "__main__": unittest.main()
+
+
+class CacheFileTests(Base):
+    def test_python_caches_are_not_changes(self):
+        """Live regression (18:14): the merge preview listed calc.cpython-312.pyc files the agent's own test run created."""
+        before = ca.snapshot(self.proj); (self.proj / "__pycache__").mkdir(); (self.proj / "__pycache__" / "app.cpython-312.pyc").write_bytes(b"x"); (self.proj / "stray.pyc").write_bytes(b"x")
+        self.assertEqual(ca.snapshot(self.proj), before)

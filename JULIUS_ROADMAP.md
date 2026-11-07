@@ -49,7 +49,7 @@ Known open items:
 - Unmeasured: service idle CPU/memory over a day, restart-after-crash, live Whisper-wake timing after sleep.
 - Reminders/calendar polish.
 
-## Phase C: Agents: built 2026-11-06, live voice test pending
+## Phase C: Agents: COMPLETE 2026-11-06 (live voice tests passed after fixes)
 
 Julius is the orchestrator; agents are sub-agents dispatched and supervised by the Sonnet planner. Build order:
 
@@ -99,7 +99,7 @@ Vision branch (beyond emotion detection), hosted version with subscriptions.
 - **Known limits:** network is port 443 only, not host-restricted, so code the agent runs could still reach any HTTPS host (it holds no secrets to send except the project copy); the stop hotkey stops speech, not a running coding task (say "cancel the coding task"); a task cannot see other projects, so cross-project work is out of scope.
 
 ### Phase C status (2026-11-06)
-Built, unit-tested (588 tests) and evaluated: file agent 43/43 (free), planner eval 25/25 clean runs (paid, $0.27), coding agent eval 5/5 (paid, $0.25). **Not yet marked complete:** the live voice test of the file agent sandbox commands and the coding agent (fix, show, merge, undo) has not been recorded; the log showed no test activity after the 14:34 restart. Headless checks of the same session classes on the real config passed (demo.wav refused, "Documents" asks which project, a coding preview and cancel). Phase C completes when the user's five live results are in.
+Built, unit-tested (588 tests) and evaluated: file agent 43/43 (free), planner eval 25/25 clean runs (paid, $0.27), coding agent eval 5/5 (paid, $0.25). **Complete (2026-11-06).** Live voice tests by the user: sandbox trash, yes and undo worked; the coding agent fixed demo_calc, showed, merged (own yes) and undid the merge. Live failures found and fixed on the way: glued wake word and ASR splits, status question dropping a pending plan, name-only trash blocked by "in the trash", bare 'undo' swallowed by the memory handler, spoken 'yes' dropped as self-echo after 'say yes to confirm', task folder under ~/.julius making every Edit fail (eval now runs at the real location), status question not recognised, garbled speech cancelling a pending start, .pyc caches listed in merge previews. Final numbers: 616 unit tests, routing 97.0% (131/135), file agent 100%, coding agent eval 5/5 ($0.21), planner eval 25/25. Known: a long garbled transcript of Julius's own voice can still slip past the echo filter and reach Haiku (dropped turns are now logged with a reason).
 
 **Known limitations**
 - Coding agent network: the sandbox allows outbound port 443 to any host (the seatbelt cannot filter by hostname). Later: restrict it to the Anthropic API with a local allow-list proxy (CONNECT proxy on localhost, sandbox allows only that port). The agent holds no secrets, but code it runs could reach any HTTPS site.
