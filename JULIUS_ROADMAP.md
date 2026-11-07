@@ -149,3 +149,8 @@ Baseline from the 10 recorded conversations (38 turns; takes were recorded acros
   1. out.wav is stamped when audio is WRITTEN to the device; the real playback lags that by 0.4 s mid-reply and about 1.8 s when the output stream has just reopened, so the reference is misaligned.
   2. The laptop speaker-to-microphone coupling is weak (echo about 0.005 against 0.1 played), only 10x above the noise floor, and the user's quiet voice is 0.005-0.014: the same level as the echo.
   Next: callback-timed playback so the reference is sample-accurate, then a controlled self-test (Julius speaks, microphone records) before asking the user to re-record.
+
+### F3a self-test result (2026-11-07)
+`diagnostics/aec_selftest.py`: Julius's recorded voice played through ONE duplex audio stream (microphone and speaker on the same device clock), the reference being the exact block handed to the speaker.
+Result: coupling 0.068 (echo 0.0075 against 0.11 played), WebRTC AEC3 echo return loss enhancement 28.7 dB, residual 0.0003 (below the 0.0008 noise floor and the 0.0045 speech threshold), stable over 50 s.
+So echo cancellation works once the reference is sample-aligned; the recording misalignment, not the canceller, was the problem. Build: duplex stream at 16 kHz (TTS 24 kHz resampled), SpeechPlayer feeding the speaker side of the callback, cleaned microphone into the existing queue, the gate dropped, talk-over = speech detector on the cleaned signal. Behind `audio.duplex` until verified live.
