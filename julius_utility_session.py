@@ -40,8 +40,9 @@ class UtilitySession:
         low=t.lower()
         pending=self.pending
         self.pending=None  # Unrelated turns cannot leave a generic yes armed.
-        if pending and low in {'yes','yes please','confirm','cancel','no'}:
-            if low in {'cancel','no'}:return output(True,'cancelled','Calendar draft discarded. No event was added.')
+        import julius_confirm
+        if pending and (low in {'yes','yes please','confirm','cancel','no'} or julius_confirm.is_yes(low) or julius_confirm.is_no(low)):
+            if low=='cancel' or julius_confirm.is_no(low):return output(True,'cancelled','Calendar draft discarded. No event was added.')
             if turn<=pending['turn'] or self.planner.clock()-pending['created']>900:
                 return output(False,'expired','That calendar preview has expired. Please request it again.')
             return self._add('event',pending['title'],pending['due'],pending['end'],pending.get('zone'))

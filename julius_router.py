@@ -5,6 +5,7 @@ PLANNING_RE=re.compile(r'\b(?:organi[sz]e|sort|tidy|clean(?:\s|-)?up|declutter|c
 MOVE_RE=re.compile(r'\b(move|organize|organise|tidy|archive|put|sort|copy)\b',re.I)
 FILEWORD=re.compile(r'\b(file|files|csvs?|notebooks?|pdfs?|images?|docs?|scripts?|everything|photos?|pictures?|documents?)\b',re.I)
 UNDO=re.compile(r'^\s*(?:please\s+)?(?:undo(?:\s+(?:that|the last (?:move|copy|change)|last))?|revert the last (?:move|change)|put (?:them|it) back)\s*[.!]?\s*$',re.I)
+import julius_confirm
 CANCEL=re.compile(r'^\s*(?:no|nope|cancel(?: that| the (?:plan|move|copy))?|never mind|nevermind|stop)\s*[.!]?\s*$',re.I)
 APPROVE=re.compile(r'^\s*(?:yes|yeah|yep|yup|do it|go ahead|approve|approved|confirm|sure|okay|ok|sounds good|move them|copy them|proceed|execute|go for it)(?:[, ]+\s*(?:please|go ahead|do it))?(?:[.!])?\s*$',re.I)
 RESUME=re.compile(r'^\s*(?:show (?:(?:the|that) )?(?:last )?plan|resume (?:the|that|last) plan|go back to (?:the|that|last) plan)\s*[.!]?\s*$',re.I)
@@ -45,12 +46,12 @@ def _clean_folder(phrase):
     text=re.sub(r'\s+(?:folder|directory)$','',text,flags=re.I)
     return text.strip().strip('"').strip("'")
 
-_GLUED_VERB=re.compile(r'^((?i:trash|delete|remove|move|copy|rename|show|list|find|read|open|put|send))(?=[A-Z])')
+_GLUED_VERB=re.compile(r'^((?i:trash|delete|remove|move|copy|rename|show|list|find|read|open|put|send))(?=[A-Z])|^((?i:trash|delete|remove))(?=[a-z0-9_-]{3,}\.[A-Za-z0-9]{1,5}\b)')
 def clean_asr(text):
     """Repair common transcription artefacts before a second routing attempt: commas between words ("trash, report.txt, in sandbox"), a command verb glued to the
     next word ("TrashReport.txt"), runs of spaces. The original text is always tried first."""
     from julius_listening import strip_leading_wake
-    out=_GLUED_VERB.sub(lambda m:m.group(1)+' ',strip_leading_wake(text.strip()))
+    out=_GLUED_VERB.sub(lambda m:(m.group(1) or m.group(2))+' ',strip_leading_wake(text.strip()))
     out=re.sub(r'\s*[,;]\s+',' ',out)
     return re.sub(r'\s+',' ',out).strip()
 
@@ -196,9 +197,9 @@ def parse_simple_request(text,root):
 def route(text,root,pending=False,has_last=False):
     text=norm(text)
     if UNDO.fullmatch(text):return ('undo',None)
-    if pending and CANCEL.fullmatch(text):return ('cancel',None)
+    if pending and (CANCEL.fullmatch(text) or julius_confirm.is_no(text)):return ('cancel',None)
     if has_last and RESUME.fullmatch(text):return ('resume',None)
-    if pending and APPROVE.fullmatch(text):return ('approve',None)
+    if pending and (APPROVE.fullmatch(text) or julius_confirm.is_yes(text)):return ('approve',None)
     if EMPTY_TRASH.fullmatch(text):return ('empty_trash',None)
     if TRASH_INFO.fullmatch(text):return ('trash_info',None)
     if FILE_HISTORY.fullmatch(text):return ('history',{'today':bool(re.search(r'\btoday\b',text,re.I))})

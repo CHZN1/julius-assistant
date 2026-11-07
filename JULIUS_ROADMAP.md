@@ -131,3 +131,11 @@ Built, unit-tested (588 tests) and evaluated: file agent 43/43 (free), planner e
 - The stop hotkey does not cancel a coding task (by decision); say "cancel the coding task".
 - Opus 5.5 pricing is not in `julius_costs.RATES`; coding spend uses the dollar figure the CLI reports.
 - "what did you change today" now says so when nothing changed today (fixed 2026-11-06); before it listed the last change whatever its date.
+
+
+### Voice recording findings, 2026-11-07 (first six conversations) and fixes
+- Saying "stop" over Julius did nothing: the microphone is shut while he speaks and voice barge-in was off. Fixed: talk-over detector (julius_talkover.py) stops speech when the user speaks over it; a bare "stop" gets no reply. Still level-based, not echo cancellation (F3a), so loud playback with a quiet voice may be missed; the hotkey remains.
+- "Nah" / "Sure, go for it" were not recognised as answers to a pending plan, and a glued "Trashnotes.txt" skipped the file agent, so Haiku improvised a nonexistent tool and the failed call left the history malformed (every later turn got a 400). Fixed: julius_confirm.py shared by file/code/calendar, lowercase glue repair, unknown tools answered instead of spoken, history repaired each turn.
+- A 2 s pause split "what time is it in London" into fragments. Fixed: dangling transcripts wait up to 4 s for the rest.
+- "Thanks, go to sleep" did not sleep. Fixed: courtesy words tolerated.
+- Long sentences stuttered (about 30 underflows in one story). Fixed by speaking clauses of up to about 110 characters; not yet re-measured on a recording.

@@ -43,11 +43,38 @@ def strip_leading_wake(text):
     """Drop a leading wake word from a request spoken while already awake; a bare wake word is left as is."""
     if WAKE_GLUED.match(text):return WAKE_GLUED.sub('',text,count=1).strip()
     return strip_wake(text) if has_wake(text) and strip_wake(text) else text
+_DANGLE_ALWAYS={'the','a','an','and','or','but','my','your','of','in','at','with','from','into','than','because','if','so','then','also','plus','between','his','her','their','our'}
+_DANGLE_SHORT={'to','for','about','on','by','me'}
+_STUBS={'tell me','show me','give me','can you','could you','would you','i want','i need','i would like','what is','whats','how do','how do i','remind me','set a','add a','let me know','what about','and what','please'}
+def dangling(text):
+    """True when the transcript stops mid-sentence ("what time is it in", "tell me"): the rest is probably coming after a pause."""
+    t=re.sub(r"[^\w\s']",'',(text or '').lower()).strip()
+    words=t.split()
+    if not words:return False
+    if t in _STUBS:return True
+    if words[-1] in _DANGLE_ALWAYS:return True
+    return words[-1] in _DANGLE_SHORT and len(words)<=3
 def incomplete_fragment(text):
     return re.sub(r'[^\w\s]','',text.lower()).strip() in {'you','the','and','but','because','so i','i was','can you','could you'}
+_LEAD_COURTESY=re.compile(r'^(?:thanks|thank you|okay|ok|alright|all right|great|cool|nice|good|perfect|right|well|and|so|um|uh)\s+')
+_TAIL_COURTESY=re.compile(r'\s+(?:now|please|julius|for now|for today|for tonight|thanks|thank you)$')
+def control_core(text):
+    """The command with courtesy words removed: "Thanks, go to sleep now" -> "go to sleep"."""
+    command=re.sub(r'[^\w\s]',' ',strip_wake(text).lower());command=re.sub(r'\s+',' ',command).strip()
+    while _LEAD_COURTESY.search(command):command=_LEAD_COURTESY.sub('',command,count=1)
+    while _TAIL_COURTESY.search(command):command=_TAIL_COURTESY.sub('',command,count=1)
+    return command
+_STOP_ONLY={'stop','stop it','stop talking','stop stop','be quiet','quiet','shut up','enough','that is enough','thats enough','hold on','wait','pause','stop that','stop right there'}
+_STOP_LEAD=re.compile(r"^(?:okay |ok )?(?:stop|wait|hold on)(?: it| talking)?[.,!]?\s+(?=\S+\s+\S)",re.I)
+def stop_only(text):
+    """"Stop." / "Be quiet." spoken over Julius: he has already stopped, so there is nothing to answer."""
+    return control_core(text) in _STOP_ONLY
+def drop_stop_lead(text):
+    """"Stop. What's the weather in Springfield?" -> "What's the weather in Springfield?" """
+    return _STOP_LEAD.sub('',text.strip(),count=1) if _STOP_LEAD.match(text.strip()) else text
 def listening_control(text):
-    command=re.sub(r'[^\w\s]','',strip_wake(text).lower()).strip()
-    if command in {'sleep','go to sleep','go back to sleep','stop listening'}:return 'sleep'
+    command=control_core(text)
+    if command in {'sleep','go to sleep','go back to sleep','stop listening','time to sleep','you can sleep','you can go to sleep'}:return 'sleep'
     if command in {'wake','wake up'}:return 'wake'
     return None
 

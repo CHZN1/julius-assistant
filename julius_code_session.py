@@ -8,6 +8,7 @@ from pathlib import Path
 import julius_code_agent as ca
 from julius_file_agent import result
 
+import julius_confirm
 YES = re.compile(r"^(?:yes|yeah|yep|yup|ok|okay|sure|go ahead|do it|confirm|confirmed|start it|merge it|apply it|please do)\b", re.I)
 NO = re.compile(r"^(?:no|nope|nah|cancel|never ?mind|don'?t|do not|stop|discard)\b", re.I)
 START = re.compile(r"^(?:please\s+)?(?:(?:ask|tell|have|get|let)\s+(?:the\s+)?(?:coding|code)\s+agent\s+(?:to\s+)?|(?:start|run|begin)\s+(?:a\s+)?(?:coding|code)\s+task\s*(?:to|that|:)?\s*)(?P<goal>.+)$", re.I)
@@ -87,8 +88,8 @@ class CodeSession:
         text = " ".join(text.strip().split()); lowered = text.rstrip(".!?").strip()
         if self.pending:
             kind, task_id = self.pending
-            if YES.match(lowered): return self._confirm(kind, task_id)
-            if NO.match(lowered): self.pending = None; return self._decline(kind, task_id)
+            if YES.match(lowered) or julius_confirm.is_yes(lowered): return self._confirm(kind, task_id)
+            if NO.match(lowered) or julius_confirm.is_no(lowered): self.pending = None; return self._decline(kind, task_id)
             fresh = time.monotonic() - getattr(self, "pending_at", 0.0) <= PENDING_TTL
             if kind == "start" and fresh and len(lowered.split()) >= 7 and not text.endswith("?") and not (START.match(lowered) or CANCEL.match(lowered)): return None   # garbled / stray speech (his own preview heard back) must not lose the question; merge and discard stay strict
             self.pending = None   # an unrelated request cancels the question, as with files

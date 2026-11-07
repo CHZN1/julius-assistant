@@ -27,7 +27,7 @@ from julius_code_session import CodeSession
 import julius_code_agent
 from julius_utility_session import UtilitySession
 from julius_apple import AppleProvider
-from julius_listening import has_wake, strip_wake, strip_leading_wake, listening_control,incomplete_fragment,CaptureClock
+from julius_listening import has_wake, strip_wake, strip_leading_wake, listening_control,incomplete_fragment,dangling,stop_only,drop_stop_lead,CaptureClock
 from julius_audio_output import ready_output
 from julius_microphone_gate import MicrophoneGate
 from julius_conversation import conversation_messages, authority_discussion_reply
@@ -226,6 +226,7 @@ if os.environ.get('JULIUS_MLX_BRAIN_PREPARE')=='1':
     print('preparing native reasoning; weights will unload before voice...',flush=True)
     prepare_backend()
 print("loading speech engine...", flush=True)
+_talkover = None
 tts = SpeechEngine()
 tts.cancel_event=cancellation.event
 speech_player = None
@@ -235,6 +236,14 @@ if tts.backend == 'qwen-mlx':  # one persistent output stream, prefill and under
                                  latency=float(os.environ.get('JULIUS_AUDIO_LATENCY', '0.4')))
     microphone_gate.cover_output_latency(speech_player.latency)
     if _rec is not None: speech_player.tap = _rec.out
+    if not _validation_no_devices and (_asr_cfg.load_config().get('barge_in') or {}).get('voice', True):
+        from julius_talkover import TalkOver
+        _talkover = TalkOver()
+        _tap_rec = speech_player.tap
+        def _tap_both(audio, rate):
+            _talkover.out(audio, rate)
+            if _tap_rec is not None: _tap_rec(audio, rate)
+        speech_player.tap = _tap_both
 
 def stop_now(source='hotkey'):
     """Stop generation and speech immediately (global hotkey, typed /stop)."""
@@ -249,7 +258,7 @@ QUIET_HOTKEY=(julius_config.load_config().get('service') or {}).get('wake_hotkey
 _wake_listener=None
 def wants_quiet(t):
     """'go to sleep' means quiet mode (detector fully off until the wake hotkey) when that hotkey can be pressed; otherwise it stays an ordinary sleep."""
-    return _wake_listener is not None and re.sub(r'[^\w\s]','',(t or '').lower()).strip() in {'go to sleep','go back to sleep'}
+    from julius_listening import control_core;return _wake_listener is not None and control_core(t or '') in {'go to sleep','go back to sleep'}
 def sleep_line(t):
     return f'Going quiet. Press {QUIET_HOTKEY.replace("<ctrl>","Control").replace("<alt>","Option").replace("+"," ").title().replace("J","J")} to wake me.' if wants_quiet(t) else 'Alright. Say Julius when you need me.'
 def enter_quiet():
@@ -300,7 +309,23 @@ if _ctx.strip():
 history = [{"role": "system", "content": SYSTEM}]
 
 
+def split_long_sentence(p, limit=110):
+    """The voice slows down on long sentences (the s06 story stuttered on every chunk). Speak clauses of about `limit` characters instead; the stream stays open between them."""
+    p = (p or "").strip()
+    if len(p) <= limit: return [p]
+    pieces, cur = [], ""
+    for clause in re.split(r"(?<=[,;:\u2014])\s+|\s+(?=(?:and|but|so|because|while|which|until|then)\s)", p):
+        if cur and len(cur) + 1 + len(clause) > limit: pieces.append(cur); cur = clause
+        else: cur = f"{cur} {clause}".strip()
+    if cur: pieces.append(cur)
+    return pieces
+
+
 def speak_sentence(p):
+    parts = (globals().get('split_long_sentence') or (lambda x: [x]))(p)
+    if len(parts) > 1:
+        for part in parts: speak_sentence(part)
+        return
     from contextlib import nullcontext
     gate=globals().get('microphone_gate')
     with gate.output() if gate is not None else nullcontext():
@@ -371,6 +396,25 @@ def _print_tool(fn, out):
         print(f"  [-> {out[:300]}]", flush=True)
 
 
+HOLD_SECONDS = 4.0
+
+
+def repair_history(h):
+    """Drop tool calls that have no matching tool result (and stray results): the API rejects the whole conversation otherwise, and every later turn fails."""
+    out, i = [], 0
+    while i < len(h):
+        m = h[i]
+        if m.get("tool_calls"):
+            n = len(m["tool_calls"]); results = []
+            j = i + 1
+            while j < len(h) and h[j].get("role") == "tool": results.append(h[j]); j += 1
+            if len(results) >= n: out.append(m); out.extend(results)
+            i = j; continue
+        if m.get("role") == "tool": i += 1; continue
+        out.append(m); i += 1
+    h[:] = out
+
+
 def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_inference=None):
     from julius_conversation import voice_capability_reply
     # A turn that used a tool carries tools into the next one, so follow-ups ("and in Shelbyville?") always have them.
@@ -394,6 +438,8 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
     # Recalled notes go only to the model (router and tool hints keep seeing the plain request), and not into the stored history.
     _notes = memory.block(user_text) if globals().get('memory') is not None else ''
 
+    if globals().get('repair_history'): repair_history(history)
+    globals()['_unknown_tool_retried'] = False
     msgs = list(history) + [{"role": "user", "content": user_text + (f"\n\n{_notes}" if _notes else "")}]
     globals()['_turn_msgs'] = (msgs, len(msgs))  # process() keeps this turn's tool exchange in the history
     # The cloud brain gets the full tool list on every turn: keyword hints can miss a garbled or oblique request
@@ -515,6 +561,16 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
             if not any(ok for _, ok in batch):
                 out = batch[0][0]
                 _print_tool(calls[0].function.name, out)
+                unknown = [c.function.name for c, (o, _) in zip(calls, batch) if o.startswith(f"{c.function.name} failed: KeyError")]
+                for c, (o, _) in zip(calls, batch):   # every tool call gets a result, or the next request is rejected as malformed
+                    msgs.append({"role": "tool", "name": c.function.name, "content": o})
+                if unknown and not globals().get('_unknown_tool_retried'):
+                    # The model invented a tool name. Tell it so and let it answer another way; never read "KeyError" aloud.
+                    globals()['_unknown_tool_retried'] = True
+                    msgs[-1]["content"] = f"There is no tool named {unknown[0]}. Answer without it, or say plainly that you can't do that."
+                    continue
+                if unknown: out = "Sorry, I couldn't do that one."
+                globals()['_unknown_tool_retried'] = False
                 if speak_fn: speak_fn(out)
                 return out
             for c, (out, ok) in zip(calls, batch):
@@ -880,10 +936,25 @@ q = deque(maxlen=int(30 * SR / CHUNK))
 PRE_ROLL_CHUNKS = max(4, int(round(0.50 * SR / CHUNK)))
 pre_roll = deque(maxlen=PRE_ROLL_CHUNKS)
 
+_recent_gated = deque(maxlen=int(0.6 * SR / CHUNK))   # last ~0.6 s of microphone audio while the gate was shut, so the start of what he says over Julius is not lost
+def _talked_over():
+    """the user started speaking while Julius was talking: cut the speech now and listen to him."""
+    print('  [you spoke over Julius: stopping]', flush=True)
+    globals().get('_rec_event', lambda *a, **k: None)("talk_over")
+    stop_now('voice')
+    microphone_gate.force_open()
+    for c in list(_recent_gated): q.append((c, time.perf_counter()))
+    _recent_gated.clear()
+
 def cb(indata, n, t, s):
     _r = globals().get('_rec')
     if _r is not None: _r.mic(indata[:, 0])
     if microphone_gate.accepting():q.append((indata[:, 0].copy(),time.perf_counter()))
+    elif globals().get('_talkover') is not None and cancellation.busy.is_set() and not microphone_gate.quiet:
+        _recent_gated.append(indata[:, 0].copy())
+        try:
+            if _talkover.mic(indata[:, 0]): _talked_over(); _talkover.triggered = False
+        except Exception: pass
 
 typed = deque()
 _scripted = os.environ.get("JULIUS_VALIDATION_SCRIPT")
@@ -1004,6 +1075,11 @@ with microphone_stream():
                 awake_until = time.time() + SESSION_SEC
                 continue
 
+            _h = globals().get('_held')
+            if _h and not recording and not q and time.time() - _h['t'] > HOLD_SECONDS:   # nothing more came: answer what he said
+                globals()['_held'] = None
+                process(_h['text'], 'en'); q.clear(); awake_until = time.time() + SESSION_SEC
+                continue
             if awake and not recording:
                 n_emo = eyes.check_nudge()
                 if n_emo:
@@ -1111,6 +1187,16 @@ with microphone_stream():
                     else:
                         if wake_engine is not None and has_wake(text): wake_engine.note_spoken_wake(text)
                         text = strip_leading_wake(text)  # "Julius, what about tomorrow?" while awake must still reach the follow-up router
+                    _h = globals().get('_held')
+                    if _h and time.time() - _h['t'] <= HOLD_SECONDS:   # the rest of a sentence he paused in
+                        text = f"{_h['text']} {text}".strip(); globals()['_held'] = None
+                        globals().get('_rec_event', lambda *a, **k: None)("merge", text=text)
+                    elif _h: globals()['_held'] = None
+                    if dangling(text) and not listening_control(text):
+                        globals()['_held'] = {'text': text, 't': time.time()}; awake_until = time.time() + SESSION_SEC
+                        globals().get('_rec_event', lambda *a, **k: None)("hold", text=text)
+                        print(f'  [waiting for the rest of the sentence ({len(text.split())} words so far)]', flush=True)
+                        q.clear(); continue
                     control = listening_control(text)
                     if control:
                         awake_until = 0.0 if control == 'sleep' else time.time() + SESSION_SEC
@@ -1128,6 +1214,10 @@ with microphone_stream():
                             except TurnCancelled:print('  [response stopped]',flush=True)
                             q.clear(); continue
 
+                    if stop_only(text) and not getattr(_file_session, 'pending', None) and not _code_session.pending:
+                        print('  [stopped]', flush=True); globals().get('_rec_event', lambda *a, **k: None)("stop_word", text=text)
+                        q.clear(); awake_until = time.time() + SESSION_SEC; continue
+                    text = drop_stop_lead(text)
                     process(text, lang)
                     q.clear()
                     awake_until = time.time() + SESSION_SEC

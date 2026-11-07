@@ -1,0 +1,95 @@
+"""Regression tests for what the first voice recording showed (2026-11-07)."""
+import sys, unittest, re
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import numpy as np
+from julius_confirm import is_yes, is_no
+from julius_listening import dangling, listening_control, stop_only, drop_stop_lead
+from julius_router import clean_asr, route
+from julius_talkover import TalkOver
+from julius_microphone_gate import MicrophoneGate
+
+
+class Confirmations(unittest.TestCase):
+    def test_natural_yes(self):
+        for t in ["Sure, go for it.", "yeah", "Yeah, do it please", "okay", "Absolutely.", "sounds good", "yes please"]: self.assertTrue(is_yes(t), t)
+
+    def test_natural_no(self):
+        for t in ["Nah.", "No thanks", "nope", "never mind", "leave it", "Don't", "cancel"]: self.assertTrue(is_no(t), t)
+
+    def test_mixed_answers_are_not_bare(self):
+        for t in ["yes but only the old ones", "no wait I meant the other file", "what time is it", "undo that"]: self.assertFalse(is_yes(t) or is_no(t), t)
+
+    def test_router_uses_them_when_pending(self):
+        self.assertEqual(route("Sure, go for it.", Path("/tmp"), pending=True)[0], "approve")
+        self.assertEqual(route("Nah.", Path("/tmp"), pending=True)[0], "cancel")
+        self.assertNotIn(route("Nah.", Path("/tmp"), pending=False), [("cancel", None)])
+
+
+class AsrGlue(unittest.TestCase):
+    def test_lowercase_glued_trash_with_filename(self):
+        self.assertEqual(clean_asr("Trashnotes.txt in Sandbox."), "Trash notes.txt in Sandbox.")
+        self.assertIn(route(clean_asr("Trashnotes.txt in Sandbox."), Path("/tmp/x"))[0], ("trash", "clarify"))
+
+    def test_other_words_untouched(self):
+        self.assertEqual(clean_asr("Trashcan stuff"), "Trashcan stuff")
+
+
+class Sleep(unittest.TestCase):
+    def test_courtesies_around_sleep(self):
+        for t in ["Thanks, go to sleep.", "Go to sleep.", "Julius, go to sleep now", "okay go to sleep please"]: self.assertEqual(listening_control(t), "sleep", t)
+        self.assertIsNone(listening_control("thanks"))
+        self.assertIsNone(listening_control("what does sleep do"))
+
+
+class Fragments(unittest.TestCase):
+    def test_dangling(self):
+        for t in ["what time is it in?", "Tell me.", "show me the", "what is the weather in"]: self.assertTrue(dangling(t), t)
+        for t in ["What about tomorrow?", "Thanks.", "a fun fact about octopuses", "what is that used for"]: self.assertFalse(dangling(t), t)
+
+
+class StopWords(unittest.TestCase):
+    def test_stop(self):
+        for t in ["Stop.", "Okay, stop!", "be quiet", "hold on"]: self.assertTrue(stop_only(t), t)
+        self.assertFalse(stop_only("stop the music in the playlist"))
+        self.assertEqual(drop_stop_lead("Stop. What's the weather in Springfield?"), "What's the weather in Springfield?")
+        self.assertEqual(drop_stop_lead("stop it"), "stop it")
+
+
+class TalkOverDetector(unittest.TestCase):
+    def feed(self, det, mic_level, out_level, seconds):
+        fired = False
+        for _ in range(int(seconds / 0.1)): fired = det.update(mic_level, out_level, 0.1) or fired
+        return fired
+
+    def test_echo_alone_never_triggers(self):
+        d = TalkOver(); self.assertFalse(self.feed(d, 0.005, 0.15, 10))
+
+    def test_speaking_over_playback_triggers(self):
+        d = TalkOver(); self.feed(d, 0.004, 0.15, 3); self.assertTrue(self.feed(d, 0.03, 0.15, 0.6))
+
+    def test_speaking_in_a_gap_between_sentences_triggers(self):
+        d = TalkOver(); self.assertTrue(self.feed(d, 0.03, 0.0, 0.6))
+
+    def test_a_click_does_not(self):
+        d = TalkOver(); self.assertFalse(self.feed(d, 0.05, 0.1, 0.1))
+
+    def test_loud_speech_in_a_gap_does_not_corrupt_the_echo_estimate(self):
+        d = TalkOver(); self.feed(d, 0.05, 0.0, 2); self.assertLessEqual(d.ratio, 0.10)
+
+    def test_mic_blocks_are_pooled(self):
+        d = TalkOver(); fired = False
+        for _ in range(12): fired = d.mic(np.full(1024, 0.04, dtype=np.float32)) or fired
+        self.assertTrue(fired)
+
+
+class GateForceOpen(unittest.TestCase):
+    def test_force_open_listens_at_once_and_clears_on_next_playback(self):
+        g = MicrophoneGate()
+        with g.output():
+            self.assertFalse(g.accepting()); g.force_open(); self.assertTrue(g.accepting())
+        with g.output(): self.assertFalse(g.accepting())
+
+
+if __name__ == "__main__":
+    unittest.main()

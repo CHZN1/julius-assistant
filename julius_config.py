@@ -18,7 +18,7 @@ DEFAULTS = {
     "service": {"wake_hotkey": "<ctrl>+<alt>+j", "log_transcripts": False},
     "code": {"model": "claude-opus-5-5", "default_cap_usd": 1.5, "max_cap_usd": 5.0, "timeout_minutes": 20, "daily_cap_usd": 5.0, "projects_root": "~/dev", "binary": "claude"},
     "files": {"folders": {"Documents": "write", "Desktop": "write", "Downloads": "write"}},
-    "barge_in": {"hotkey": "<ctrl>+<alt>+s", "voice": False},
+    "barge_in": {"hotkey": "<ctrl>+<alt>+s", "voice": True},
     "wake": {"engine": "whisper", "threshold_low": 0.05, "level_floor": 0.0015, "speaker_threshold": 0.25, "verifier": "~/.julius/wake_verifier.pkl"},
     "asr": {"vocabulary_hint": True,
             "vocabulary": ["Julius", "AcmeCorp", "Pat Example", "FER 2013", "Ethereum", "ETH", "Bitcoin", "NHL", "NFL", "MLB", "WNBA", "Springfield", "Shelbyville"],
