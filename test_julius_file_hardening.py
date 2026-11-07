@@ -200,7 +200,7 @@ class PermissionTests(Base):
         extra = self.root / 'sandbox'; extra.mkdir(); (extra / 'report.txt').write_text('r')
         a = self.agent_with(Documents='write', **{str(extra): 'write'})
         try:
-            for said in ('trash report.txt in sandbox', 'trash report.txt in sand box', 'Trash Report.txt in Sandbox.', 'trash, report.txt, in sandbox.', 'TrashReport.txt in sandbox', 'trash report dot txt in the sandbox folder', 'Julius, trash report.txt in sandbox', 'JuliusTrashReport.txt in sand box', 'Hey Julius, trash, report.txt, in sandbox.'):
+            for said in ('trash report.txt in sandbox', 'trash report.txt in sand box', 'Trash Report.txt in Sandbox.', 'trash, report.txt, in sandbox.', 'TrashReport.txt in sandbox', 'trash report dot txt in the sandbox folder', 'Julius, trash report.txt in sandbox', 'JuliusTrashReport.txt in sand box', 'Hey Julius, trash, report.txt, in sandbox.', 'I want report.txt gone, just put it in the trash', 'put report.txt in the trash', 'move report.txt to the bin'):
                 session = FileSession(a); out = session.handle(said, 1)
                 self.assertTrue(out and out['code'] == 'preview', (said, out)); self.assertEqual(Path(out['data']['plan']['ops'][0]['from']).name.lower(), 'report.txt', said); a.cancel(session.pending)
         finally: julius_router.EXTRA_FOLDERS.clear()

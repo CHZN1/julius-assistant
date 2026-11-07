@@ -10,6 +10,7 @@ FOLLOW_UP=re.compile(r"^(?:(?:oh|um|uh|er|no|well|it'?s|its|that'?s|i meant|i sa
 BARE_YES=re.compile(r"^(?:(?:yes|yeah|yep|yup|sure|absolutely|definitely)(?:[\s,]+(?:please|do it|go ahead))?|(?:please\s+)?do it|go ahead|please do|confirm(?:ed)?|yes please)\s*[.!]*$",re.I)
 NOTHING_WAITING="There's nothing waiting for a yes right now. What would you like me to do?"
 TRASHY=re.compile(r"^\W*(?:please\s+)?(?:trash|bin|delete|remove|throw away|get rid of)\b",re.I)
+TRASH_PHRASE=re.compile(r"\b(?:in|into|to)\s+(?:the |my )?(?:trash(?: can)?|bin)\b",re.I)
 FOLDER_WORDS=re.compile(r"\b(?:in|inside|from|on)\b",re.I)
 
 class FileSession:
@@ -82,7 +83,7 @@ class FileSession:
         elif kind=='trash':
             if self.pending:self.agent.cancel(self.pending)
             out=self.agent.propose('trash',source=args['source'],pattern=args['pattern'],origin='human',turn=turn)
-            if not out['ok'] and out.get('code') in ('no_matches','not_found') and not FOLDER_WORDS.search(text) and not any(c in args['pattern'] for c in '*?['):
+            if not out['ok'] and out.get('code') in ('no_matches','not_found','outside_scope') and not FOLDER_WORDS.search(TRASH_PHRASE.sub('',text)) and not any(c in args['pattern'] for c in '*?['):
                 homes=[f for f,mode in self.agent.modes.items() if mode=='write' and f.is_dir()]   # no folder was named: look for that exact name in every folder Julius may change
                 hits=[f for f in homes if self.agent.find(pattern=args['pattern'],source=str(f),recursive=False)['data'].get('items')]
                 if len(hits)==1:out=self.agent.propose('trash',source=str(hits[0]),pattern=args['pattern'],origin='human',turn=turn)
