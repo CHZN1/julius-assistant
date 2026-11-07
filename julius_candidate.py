@@ -397,6 +397,7 @@ def _print_tool(fn, out):
 
 
 HOLD_SECONDS = 4.0
+META_LEAK = re.compile(r"\b(?:length guidance|no tools? (?:needed|required|necessary)|system prompt|my instructions|per my instructions|the guidance)\b", re.I)
 
 
 def repair_history(h):
@@ -505,6 +506,7 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
                     if not mt:
                         break
                     sent, pend = pend[:mt.end()].strip(), pend[mt.end():]
+                    if globals().get("META_LEAK") and META_LEAK.search(sent): sent = ""   # the model narrating its own instructions ("the length guidance gives way", "no tools needed") is never spoken
                     if len(sent) > 2:
                         spoken += 1
                         print(sent, end=" ", flush=True)     # print BEFORE speaking

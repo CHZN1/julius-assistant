@@ -31,7 +31,7 @@ log_transcripts = false         # JSON log in ~/Library/Logs/Julius redacts what
 
 [barge_in]
 hotkey = "<ctrl>+<alt>+s"      # global stop: silences Julius at once, whatever the microphone hears. macOS asks once to allow input monitoring for the terminal
-voice = false                  # spoken barge-in over the speakers; stays off until it meets the eval targets (evals/bargein_eval.py)
+voice = true                   # spoken stop: speaking over Julius cuts his speech (julius_talkover.py); the hotkey always works
 
 [wake]
 engine = "cascade"             # "cascade": openWakeWord "Julius" detector -> optional speaker verifier -> Whisper check; "whisper": transcript-regex wake (the fallback)
