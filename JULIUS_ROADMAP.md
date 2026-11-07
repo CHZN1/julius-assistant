@@ -64,7 +64,9 @@ Julius is the orchestrator; agents are sub-agents dispatched and supervised by t
    2. Per-task cost cap enforced by Julius, with a spoken warning and a hard stop.
    3. Eval suite: small repo tasks with tests as the oracle, cost and time per task, refusal/stop behavior, no writes outside the project folder.
 
-## Phase D: Sports analytics agent (differentiator)
+## Phase D: Sports analytics agent (differentiator): PAUSED until the user's models are ready (decided 2026-11-06)
+
+Plan posted 2026-11-06 (D1 read-only summaries, D2 confirmed runner, D3 grading, D4 gated retraining, D5 notebooks); open decisions: ODDS_API_KEY handling (recommended: the user exports it, Julius never holds it), canonical NHL scripts, output layout, papermill. Do not start until the user resumes it.
 
 Julius supervises my NHL/NFL/MLB/WNBA pipelines in `~/dev` as sub-agents: run today's predictions, summarize results and parlays, report model performance, trigger retraining, all with confirmation before anything writes or bets.
 
@@ -75,7 +77,26 @@ Julius supervises my NHL/NFL/MLB/WNBA pipelines in `~/dev` as sub-agents: run to
 - MIT license.
 - Wake word: the shipped detector (`wake/models/julius.onnx`) and the default `engine = "cascade"` path must work for anyone without the personal speaker verifier. The verifier is a personal layer trained on one person's voice (`python wake/verifier.py train`) and stored outside the repo in `~/.julius/`; the repo must not contain recordings, the verifier file or `julius_memory/wake_log.jsonl`. The detector was trained with the author's wake recordings as part of its positives: before release, retrain it from synthetic voices only (or ship it clearly labelled) and document how to record a personal wake set. Confirm the openWakeWord models download step (`openwakeword.utils.download_models`) is in the setup README.
 
-## Phase F: UI
+## Phase F: Voice polish and reliability (before the UI; planned 2026-11-06, awaiting the user's OK to build)
+
+Goal: voice conversations feel as reliable as typed ones. Text tests pass; the remaining failures are in the voice layer (ASR, echo, endpointing, pending state, Haiku improvising).
+1. **Diagnose** from the logs and the conversation record: every voice failure of the last week, grouped by cause and counted (done 2026-11-06, see "Failure breakdown" below).
+2. **Multi-turn voice eval:** a script that prompts the user to record about 10 realistic multi-turn conversations (follow-ups, yes/no confirmations, "no, I meant..." corrections, a pause mid-sentence, speaking while Julius talks), replays them through the full pipeline and scores per turn: transcript accuracy, correct handling, latency. Added to `run_all.py`.
+3. **Fixes, cheapest first, each measured on that eval:** (a) always-on WebRTC echo cancellation on the mic input, even with voice barge-in off; (b) VAD endpointing (Silero) instead of energy plus a fixed 0.6 s, with a longer wait when the sentence sounds unfinished; (c) low-confidence handling: confirm ("Did you say report.txt?") instead of guessing, optionally re-run a larger Whisper on those utterances; (d) a short spoken acknowledgment ("on it") before anything slower than about 1.5 s; (e) confirmations accept natural answers ("yeah", "sure", "go for it", "nah").
+4. **Reliability:** a 24-hour soak test of the service (CPU, memory, crashes and restarts, every error and traceback) plus a log scanner that summarizes errors; fix what it finds.
+
+**Failure breakdown (data window: service log 2026-11-05 20:23 to 11-06 18:19, conversation record 11-05 16:37 to 11-06 18:14, 95 turns; typed headless test turns excluded; only these two days exist for the last week).**
+| Cause | Count | Examples |
+|---|---|---|
+| ASR dropped or garbled words | 8 (3 harmless) | "Thursday is the season of 45", "you won the NHL last night" for "who won", "Aans, a", glued "JuliusTrashReport.txt", one utterance with no transcript |
+| Self-hearing echo | 12 (4 answered, 7 caught by the filter, 1 real "yes" wrongly dropped) | "This note is gone", "14 hours ahead of you", an 18-word garble of his own preview |
+| Endpointing / truncation (suspected, audio not saved) | 3 | "TrashReport." then "Oh, report.txt." three times |
+| Pending-state confusion | 5 | bare filename after a clarification, "yes" after a status question, "undo" taken by the memory handler, "yes" after a garbled turn |
+| Haiku improvising or false "I can't" | 5 (+2 caught by the stall guard) | fabricated NHL scores, "I can't delete notes", "I can't move files myself", a status request "not understood" |
+| Infrastructure (not the voice model) | 6 TTS outages, 3 hotkey-permission failures, 2 underflow bursts (from my own eval load) | speech tmp dir deleted by macOS (fixed), service Python lacks Accessibility for hotkeys |
+Not measurable today: turn latency (not logged), real endpointing behaviour (no saved audio), anything older than 2 days.
+
+## Phase G: UI
 
 Siri-style animated orb (listening, thinking, speaking states), transcript bubble, push-to-talk hotkey. Design details to come from me.
 
