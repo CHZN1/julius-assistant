@@ -76,6 +76,9 @@ def main():
         rows.append(suite("coding agent (paid)", "code_eval.py", [], "code", "ok_pct", "cases", 0.0, True))
     if "audio" not in skip and not a.free:
         rows.append(suite("recorded audio", "audio_regression.py", [], "audio", "turn_ok_pct", "turns ok", 3.0, True))
+    if "voice" not in skip and (ROOT / "voice_data").is_dir():   # recorded multi-turn conversations (evals/voice_record.py); free
+        rows.append(suite("voice conversations", "voice_eval.py", [], "voice", "ok_pct", "handled", 1.0, False))
+        rows.append(suite("voice front-end replay", "voice_eval.py", ["replay", "--mode", "gate"], "voicereplay_gate", "mean_wer", "WER", 3.0, False))
     if "memory" not in skip:
         rows.append(suite("memory" + (" (free parts)" if a.free else ""), "memory_eval.py", ["--free"] if a.free else [], "memory", "ok_pct", "sections ok", 0.0, not a.free))
     w = max(len(r["suite"]) for r in rows)
