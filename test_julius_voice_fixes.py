@@ -93,3 +93,11 @@ class GateForceOpen(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StatusAfterFinish(unittest.TestCase):
+    def test_status_question_after_the_task_finished_is_answered_by_the_coding_session(self):
+        import julius_code_session as cs
+        src = open(cs.__file__).read()
+        self.assertIn("self.latest().status in FINISHED", src)
+        self.assertTrue(cs.LOOSE_STATUS.match("what's the status"))

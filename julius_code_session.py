@@ -96,7 +96,7 @@ class CodeSession:
         m = START.match(lowered)
         if m: return self._start_command(m.group("goal").strip())
         if CANCEL.match(lowered): return self._cancel()
-        if STATUS.search(lowered) or (LOOSE_STATUS.match(lowered) and ca.running()): return self._status()
+        if STATUS.search(lowered) or (LOOSE_STATUS.match(lowered) and (ca.running() or ((self.latest() or None) and self.latest().status in FINISHED))): return self._status()
         if UNDO_MERGE.match(lowered): return self._undo_merge()
         if SHOW.match(lowered): return self._show()
         if MERGE.match(lowered): return self._merge_preview()
