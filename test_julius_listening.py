@@ -39,6 +39,12 @@ class LeadingWakeWhileAwakeTests(unittest.TestCase):
         from julius_listening import strip_leading_wake
         self.assertEqual(strip_leading_wake("JuliusTrashReport.txt in sandbox"),"TrashReport.txt in sandbox")
         self.assertEqual(strip_leading_wake("Juliusville is a town"),"Juliusville is a town")
+    def test_a_glued_wake_word_passes_the_wake_gate(self):
+        """Live (wake_log 11-06 16:42:05 and 17:35:17): 'JuliusTrashReport.' was a real wake that the Whisper check rejected."""
+        from julius_listening import has_wake, strip_wake
+        for t in ("JuliusTrashReport.", "JuliusTrashReport.TXT and Sandbox.", "Julius, trash report.txt", "Hey Julius."): self.assertTrue(has_wake(t), t)
+        for t in ("Juliusville is a town", "Julia said she'd call Julian about the flight.", "Hey, it's Jules.", "Julie called"): self.assertFalse(has_wake(t), t)
+        self.assertEqual(strip_wake("JuliusTrashReport.TXT and Sandbox."), "TrashReport.TXT and Sandbox.")
     def test_bare_wake_word_and_ordinary_speech_are_unchanged(self):
         from julius_listening import strip_leading_wake
         self.assertEqual(strip_leading_wake('Julius?'),'Julius?');self.assertEqual(strip_leading_wake('what about tomorrow?'),'what about tomorrow?')

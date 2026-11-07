@@ -67,3 +67,6 @@ wake/data/
 wake/personal/
 
 !wake/models/julius.onnx
+
+# Voice eval recordings (the user's voice and conversation text): local only, never committed or released. Delete with: python evals/voice_record.py delete-all
+voice_data/

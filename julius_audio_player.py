@@ -91,6 +91,10 @@ class SpeechPlayer:
                     nonlocal sentence_underflows, written, seconds_written
                     if sample_rate != rate:
                         raise RuntimeError("Speech sample rate changed")
+                    tap = getattr(self, "tap", None)
+                    if tap is not None:
+                        try: tap(audio, sample_rate)   # session recorder (voice eval); never allowed to disturb playback
+                        except Exception: pass
                     flagged = stream.write(np.ascontiguousarray(audio, dtype=np.float32).reshape(-1, 1))
                     if flagged and index > 0:  # the first write of a sentence follows the natural pause between sentences
                         sentence_underflows += 1

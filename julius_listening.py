@@ -15,8 +15,10 @@ class CaptureClock:
         self.previous=captured_at
         return previous is not None and (captured_at<previous or captured_at-previous>self.max_gap_seconds)
 WAKE_PREFIX=re.compile(r'^\s*(?:(?:hey|okay|ok)[\s,]+)?(?:julius|juliet)\b[\s,.:!?-]*',re.I)
-def has_wake(text):return bool(WAKE_PREFIX.match(text))
-def strip_wake(text):return WAKE_PREFIX.sub('',text,count=1).strip()
+def has_wake(text):return bool(WAKE_PREFIX.match(text) or WAKE_GLUED.match(text))   # "JuliusTrashReport." is a wake plus a request (two real wakes were rejected on 11-06)
+def strip_wake(text):
+    if WAKE_GLUED.match(text) and not WAKE_PREFIX.match(text):return WAKE_GLUED.sub('',text,count=1).strip()
+    return WAKE_PREFIX.sub('',text,count=1).strip()
 FILLER=re.compile(r'^\s*(?:thanks|thank you|okay|ok|alright|well|so|and|hey|hi|yeah|yep|um|uh|please)\b[\s,.!:;-]*',re.I)
 FILLER_KEEP_AND=re.compile(r'^\s*(?:thanks|thank you|okay|ok|alright|well|so|hey|hi|yeah|yep|um|uh|please)\b[\s,.!:;-]*',re.I)
 TRAILING=re.compile(r'[\s,]+(?:again|please|for me|real quick|quickly|thanks|thank you)$',re.I)

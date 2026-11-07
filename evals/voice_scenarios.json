@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "notes": "Ten realistic conversations for the multi-turn voice eval. `say` is what the user says (also the reference for transcript accuracy, minus the stage directions in brackets). `expect` is how Julius should handle the turn: kind is a label, `must` / `must_not` are regexes on Julius's reply text (case-insensitive), `ignored` means NO reply is expected. `when`: after_reply (default), during_reply (speak over Julius), pause (stop mid-sentence for about 2 seconds where the ellipsis is).",
+  "scenarios": [
+    {"id": "s01_weather_followups", "title": "Weather with follow-ups", "intro": "Natural follow-ups that depend on the previous answer.",
+     "turns": [
+       {"say": "Julius, what's the weather in Springfield?", "expect": {"kind": "answer", "must": ["Springfield", "degrees"]}},
+       {"say": "What about tomorrow?", "expect": {"kind": "followup", "must": ["\\d"], "must_not": ["what do you mean", "which city"]}},
+       {"say": "And in San Jose?", "expect": {"kind": "followup", "must": ["San Jose"]}},
+       {"say": "Thanks.", "expect": {"kind": "ack", "must_not": ["error", "couldn't"]}}]},
+
+    {"id": "s02_correction", "title": "A correction, then sleep", "intro": "Correct yourself with 'no, I meant...'.",
+     "turns": [
+       {"say": "Julius, what time is it in Tokyo?", "expect": {"kind": "answer", "must": ["Tokyo"]}},
+       {"say": "No, I meant Toronto.", "expect": {"kind": "correction", "must": ["Toronto"], "must_not": ["Tokyo"]}},
+       {"say": "Thanks. Go to sleep.", "expect": {"kind": "sleep", "must": ["sleep|here|night|later|rest|call"]}}]},
+
+    {"id": "s03_trash_yes_undo", "title": "Trash a file, confirm, undo", "intro": "Uses ~/dev/sandbox/report.txt. Everything is reversible and the last turn puts it back.",
+     "pre": {"sandbox_files": ["report.txt"]},
+     "turns": [
+       {"say": "Julius, trash report.txt in sandbox.", "expect": {"kind": "preview", "must": ["report.txt", "trash"], "must_not": ["Moved to the trash"]}},
+       {"say": "Yes.", "expect": {"kind": "confirm", "must": ["Moved to the trash"]}},
+       {"say": "Undo.", "expect": {"kind": "undo", "must": ["Reversed|put back|restored|undid|undone|brought"]}}]},
+
+    {"id": "s04_natural_confirmations", "title": "Natural yes and no", "intro": "Answer the confirmations the way you really would: 'nah', 'sure, go for it'. Uses ~/dev/sandbox/notes.txt and puts it back at the end.",
+     "pre": {"sandbox_files": ["notes.txt"]},
+     "turns": [
+       {"say": "Julius, trash notes.txt in sandbox.", "expect": {"kind": "preview", "must": ["notes.txt", "trash"]}},
+       {"say": "Nah.", "expect": {"kind": "cancel", "must": ["cancel|won't|no files|nothing"], "must_not": ["Moved to the trash"]}},
+       {"say": "Trash notes.txt in sandbox.", "expect": {"kind": "preview", "must": ["notes.txt"]}},
+       {"say": "Sure, go for it.", "expect": {"kind": "confirm", "must": ["Moved to the trash"]}},
+       {"say": "Actually, undo that.", "expect": {"kind": "undo", "must": ["Reversed|put back|restored|undid|undone|brought"]}}]},
+
+    {"id": "s05_pause_midsentence", "title": "Pausing in the middle of a sentence", "intro": "Where you see [pause], stop for about two seconds, then finish the sentence.",
+     "turns": [
+       {"say": "Julius, what time is it in [pause] London?", "when": "pause", "ref": "Julius, what time is it in London?", "expect": {"kind": "answer", "must": ["London"]}},
+       {"say": "Tell me [pause] a fun fact about octopuses.", "when": "pause", "ref": "Tell me a fun fact about octopuses.", "expect": {"kind": "answer", "must": ["octopus"]}},
+       {"say": "Thanks.", "expect": {"kind": "ack", "must_not": ["error"]}}]},
+
+    {"id": "s06_interrupt", "title": "Speaking while Julius is talking", "intro": "Ask for something long. About three seconds into his answer, talk over him with the second line. (Voice barge-in is off on purpose; this measures what happens.)",
+     "turns": [
+       {"say": "Julius, tell me a long story about a lighthouse keeper.", "expect": {"kind": "long_answer", "must": ["lighthouse"]}},
+       {"say": "Stop. What's the weather in Springfield?", "when": "during_reply", "expect": {"kind": "interrupt", "must": ["Springfield"]}}]},
+
+    {"id": "s07_coding_agent", "title": "Coding agent, short", "intro": "Starts a real coding task on a copy of demo_calc (about 3 cents) and discards it. Wait for 'finished' before the status turn.",
+     "pre": {"projects": ["demo_calc"]},
+     "turns": [
+       {"say": "Julius, have the coding agent fix the failing tests in demo calc.", "expect": {"kind": "preview", "must": ["coding task", "demo"]}},
+       {"say": "Yes.", "expect": {"kind": "confirm", "must": ["Started"]}},
+       {"say": "What's the status?", "when": "after_reply", "wait_note": "wait about 20 seconds first, or until he says it is finished", "expect": {"kind": "status", "must": ["coding|running|done|finished|working|changed|task"], "must_not": ["didn't understand"]}},
+       {"say": "Show me what changed.", "expect": {"kind": "show", "must": ["calc|changed|tests|add"]}},
+       {"say": "Discard the coding task.", "expect": {"kind": "preview", "must": ["discard|throw|remove|copy"]}},
+       {"say": "Yes.", "expect": {"kind": "confirm", "must": ["discard|removed|gone|deleted"]}}]},
+
+    {"id": "s08_memory_roundtrip", "title": "Remember, recall, forget, undo", "intro": "Runs on a throwaway memory, not your real one.",
+     "turns": [
+       {"say": "Julius, remember that my dog is called Rex.", "expect": {"kind": "memory_add", "must": ["Rex|remember|got it|noted"]}},
+       {"say": "What's my dog called?", "expect": {"kind": "memory_recall", "must": ["Rex"]}},
+       {"say": "Forget that.", "expect": {"kind": "memory_forget", "must": ["forgot|forgotten|removed|which|gone"]}},
+       {"say": "Undo that.", "expect": {"kind": "undo", "must": ["put it back|restored|brought|back"], "must_not": ["nothing to bring back", "no file changes"]}}]},
+
+    {"id": "s09_no_made_up_data", "title": "Questions Julius has no tool for", "intro": "He must not invent live facts. He may say he could not get it.",
+     "turns": [
+       {"say": "Julius, who won the NHL game last night?", "expect": {"kind": "no_fabrication", "must_not": ["\\b\\d{1,2}\\s?[-–]\\s?\\d{1,2}\\b"]}},
+       {"say": "What's the price of gas in Springfield right now?", "expect": {"kind": "no_fabrication", "must_not": ["\\$\\s?\\d"]}},
+       {"say": "What time does the Sharks game start tonight?", "expect": {"kind": "no_fabrication", "must_not": ["\\b\\d{1,2}:\\d\\d\\b"]}},
+       {"say": "What's the weather in Springfield?", "expect": {"kind": "answer", "must": ["degrees"]}}]},
+
+    {"id": "s10_wake_and_sleep", "title": "Wake word, short phrases, sleeping", "intro": "The last line is spoken AFTER he has gone to sleep, with no wake word: he should stay silent.",
+     "turns": [
+       {"say": "Julius.", "expect": {"kind": "wake_only", "must": ["yeah|here|go ahead|what"]}},
+       {"say": "What's on my calendar tomorrow?", "expect": {"kind": "answer", "must_not": ["error"]}},
+       {"say": "Never mind.", "expect": {"kind": "ack", "must_not": ["error"]}},
+       {"say": "Go to sleep.", "expect": {"kind": "sleep", "must": ["sleep|here|night|later|rest|call"]}},
+       {"say": "What time is it?", "expect": {"kind": "ignored", "ignored": true}}]}
+  ]
+}

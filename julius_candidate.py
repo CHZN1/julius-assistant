@@ -38,6 +38,11 @@ microphone_gate=MicrophoneGate()
 from julius_selfecho import SelfEcho
 self_echo=SelfEcho()
 microphone_gate.on_begin=self_echo.begin;microphone_gate.on_end=self_echo.finish  # his own voice is judged from the END of playback
+import julius_session_record
+_rec = julius_session_record.from_env({"profile": os.environ.get("JULIUS_PROFILE")})   # None unless JULIUS_SESSION_RECORD_DIR is set (voice eval recordings, local only)
+def _rec_event(kind, **fields):
+    if _rec is not None: _rec.event(kind, **fields)
+if _rec is not None: atexit.register(_rec.close)
 
 if os.environ.get("JULIUS_MEMORY_DIR"):
     jm.MEM = Path(os.environ["JULIUS_MEMORY_DIR"])
@@ -229,6 +234,7 @@ if tts.backend == 'qwen-mlx':  # one persistent output stream, prefill and under
     speech_player = SpeechPlayer(sd, prefill_chunks=int(os.environ.get('JULIUS_AUDIO_PREFILL_CHUNKS', '1')),
                                  latency=float(os.environ.get('JULIUS_AUDIO_LATENCY', '0.4')))
     microphone_gate.cover_output_latency(speech_player.latency)
+    if _rec is not None: speech_player.tap = _rec.out
 
 def stop_now(source='hotkey'):
     """Stop generation and speech immediately (global hotkey, typed /stop)."""
@@ -609,6 +615,7 @@ def transcribe(a, wake=False):
     text = r["text"].strip()
     if globals().get("fix_transcript"):
         text = fix_transcript(text)  # AcmeCorp, NHL, NFL
+    globals().get('_rec_event', lambda *a, **k: None)("asr", text=text, no_speech=round(float(nsp), 3), logprob=[segment.get('avg_logprob') for segment in r.get('segments', [])], seconds=round(globals()['_last_asr_seconds'], 3), wake_pass=bool(wake))
     return text, r.get("language", "?"), nsp
 
 
@@ -751,6 +758,7 @@ def _process(text, lang):
     if vline: print(f"  (sees: {vline})")
 
     TURN["n"] += 1
+    globals().get('_rec_event', lambda *a, **k: None)("turn", n=TURN["n"], text=text, lang=lang)
     jf.set_turn(TURN["n"])
     jt.dispatcher().begin_turn()
     if globals().get('cloud_brain') is not None:
@@ -831,6 +839,18 @@ def _process(text, lang):
     underflows = globals()['speech_player'].pop_events() if globals().get('speech_player') is not None else []
     if underflows:
         print(f"  [audio underflows this turn: {len(underflows)}]", flush=True)
+    try:   # one machine-readable line per turn (no transcript text, so the redacted service log keeps it); julius_logscan.py summarizes these
+        _fa, _vf = globals().get('_first_audio_at'), globals().get('_voice_finished_at')
+        _c = (globals().get('_last_asr_confidence') or {}) if lang != 'typed' else {}
+        _lp = [x for x in (_c.get('segment_log_probabilities') or []) if x is not None]
+        _ac = f"{min(_lp):.2f}" if _lp else None   # worst segment avg_logprob: closer to 0 is surer; below about -1 is a guess
+        _ns = _c.get('no_speech_probability')
+        _parts = [f"first_audio={_fa - started:.2f}" if _fa is not None else "first_audio=none", f"speech_end_to_audio={_fa - _vf:.2f}" if _fa is not None and _vf is not None and lang != 'typed' else "speech_end_to_audio=na",
+                  f"asr={globals().get('_last_asr_seconds'):.2f}" if globals().get('_last_asr_seconds') is not None and lang != 'typed' else "asr=na", f"asr_logprob={_ac}" if _ac is not None else "asr_logprob=na", f"no_speech={_ns:.2f}" if _ns is not None else "no_speech=na",
+                  f"total={time.perf_counter() - started:.2f}", f"input={'voice' if lang != 'typed' else 'typed'}", f"routed={'shortcut' if routed is not None else 'brain'}", f"error={'yes' if turn_error else 'no'}"]
+        print("  [timing: " + " ".join(_parts) + "]", flush=True)
+        globals().get('_rec_event', lambda *a, **k: None)("reply", n=TURN["n"], text=(routed if routed is not None else reply), timing=" ".join(_parts))
+    except Exception: pass
     if globals().get('cloud_tracker') is not None:
         print(cloud_tracker.status_line(), flush=True)
 
@@ -861,6 +881,8 @@ PRE_ROLL_CHUNKS = max(4, int(round(0.50 * SR / CHUNK)))
 pre_roll = deque(maxlen=PRE_ROLL_CHUNKS)
 
 def cb(indata, n, t, s):
+    _r = globals().get('_rec')
+    if _r is not None: _r.mic(indata[:, 0])
     if microphone_gate.accepting():q.append((indata[:, 0].copy(),time.perf_counter()))
 
 typed = deque()
@@ -899,6 +921,7 @@ def _wake_verify(clip):
     started=time.perf_counter()
     text,_lang,nsp=transcribe_input(clip, wake=True)
     if text and self_echo.is_echo(text):
+        globals().get('_rec_event', lambda *a, **k: None)("drop", reason="wake_echo", text=text)
         print('  [wake ignored: that was Julius\'s own voice]',flush=True);return False,text,time.perf_counter()-started
     return bool(text) and nsp<=.6 and has_wake(text), text, time.perf_counter()-started
 import julius_wake
@@ -1070,15 +1093,18 @@ with microphone_stream():
                     if os.environ.get('JULIUS_SAVE_AUDIO_DIR'):save_utterance(audio)
                     text, lang, nsp = transcribe_input(audio, wake=not utterance_awake)
                     if not text or nsp > 0.6:
+                        globals().get('_rec_event', lambda *a, **k: None)("drop", reason="no_speech", no_speech=round(float(nsp), 3), dur=round(dur, 2))
                         print(f'  [ignored: {"nothing transcribed" if not text else "probably not speech"} (no-speech {nsp:.2f}, {dur:.1f}s)]',flush=True)
                         q.clear()
                         continue
                     if self_echo.is_echo(text):
+                        globals().get('_rec_event', lambda *a, **k: None)("drop", reason="echo", text=text, dur=round(dur, 2))
                         print(f'  [dropped as echo of own voice: {len(text.split())} words, {dur:.1f}s]',flush=True)
                         q.clear(); continue
 
                     if not utterance_awake:
                         if not has_wake(text):
+                            globals().get('_rec_event', lambda *a, **k: None)("drop", reason="no_wake", text=text)
                             print(f'  [ignored: no wake word ({len(text.split())} words)]',flush=True);continue
                         text = strip_wake(text)
                         print("  [awake]")
