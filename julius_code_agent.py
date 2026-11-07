@@ -1,6 +1,6 @@
 """Opus coding agent, run through `claude -p` inside a sandbox. This module owns everything that makes that safe.
 
-A task never touches a real project. The project is COPIED (minus secrets, caches and git history) to ~/.julius/code/<id>/work, a fresh
+A task never touches a real project. The project is COPIED (minus secrets, caches and git history) to ~/Library/Application Support/Julius/code/<id>/work, a fresh
 git repository with no remote is created there, and `claude -p` runs inside a macOS seatbelt profile that denies writing anywhere else and
 denies reading your other projects and personal folders. Merging a result back into the real project is a separate, explicit step that
 only adds or modifies files that have not changed since the copy, backs up everything it overwrites, never deletes, and can be undone.
@@ -16,7 +16,8 @@ import fnmatch, hashlib, json, os, re, shutil, signal, subprocess, threading, ti
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 
-CODE_HOME = Path("~/.julius/code").expanduser()
+# Not under ~/.julius: the sandbox denies reads of ~/.julius, and with the task folder inside it Claude Code's own path checks fail and every Edit is refused (live, 17:57).
+CODE_HOME = Path("~/Library/Application Support/Julius/code").expanduser()
 MODEL = "claude-opus-5-5"
 FORBIDDEN = re.compile(r"(logic|garageband|waves|slate|zebra|kontakt|maschine|stems|music|audio|\bni\b|btc|bitcoin|crypto|ethereum|binance|coinbase|wallet)", re.I)
 SECRET_GLOBS = [".env", ".env.*", "*.pem", "*.key", "*.p12", "*.pfx", "id_rsa*", "id_ed25519*", "id_ecdsa*", ".netrc", ".npmrc", ".pypirc", "credentials*", "secrets*", "*.keychain*", "*.kdbx", ".git-credentials"]
@@ -163,7 +164,7 @@ def seatbelt_profile(task, home=None):
     for p in DENIED_READ:
         full = Path(os.path.expanduser(p.replace("~", str(home), 1))) if p.startswith("~") else Path(p)
         lines.append(f'(deny file-read* (subpath "{full}"))')
-    lines.append(f'(allow file-read* (subpath "{d}"))')   # after the denies: the task folder sits under ~/.julius
+    lines.append(f'(allow file-read* (subpath "{d}"))')
     lines += ["(deny network*)", '(allow network-outbound (remote tcp "*:443"))', '(allow network-outbound (remote udp "*:53"))', '(allow network-outbound (remote ip "localhost:*"))', '(allow network-outbound (literal "/private/var/run/mDNSResponder"))']
     return "\n".join(lines) + "\n"
 

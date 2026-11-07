@@ -27,7 +27,8 @@ class Env:
         self.ca, self.cs = ca, cs
         self.scratch = Path(tempfile.mkdtemp(prefix="julius_code_eval_")).resolve()
         self.dev = Path.home() / "dev" / (".julius_code_eval_" + self.scratch.name[-8:]); self.dev.mkdir()
-        ca.CODE_HOME = self.scratch / "code"; ca.CODE_HOME.mkdir()
+        self.real_home = ca.CODE_HOME; ca.CODE_HOME = self.real_home / ("_eval_" + self.scratch.name[-8:])   # the REAL location: a path under ~/.julius once made every Edit fail live
+        ca.CODE_HOME.mkdir(parents=True, exist_ok=True)
         self.tracker = CostTracker(self.scratch / "costs.jsonl", 100.0)
         self.config = {"projects_root": str(self.dev), "default_cap_usd": 1.0, "max_cap_usd": 1.0, "daily_cap_usd": 50.0, "timeout_minutes": 8}
         self.done = []
@@ -76,7 +77,7 @@ class Env:
 
     def close(self):
         if self.dev.parent == Path.home() / "dev" and self.dev.name.startswith(".julius_code_eval_"): shutil.rmtree(self.dev, ignore_errors=True)
-        shutil.rmtree(self.scratch, ignore_errors=True)
+        shutil.rmtree(self.scratch, ignore_errors=True); shutil.rmtree(self.ca.CODE_HOME, ignore_errors=True)
 
 
 def fail(msg): return False, msg
