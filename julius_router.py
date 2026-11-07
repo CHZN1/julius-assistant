@@ -49,7 +49,8 @@ _GLUED_VERB=re.compile(r'^((?i:trash|delete|remove|move|copy|rename|show|list|fi
 def clean_asr(text):
     """Repair common transcription artefacts before a second routing attempt: commas between words ("trash, report.txt, in sandbox"), a command verb glued to the
     next word ("TrashReport.txt"), runs of spaces. The original text is always tried first."""
-    out=_GLUED_VERB.sub(lambda m:m.group(1)+' ',text.strip())
+    from julius_listening import strip_leading_wake
+    out=_GLUED_VERB.sub(lambda m:m.group(1)+' ',strip_leading_wake(text.strip()))
     out=re.sub(r'\s*[,;]\s+',' ',out)
     return re.sub(r'\s+',' ',out).strip()
 
