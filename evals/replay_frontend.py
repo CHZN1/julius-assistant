@@ -21,6 +21,7 @@ import voice_eval as ve
 SR, CHUNK = 16000, 1024
 SILENCE_LEN, MIN_SPEECH = 0.6, 0.4
 SETTLE = 0.75
+PHYS = 0.45   # seconds from a chunk being written to the device until its sound reaches the microphone (device latency 0.4 s + air)
 ASR = "mlx-community/whisper-small.en-mlx"
 
 
@@ -74,8 +75,8 @@ def front_end(mic, out, mode):
         for i in np.flatnonzero(shut): sig[i * CHUNK:(i + 1) * CHUNK] = 0
         return sig
     if mode == "aec":
-        import echo_cancel
-        return echo_cancel.cancel(mic, out)
+        import julius_aec
+        return julius_aec.cancel(mic, out, lag=PHYS)
     raise ValueError(mode)
 
 
@@ -97,9 +98,15 @@ def replay_take(take, mode):
     n = min(len(mic), len(out)); mic, out = mic[:n], out[:n]
     end_ev = next((e for e in events if e["kind"] == "session_end"), events[-1])
     mic_s = end_ev.get("mic_seconds") or n / SR   # mic.wav is padded to the length of out.wav; the true microphone duration is in the session_end event
-    off = (end_ev["t"] - t0) - mic_s   # the microphone opened `off` seconds after the session_start event; out.wav is placed on the session clock, mic.wav on the microphone clock
-    t0 += off
+    off = (end_ev["t"] - t0) - mic_s   # first guess: when the microphone opened relative to session_start (the session closes a little after the last sample, so this is too large)
     shift = int(round(off * SR)); out = np.concatenate([out[shift:], np.zeros(shift, dtype=np.float32)])[:n] if shift > 0 else out
+    import julius_aec
+    lag = julius_aec.estimate_lag(mic, out)   # whatever is left is the acoustic delay (PHYS) plus the error of that guess
+    off += lag - PHYS if lag > 0.1 else 0.0
+    shift2 = int(round((lag - PHYS) * SR))
+    if lag > 0.1 and shift2 != 0:   # move out.wav so it sits at the moment each chunk was WRITTEN to the device (the live gate's clock); the echo then trails it by PHYS
+        out = np.concatenate([out[shift2:], np.zeros(shift2, dtype=np.float32)])[:n] if shift2 > 0 else np.concatenate([np.zeros(-shift2, dtype=np.float32), out])[:n]
+    t0 += off
     sig = front_end(mic, out, mode); th = noise_threshold(mic)
     replies = [(e["t"] - t0, e.get("text", "")) for e in events if e["kind"] == "reply" and e.get("text")]
     spoken = [e.get("text", "") for e in events if e["kind"] == "reply"]

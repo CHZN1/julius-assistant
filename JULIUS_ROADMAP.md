@@ -139,3 +139,13 @@ Built, unit-tested (588 tests) and evaluated: file agent 43/43 (free), planner e
 - A 2 s pause split "what time is it in London" into fragments. Fixed: dangling transcripts wait up to 4 s for the rest.
 - "Thanks, go to sleep" did not sleep. Fixed: courtesy words tolerated.
 - Long sentences stuttered (about 30 underflows in one story). Fixed by speaking clauses of up to about 110 characters; not yet re-measured on a recording.
+
+### F2 baseline and F3a findings, 2026-11-07
+Baseline from the 10 recorded conversations (38 turns; takes were recorded across code versions, so some failures were fixed after they were recorded):
+- Live scoring (`python evals/voice_eval.py`): handled correctly 32/38 (84%); mean WER 0.106, 28/37 transcripts exact; 2 turns split by pauses; speech end to first audio p50 3.3 s, p95 5.8 s.
+  The 6 failures: s04 x2 (natural yes/no, glued filename: fixed), s05 x2 (pause split the sentence: fixed by the 4 s hold), s07 status after finish (fixed), s06 interrupt (stop works only when loud; needs AEC).
+- Front-end replay (`python evals/voice_eval.py replay --mode gate|none|aec`): gate WER 0.285 (25 utterances of Julius hearing himself), no gate WER 1.62 (93 self-heard), AEC WER 0.83 (59 self-heard).
+- Echo cancellation (WebRTC AEC3 via livekit 1.1.21, vetted: Apache-2.0, official LiveKit wheel; julius_aec.py) removes only 3-6 dB of echo on these recordings. Reasons found:
+  1. out.wav is stamped when audio is WRITTEN to the device; the real playback lags that by 0.4 s mid-reply and about 1.8 s when the output stream has just reopened, so the reference is misaligned.
+  2. The laptop speaker-to-microphone coupling is weak (echo about 0.005 against 0.1 played), only 10x above the noise floor, and the user's quiet voice is 0.005-0.014: the same level as the echo.
+  Next: callback-timed playback so the reference is sample-accurate, then a controlled self-test (Julius speaks, microphone records) before asking the user to re-record.
