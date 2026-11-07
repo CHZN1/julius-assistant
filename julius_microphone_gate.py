@@ -14,6 +14,9 @@ class MicrophoneGate:
     def force_open(self):
         """the user is talking over Julius and playback has been cut: listen at once instead of waiting out the echo settle time. Cleared by the next playback."""
         with self._lock:self._force=True
+    def settling(self):
+        """Playback is over but the room echo has not died down yet: the gate is still shut."""
+        with self._lock:return self._outputs==0 and not self._force and self.clock()<self._resume_at
     def accepting(self):
         with self._lock:
             if self._force:return not self.quiet

@@ -49,6 +49,9 @@ class LiveIntentRouter:
         if location and ',' in location and location.split(',')[1].strip().lower() not in REGIONS:  # "Shelbyville, Springfield" is two places
             self.last = None
             return None
+        if re.search(r'\bwhat time (?:does|do|will|did|are|is the|is that|is it (?:on|at|for))\b', low):   # "what time does the game start" is a schedule question, not the clock
+            self.last = None
+            return None
         if re.search(r'\b(?:what time|current time|what day|current date|today.s date|what(?:.s| is) (?:the )?date)\b', low):
             # Dates: only today, tomorrow or yesterday; a named date, weekday or "next Friday" is not a clock lookup.
             if re.search(r'\b(?:what day|date)\b', low):

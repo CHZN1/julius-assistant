@@ -101,6 +101,22 @@ CURRENT_TIME_QUERY = re.compile(
     re.I,
 )
 
+SCHEDULE_QUERY = re.compile(r"\b(?:what time|when)\b.*\b(?:start|starts|begin|begins|kick ?off|tip ?off|puck drop|first pitch|game|match|show|playing|on tonight)\b|\b(?:game|match)\b.*\b(?:start|starts|begin|begins|what time|when)\b", re.I)
+
+def schedule_league(text):
+    """Which league a schedule question is about, from a league name or a team name; None when unclear."""
+    low = (text or "").lower()
+    for lg in ("nhl", "nfl", "mlb", "nba", "wnba"):
+        if re.search(rf"\b{lg}\b", low): return lg
+    cfg = _asr_cfg.load_config().get("asr", {})
+    for lg in ("nhl", "nfl"):
+        if any(re.search(rf"\b{re.escape(t.lower())}\b", low) for t in cfg.get(f"{lg}_teams", [])): return lg
+    extra = {"nba": ["warriors", "lakers", "celtics", "kings"], "mlb": ["giants", "athletics", "dodgers", "yankees"], "nfl": ["49ers", "niners", "raiders"]}
+    for lg, names in extra.items():
+        if any(re.search(rf"\b{n}\b", low) for n in names): return lg
+    return None
+
+
 BAD_ID = re.compile(r"(just )?an? (text-based |large )?(ai|A\.I\.) (assistant|model)|"
                     r"language model|i'm just (a |an )?(program|bunch of code|code|bot)|"
                     r"bunch of code", re.I)
@@ -577,14 +593,19 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
                 return out
             for c, (out, ok) in zip(calls, batch):
                 fn, args = c.function.name, dict(c.function.arguments)
+                if fn == 'get_datetime' and SCHEDULE_QUERY.search(user_text) and not CURRENT_TIME_QUERY.search(user_text):
+                    # "What time does the Sharks game start?" is a schedule question; the clock does not answer it.
+                    lg = schedule_league(user_text)
+                    if lg: out = jt.call('get_scores', {'league': lg, 'day': 'today'}); args = {'league': lg, 'day': 'today'}
+                    else: out = "That only gives the current time, not when a game starts, and I can't tell which team or league you mean. Ask again with the team name."
                 _print_tool(fn, out)
                 if ok:
                     intent_router.record(fn, args, out)
                 if out.count("\n") > 3:
                     long_tool_result = True
-                msgs.append({"role": "tool", "name": fn, "content": out})
+                msgs.append({"role": "tool", "name": c.function.name, "content": out})
             print("  ...thinking", end="", flush=True)
-            if len(calls) == 1 and globals().get('speakable') is not None:
+            if len(calls) == 1 and globals().get('speakable') is not None and not (fn == 'get_datetime' and SCHEDULE_QUERY.search(user_text) and not CURRENT_TIME_QUERY.search(user_text)):
                 # One simple lookup (weather, time, calculator, price): a ready-to-speak sentence, no second model call.
                 ready = speakable(fn, out, args, exact=bool(globals().get('EXACT_REQUEST') and EXACT_REQUEST.search(user_text)))
                 if ready:
@@ -941,9 +962,12 @@ pre_roll = deque(maxlen=PRE_ROLL_CHUNKS)
 _recent_gated = deque(maxlen=int(1.0 * SR / CHUNK))   # last ~0.6 s of microphone audio while the gate was shut, so the start of what he says over Julius is not lost
 def _talked_over():
     """the user started speaking while Julius was talking: cut the speech now and listen to him."""
-    print('  [you spoke over Julius: stopping]', flush=True)
-    globals().get('_rec_event', lambda *a, **k: None)("talk_over")
-    stop_now('voice')
+    if cancellation.busy.is_set():
+        print('  [you spoke over Julius: stopping]', flush=True)
+        globals().get('_rec_event', lambda *a, **k: None)("talk_over")
+        stop_now('voice')
+    else:
+        print('  [you started speaking right after Julius finished: listening]', flush=True)
     microphone_gate.force_open()
     _cc = globals().get('capture_clock')
     if _cc is not None: _cc.previous = None   # the gate was shut, so the first saved block looks like a gap and would wipe everything saved
@@ -955,7 +979,7 @@ def cb(indata, n, t, s):
     _r = globals().get('_rec')
     if _r is not None: _r.mic(indata[:, 0])
     if microphone_gate.accepting():q.append((indata[:, 0].copy(),time.perf_counter()))
-    elif globals().get('_talkover') is not None and cancellation.busy.is_set() and not microphone_gate.quiet:
+    elif globals().get('_talkover') is not None and (cancellation.busy.is_set() or microphone_gate.settling()) and not microphone_gate.quiet:
         _recent_gated.append(indata[:, 0].copy())
         try:
             if _talkover.mic(indata[:, 0]): _talked_over(); _talkover.triggered = False
@@ -1173,6 +1197,7 @@ with microphone_stream():
                     if dur < MIN_SPEECH or longest_voiced_run < 2:continue
                     if os.environ.get('JULIUS_SAVE_AUDIO_DIR'):save_utterance(audio)
                     text, lang, nsp = transcribe_input(audio, wake=not utterance_awake)
+                    if text and not re.search(r'\w', text): text = ''   # "!" is Whisper's guess at noise, not speech
                     if not text or nsp > 0.6:
                         globals().get('_rec_event', lambda *a, **k: None)("drop", reason="no_speech", no_speech=round(float(nsp), 3), dur=round(dur, 2))
                         print(f'  [ignored: {"nothing transcribed" if not text else "probably not speech"} (no-speech {nsp:.2f}, {dur:.1f}s)]',flush=True)

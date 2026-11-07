@@ -190,7 +190,8 @@ SCHEMAS = [
 
     {"type":"function","function":{"name":"get_datetime",
         "description":"Current date and time. Give a location for time elsewhere, "
-                    "otherwise returns local time. Omit location for local time; never use a placeholder.",
+                    "otherwise returns local time. Omit location for local time; never use a placeholder. Only for what time or date it is NOW; "
+                    "never for when a game, show or event starts or is scheduled (use get_scores for games).",
         "parameters":{"type":"object","properties":{
         "location":{"type":"string","description":"City, e.g. 'Tokyo'"},
         "offset_days":{"type":"integer","description":"Local date only: 1 for tomorrow, -1 for yesterday. For any other date use date_calculate."}},
