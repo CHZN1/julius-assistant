@@ -938,13 +938,16 @@ q = deque(maxlen=int(30 * SR / CHUNK))
 PRE_ROLL_CHUNKS = max(4, int(round(0.50 * SR / CHUNK)))
 pre_roll = deque(maxlen=PRE_ROLL_CHUNKS)
 
-_recent_gated = deque(maxlen=int(0.6 * SR / CHUNK))   # last ~0.6 s of microphone audio while the gate was shut, so the start of what he says over Julius is not lost
+_recent_gated = deque(maxlen=int(1.0 * SR / CHUNK))   # last ~0.6 s of microphone audio while the gate was shut, so the start of what he says over Julius is not lost
 def _talked_over():
     """the user started speaking while Julius was talking: cut the speech now and listen to him."""
     print('  [you spoke over Julius: stopping]', flush=True)
     globals().get('_rec_event', lambda *a, **k: None)("talk_over")
     stop_now('voice')
     microphone_gate.force_open()
+    _cc = globals().get('capture_clock')
+    if _cc is not None: _cc.previous = None   # the gate was shut, so the first saved block looks like a gap and would wipe everything saved
+    q.clear()
     for c in list(_recent_gated): q.append((c, time.perf_counter()))
     _recent_gated.clear()
 
