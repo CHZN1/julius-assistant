@@ -38,10 +38,11 @@ class BackupToolTests(unittest.TestCase):
         from julius_code_session import CodeSession
         self.dev = self.root / "dev"; (self.dev / "demo").mkdir(parents=True); (self.dev / "demo" / "a.py").write_text("x=1\n")
         self.code = CodeSession(config={"projects_root": str(self.dev)}, projects_root=str(self.dev), sandbox=False)
+        import julius_code_agent as _ca; self._ca, self._old_home = _ca, _ca.CODE_HOME; _ca.CODE_HOME = Path(self.temp.name) / 'codehome'; _ca.CODE_HOME.mkdir()   # never read the real task folders
         self.old = (jt.file_session, jt.code_session); jt.file_session, jt.code_session = self.session, self.code
 
     def tearDown(self):
-        jt.file_session, jt.code_session = self.old; jo._STATE["user_text"] = ""; self.temp.cleanup()
+        self._ca.CODE_HOME = self._old_home; jt.file_session, jt.code_session = self.old; jo._STATE["user_text"] = ""; self.temp.cleanup()
 
     def say(self, text): jo._STATE["user_text"] = text
 
