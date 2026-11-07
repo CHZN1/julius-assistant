@@ -26,6 +26,8 @@ class SelfEcho:
         if not self.said: return False
         age = 0.0 if self.speaking else now - self.ended
         if age > self.late_window: return False
+        hw = _words(heard)
+        if hw and any(_words(t) == hw for t, at in self.said if now - at <= self.late_window + 1): return True   # a whole sentence he just said, word for word ("Yeah?" after a wake)
         if not self.speaking and age > self.short_window and len(_words(heard)) <= 2: return False   # "yes" / "cancel" after his prompt "say yes to confirm" is an answer: speaker echo is over within ~2 s
         text = " ".join(t for t, at in self.said if now - at <= self.memory)
         if not text: return False

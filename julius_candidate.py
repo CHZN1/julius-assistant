@@ -969,6 +969,7 @@ def _talked_over():
     else:
         print('  [you started speaking right after Julius finished: listening]', flush=True)
     microphone_gate.force_open()
+    globals()['_talkover_pending'] = True   # the main loop must not clear what the user said while the turn was being cancelled
     _cc = globals().get('capture_clock')
     if _cc is not None: _cc.previous = None   # the gate was shut, so the first saved block looks like a gap and would wipe everything saved
     q.clear()
@@ -1038,12 +1039,14 @@ def _after_wake(ev):
     if control:
         globals()['awake_until'] = 0.0 if control == 'sleep' else time.time() + SESSION_SEC
         print(f"  [{ 'asleep' if control == 'sleep' else 'awake' }]", flush=True)
+        globals().get('_rec_event', lambda *a, **k: None)("reply", text=sleep_line(text) if control == 'sleep' else 'I am here.', control=control)
         try:speak(sleep_line(text) if control == 'sleep' else 'I am here.')
         except TurnCancelled:print('  [response stopped]',flush=True)
         if control=='sleep':release_idle_models()
         if control=='sleep' and wants_quiet(text):enter_quiet()
     elif len(text.split()) < 2:
         globals()['awake_until'] = time.time() + SESSION_SEC
+        globals().get('_rec_event', lambda *a, **k: None)("reply", text="Yeah?", control="wake")
         try:speak("Yeah?")
         except TurnCancelled:print('  [response stopped]',flush=True)
     else:
@@ -1231,6 +1234,7 @@ with microphone_stream():
                     if control:
                         awake_until = 0.0 if control == 'sleep' else time.time() + SESSION_SEC
                         print(f"  [{ 'asleep' if control == 'sleep' else 'awake' }]", flush=True)
+                        globals().get('_rec_event', lambda *a, **k: None)("reply", text=sleep_line(text) if control == 'sleep' else 'I am here.', control=control)
                         try:speak(sleep_line(text) if control == 'sleep' else 'I am here.')
                         except TurnCancelled:print('  [response stopped]',flush=True)
                         if control=='sleep':release_idle_models()
@@ -1240,16 +1244,17 @@ with microphone_stream():
                     if not utterance_awake:
                         if len(text.split()) < 2:
                             awake_until = time.time() + SESSION_SEC
+                            globals().get('_rec_event', lambda *a, **k: None)("reply", text="Yeah?", control="wake")
                             try:speak("Yeah?")
                             except TurnCancelled:print('  [response stopped]',flush=True)
                             q.clear(); continue
 
                     if stop_only(text) and not getattr(_file_session, 'pending', None) and not _code_session.pending:
-                        print('  [stopped]', flush=True); globals().get('_rec_event', lambda *a, **k: None)("stop_word", text=text)
+                        print('  [stopped]', flush=True); globals().get('_rec_event', lambda *a, **k: None)("stop_word", text=text); globals().get('_rec_event', lambda *a, **k: None)("reply", text="", control="stop")
                         q.clear(); awake_until = time.time() + SESSION_SEC; continue
                     text = drop_stop_lead(text)
                     process(text, lang)
-                    q.clear()
+                    if not globals().pop('_talkover_pending', False): q.clear()
                     awake_until = time.time() + SESSION_SEC
 
     except KeyboardInterrupt:
