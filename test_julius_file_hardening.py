@@ -122,6 +122,26 @@ class VoiceFlowTests(Base):
         out = self.say('trash notes.txt in Downloads'); self.assertEqual(out['code'], 'preview'); self.assertTrue(p.exists())
         done = self.say('yes'); self.assertEqual(done['code'], 'completed'); self.assertFalse(p.exists())
         self.assertEqual(self.say('undo')['code'], 'undone'); self.assertEqual(p.read_text(), 'keep me')
+    def test_a_question_about_the_waiting_plan_keeps_it_and_the_yes_still_works(self):
+        p = self.file('report.txt', 'r')
+        self.assertEqual(self.say('trash report.txt in Downloads')['code'], 'preview')
+        for q in ('So did you do it?', 'is it done', 'what are you going to do', 'which file'):
+            out = self.say(q); self.assertEqual(out['code'], 'pending_status', q); self.assertTrue(out['message'].startswith('Not yet. I can move')); self.assertTrue(p.exists())
+        self.assertEqual(self.say('Yes.')['code'], 'completed'); self.assertFalse(p.exists()); self.assertEqual(self.say('undo')['code'], 'undone')
+    def test_an_unrelated_request_still_drops_the_waiting_plan(self):
+        p = self.file('report.txt', 'r'); self.say('trash report.txt in Downloads'); self.assertIsNone(self.say("what's the weather")); self.assertIsNone(self.say('yes')); self.assertTrue(p.exists())
+    def test_a_bare_filename_answers_the_please_name_the_files_question(self):
+        p = self.file('report.txt', 'r', folder=self.desktop)
+        self.assertEqual(self.say('TrashReport.')['code'], 'clarification')   # "trash report in sandbox" heard without the file name or folder
+        out = self.say('Oh, report.txt.'); self.assertEqual(out['code'], 'preview', out); self.assertIn('report.txt', out['message']); self.assertTrue(p.exists())
+        self.assertEqual(self.say('yes')['code'], 'completed'); self.assertFalse(p.exists())
+    def test_a_filename_with_no_folder_is_found_in_the_one_folder_that_has_it(self):
+        p = self.file('only_here.txt', 'x', folder=self.desktop); out = self.say('trash only_here.txt')
+        self.assertEqual(out['code'], 'preview', out); self.assertEqual(Path(out['data']['plan']['ops'][0]['from']), p.resolve())
+    def test_a_filename_in_two_folders_asks_which_and_a_named_wrong_folder_is_not_searched_around(self):
+        self.file('dup.txt', 'a', folder=self.desktop); self.file('dup.txt', 'b', folder=self.docs); out = self.say('trash dup.txt')
+        self.assertEqual(out['code'], 'clarification'); self.assertIn('Desktop', out['message']); self.assertIn('Documents', out['message'])
+        self.file('elsewhere.txt', 'e', folder=self.desktop); self.assertNotEqual(self.say('trash elsewhere.txt in Downloads')['code'], 'preview')
     def test_vague_or_bulk_delete_requests_change_nothing(self):
         p = self.file('notes.txt')
         for phrase in ('delete everything in my Downloads folder', 'delete that file', 'throw away the files'):

@@ -2,9 +2,17 @@
 from julius_router import route, clean_asr
 from julius_file_agent import result, FileProblem
 
+import re
+# Questions about the plan that is waiting for a yes: answered with the plan, which stays pending (an unrelated topic still drops it).
+ABOUT_PENDING=re.compile(r"^(?:(?:so|and|well|okay|ok|wait|hey)[\s,]+)*(?:did you (?:do|move|trash|delete|finish|go ahead)(?: it| that)?|have you (?:done|moved|trashed|deleted|finished)(?: it| that)?|(?:is|was) (?:it|that) (?:done|finished|moved|trashed)|has (?:it|that) (?:been )?(?:done|moved|trashed|deleted)|did (?:it|that) (?:work|happen)|what(?:'s| is) (?:it )?(?:waiting|pending)|what (?:are you|were you) (?:going|about) to (?:do|trash|move)|what (?:will|would) (?:this|that|it) (?:do|change|trash|move)|which files?(?: (?:is it|was that|are you|is that))?|are you sure|(?:read|say) (?:it|that|the plan) (?:back|again)|what was (?:the plan|that))\s*[?.!]*$",re.I)
+# After "Please name the exact files...", a bare filename ("Oh, report.txt") completes the trash request.
+FOLLOW_UP=re.compile(r"^(?:(?:oh|um|uh|er|no|well|it'?s|its|that'?s|i meant|i said|just|the)[\s,]+)*(?P<name>[\w.-]+\.[a-z0-9]{1,8})(?:\s+(?:in|from|on)\s+(?:my |the )?(?P<folder>.+?))?\s*[.!?]*$",re.I)
+TRASHY=re.compile(r"^\W*(?:please\s+)?(?:trash|bin|delete|remove|throw away|get rid of)\b",re.I)
+FOLDER_WORDS=re.compile(r"\b(?:in|inside|from|on)\b",re.I)
+
 class FileSession:
     def __init__(self, agent):
-        self.agent=agent;self.pending=None;self.last=None;self.last_result=None
+        self.agent=agent;self.pending=None;self.last=None;self.last_result=None;self.clarify_turn=None
         import julius_router
         standard={agent.root/n for n in ('Documents','Desktop','Downloads')}
         julius_router.EXTRA_FOLDERS.clear()
@@ -22,11 +30,22 @@ class FileSession:
             if repaired and repaired!=text:
                 action=route(repaired,self.agent.root/'Documents',pending=self.pending is not None,has_last=self.last is not None)
                 if action:text=repaired
+        if not action and self.pending and ABOUT_PENDING.match(text.strip()):
+            base=re.sub(r'^(?:Not yet\. )+','',(self.last_result or {}).get('message','')) if self.pending==self.last else ''
+            out=result(True,'pending_status',"Not yet. "+(base or 'A change is waiting for your yes.'));self.last_result=out
+            return out
+        if not action and self.clarify_turn is not None and turn-self.clarify_turn<=2:
+            follow=FOLLOW_UP.match(clean_asr(text) or text)
+            if follow:
+                where=f" in {follow.group('folder')}" if follow.group('folder') else ''
+                action=route(f"trash {follow.group('name')}{where}",self.agent.root/'Documents',pending=self.pending is not None,has_last=self.last is not None)
+                if action:text=f"trash {follow.group('name')}{where}"
         if not action:
             # A generic yes after an unrelated topic must not execute an old plan.
-            self.pending=None
+            self.pending=None;self.clarify_turn=None
             return None
         kind,args=action
+        self.clarify_turn=turn if kind=='clarify' and TRASHY.match(clean_asr(text) or text) else None
         if kind=='clarify':
             self.pending=None
             out=result(False,'clarification',args['clarification'])
@@ -58,7 +77,12 @@ class FileSession:
         elif kind=='trash':
             if self.pending:self.agent.cancel(self.pending)
             out=self.agent.propose('trash',source=args['source'],pattern=args['pattern'],origin='human',turn=turn)
-            self.pending=out['data']['plan']['id'] if out['ok'] else None
+            if not out['ok'] and out.get('code') in ('no_matches','not_found') and not FOLDER_WORDS.search(text) and not any(c in args['pattern'] for c in '*?['):
+                homes=[f for f,mode in self.agent.modes.items() if mode=='write' and f.is_dir()]   # no folder was named: look for that exact name in every folder Julius may change
+                hits=[f for f in homes if self.agent.find(pattern=args['pattern'],source=str(f),recursive=False)['data'].get('items')]
+                if len(hits)==1:out=self.agent.propose('trash',source=str(hits[0]),pattern=args['pattern'],origin='human',turn=turn)
+                elif len(hits)>1:out=result(False,'clarification',f"I found {args['pattern']} in {' and '.join(f.name for f in hits)}. Say which folder, for example trash {args['pattern']} in {hits[0].name}.")
+            self.pending=out['data']['plan']['id'] if out['ok'] and 'plan' in out.get('data',{}) else None
             if self.pending:self.last=self.pending
         elif kind=='empty_trash':
             if self.pending:self.agent.cancel(self.pending)
