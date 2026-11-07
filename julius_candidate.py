@@ -255,7 +255,7 @@ if tts.backend == 'qwen-mlx':  # one persistent output stream, prefill and under
     if not _validation_no_devices and (_asr_cfg.load_config().get('barge_in') or {}).get('voice', True):
         from julius_talkover import TalkOver
         _talkover = TalkOver()
-        _tap_rec = speech_player.tap
+        _tap_rec = getattr(speech_player, "tap", None)
         def _tap_both(audio, rate):
             _talkover.out(audio, rate)
             if _tap_rec is not None: _tap_rec(audio, rate)

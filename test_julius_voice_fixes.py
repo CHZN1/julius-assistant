@@ -125,3 +125,11 @@ class SleepVersusQuiet(unittest.TestCase):
         sleep_turns = [t for s in sc for t in s["turns"] if t["expect"].get("kind") == "sleep"]
         self.assertTrue(sleep_turns)
         for t in sleep_turns: self.assertRegex("Alright. Say Julius when you need me.", re.compile("|".join(t["expect"]["must"]), re.I))
+
+
+class StartupWiring(unittest.TestCase):
+    def test_talkover_tap_does_not_assume_a_recorder(self):
+        """The 11-07 crash loop: speech_player.tap only exists while recording, and the service does not record."""
+        src = (Path(__file__).resolve().parent / "julius_candidate.py").read_text()
+        self.assertNotIn("_tap_rec = speech_player.tap", src)
+        self.assertIn('getattr(speech_player, "tap", None)', src)
