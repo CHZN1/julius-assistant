@@ -1070,14 +1070,16 @@ with microphone_stream():
                     if os.environ.get('JULIUS_SAVE_AUDIO_DIR'):save_utterance(audio)
                     text, lang, nsp = transcribe_input(audio, wake=not utterance_awake)
                     if not text or nsp > 0.6:
+                        print(f'  [ignored: {"nothing transcribed" if not text else "probably not speech"} (no-speech {nsp:.2f}, {dur:.1f}s)]',flush=True)
                         q.clear()
                         continue
                     if self_echo.is_echo(text):
-                        print(f'  [ignored: Julius heard his own voice: {text!r}]',flush=True)
+                        print(f'  [dropped as echo of own voice: {len(text.split())} words, {dur:.1f}s]',flush=True)
                         q.clear(); continue
 
                     if not utterance_awake:
-                        if not has_wake(text): continue
+                        if not has_wake(text):
+                            print(f'  [ignored: no wake word ({len(text.split())} words)]',flush=True);continue
                         text = strip_wake(text)
                         print("  [awake]")
                     else:

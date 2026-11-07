@@ -20,6 +20,11 @@ class SelfEchoTests(unittest.TestCase):
     def test_a_short_answer_to_his_question_is_not_an_echo_late(self):
         t=[100.];e=SelfEcho(clock=lambda:t[0]);e.begin();e.note('Which should I forget, the Sharks or the file stuff?');e.finish();t[0]+=6
         self.assertFalse(e.is_echo('The Sharks.'));self.assertFalse(e.is_echo('forget the Sharks one please'))
+    def test_yes_after_his_say_yes_prompt_is_an_answer_not_an_echo(self):
+        """Live regression (17:37:55): 'Say yes to confirm or cancel to discard.' then the user's 'yes' ~3 s later was dropped as Julius's own voice."""
+        t=[100.];e=SelfEcho(clock=lambda:t[0]);e.begin();e.note('Nothing has changed. Say yes to confirm or cancel to discard.');e.finish()
+        t[0]+=.8;self.assertTrue(e.is_echo('discard.'))          # real tail echo, right at the end
+        t[0]+=2.2;self.assertFalse(e.is_echo('Yes.'));self.assertFalse(e.is_echo('cancel'))
     def test_gate_reports_playback_start_and_end(self):
         calls=[];g=MicrophoneGate();g.on_begin=lambda:calls.append('b');g.on_end=lambda:calls.append('e')
         with g.output():calls.append('play')

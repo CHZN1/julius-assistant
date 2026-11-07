@@ -9,9 +9,9 @@ def overlap(heard, spoken):
 class SelfEcho:
     """Remembers what Julius said, sentence by sentence, and when he stopped. His voice comes back through the microphone while he is still speaking and for a few
     seconds after (reverb, speaker tail, Whisper latency), so the window runs from the END of playback. A long reply is checked against all of it, not the last sentence."""
-    def __init__(self, window=5.0, threshold=.6, clock=time.monotonic, keep=12, late_window=9.0, late_threshold=.75, late_min_words=4, memory=40.0):
+    def __init__(self, window=5.0, threshold=.6, clock=time.monotonic, keep=12, late_window=9.0, late_threshold=.75, late_min_words=4, memory=40.0, short_window=2.0):
         self.window, self.threshold, self.clock, self.keep = window, threshold, clock, keep
-        self.late_window, self.late_threshold, self.late_min_words, self.memory = late_window, late_threshold, late_min_words, memory
+        self.late_window, self.late_threshold, self.late_min_words, self.memory, self.short_window = late_window, late_threshold, late_min_words, memory, short_window
         self.said = []; self.ended = 0.0; self.speaking = 0
     def note(self, spoken):
         """A sentence is about to be played."""
@@ -26,6 +26,7 @@ class SelfEcho:
         if not self.said: return False
         age = 0.0 if self.speaking else now - self.ended
         if age > self.late_window: return False
+        if not self.speaking and age > self.short_window and len(_words(heard)) <= 2: return False   # "yes" / "cancel" after his prompt "say yes to confirm" is an answer: speaker echo is over within ~2 s
         text = " ".join(t for t, at in self.said if now - at <= self.memory)
         if not text: return False
         score = overlap(heard, text)
