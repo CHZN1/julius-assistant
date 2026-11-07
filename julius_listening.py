@@ -72,9 +72,13 @@ def stop_only(text):
 def drop_stop_lead(text):
     """"Stop. What's the weather in Springfield?" -> "What's the weather in Springfield?" """
     return _STOP_LEAD.sub('',text.strip(),count=1) if _STOP_LEAD.match(text.strip()) else text
+QUIET_COMMANDS={'stop listening','go quiet','go silent','mute yourself'}
+def quiet_command(text):
+    """Full microphone-off quiet mode (woken only by the hotkey): only on these words. \"Go to sleep\" is ordinary sleep that wakes on \"Julius\"."""
+    return control_core(text) in QUIET_COMMANDS
 def listening_control(text):
     command=control_core(text)
-    if command in {'sleep','go to sleep','go back to sleep','stop listening','time to sleep','you can sleep','you can go to sleep'}:return 'sleep'
+    if command in {'sleep','go to sleep','go back to sleep','stop listening','go quiet','go silent','mute yourself','time to sleep','you can sleep','you can go to sleep'}:return 'sleep'
     if command in {'wake','wake up'}:return 'wake'
     return None
 

@@ -13,7 +13,7 @@
      "turns": [
        {"say": "Julius, what time is it in Tokyo?", "expect": {"kind": "answer", "must": ["Tokyo"]}},
        {"say": "No, I meant Toronto.", "expect": {"kind": "correction", "must": ["Toronto"], "must_not": ["Tokyo"]}},
-       {"say": "Thanks. Go to sleep.", "expect": {"kind": "sleep", "must": ["sleep|here|night|later|rest|call"]}}]},
+       {"say": "Thanks. Go to sleep.", "expect": {"kind": "sleep", "must": ["sleep|here|night|later|rest|call|say julius|alright"]}}]},
 
     {"id": "s03_trash_yes_undo", "title": "Trash a file, confirm, undo", "intro": "Uses ~/dev/sandbox/report.txt. Everything is reversible and the last turn puts it back.",
      "pre": {"sandbox_files": ["report.txt"]},
@@ -71,7 +71,7 @@
        {"say": "Julius.", "expect": {"kind": "wake_only", "must": ["yeah|here|go ahead|what"]}},
        {"say": "What's on my calendar tomorrow?", "expect": {"kind": "answer", "must_not": ["error"]}},
        {"say": "Never mind.", "expect": {"kind": "ack", "must_not": ["error"]}},
-       {"say": "Go to sleep.", "expect": {"kind": "sleep", "must": ["sleep|here|night|later|rest|call"]}},
+       {"say": "Go to sleep.", "expect": {"kind": "sleep", "must": ["sleep|here|night|later|rest|call|say julius|alright"]}},
        {"say": "What time is it?", "expect": {"kind": "ignored", "ignored": true}}]}
   ]
 }

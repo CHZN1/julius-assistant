@@ -101,3 +101,27 @@ class StatusAfterFinish(unittest.TestCase):
         src = open(cs.__file__).read()
         self.assertIn("self.latest().status in FINISHED", src)
         self.assertTrue(cs.LOOSE_STATUS.match("what's the status"))
+
+
+class SleepVersusQuiet(unittest.TestCase):
+    def test_go_to_sleep_is_ordinary_sleep(self):
+        from julius_listening import quiet_command
+        for t in ["Go to sleep.", "Thanks, go to sleep.", "go back to sleep", "time to sleep"]:
+            self.assertEqual(listening_control(t), "sleep", t); self.assertFalse(quiet_command(t), t)
+
+    def test_only_stop_listening_and_go_quiet_turn_the_microphone_off(self):
+        from julius_listening import quiet_command
+        for t in ["Stop listening.", "Go quiet.", "okay go quiet please", "Julius, stop listening"]:
+            self.assertEqual(listening_control(t), "sleep", t); self.assertTrue(quiet_command(t), t)
+        self.assertIsNone(listening_control("Stop listening to that song."))
+
+    def test_candidate_uses_quiet_command_only(self):
+        src = open(Path(__file__).resolve().parent / "julius_candidate.py").read()
+        self.assertIn("quiet_command(t or '')", src); self.assertNotIn("'go to sleep','go back to sleep'}", src)
+
+    def test_scenario_expectation_accepts_the_ordinary_sleep_line(self):
+        import json as _j
+        sc = _j.loads((Path(__file__).resolve().parent / "evals" / "voice_scenarios.json").read_text())["scenarios"]
+        sleep_turns = [t for s in sc for t in s["turns"] if t["expect"].get("kind") == "sleep"]
+        self.assertTrue(sleep_turns)
+        for t in sleep_turns: self.assertRegex("Alright. Say Julius when you need me.", re.compile("|".join(t["expect"]["must"]), re.I))

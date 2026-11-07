@@ -273,8 +273,8 @@ import julius_state,signal
 QUIET_HOTKEY=(julius_config.load_config().get('service') or {}).get('wake_hotkey','<ctrl>+<alt>+j') if os.environ.get('JULIUS_VALIDATION_NO_DEVICES')!='1' else None
 _wake_listener=None
 def wants_quiet(t):
-    """'go to sleep' means quiet mode (detector fully off until the wake hotkey) when that hotkey can be pressed; otherwise it stays an ordinary sleep."""
-    from julius_listening import control_core;return _wake_listener is not None and control_core(t or '') in {'go to sleep','go back to sleep'}
+    """'stop listening' / 'go quiet' mean quiet mode (detector fully off until the wake hotkey) when that hotkey can be pressed; 'go to sleep' is an ordinary sleep that wakes on 'Julius'."""
+    from julius_listening import quiet_command;return _wake_listener is not None and quiet_command(t or '')
 def sleep_line(t):
     return f'Going quiet. Press {QUIET_HOTKEY.replace("<ctrl>","Control").replace("<alt>","Option").replace("+"," ").title().replace("J","J")} to wake me.' if wants_quiet(t) else 'Alright. Say Julius when you need me.'
 def enter_quiet():
