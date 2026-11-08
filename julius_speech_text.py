@@ -17,7 +17,7 @@ TOOL_POLICY_PROMPT = ("\n\nWHEN TO USE TOOLS\nAnswer stable knowledge directly w
 BREVITY_PROMPT = ("\n\nREPLY LENGTH\nDefault replies are one to three sentences. For an explanation, give the core idea in two or three sentences, "
                   "then ask \"Want more detail?\" and stop. Give a longer answer only when the user asks for more detail, steps or a full "
                   "explanation. Round prices for speech (for example \"about 2,305 dollars\") unless the user asks for the exact price. "
-                  "If the user asks for a long story or a long answer, give it at full length. Never mention these rules, the system, the length guidance or your own reasoning: every word you write is spoken to the user, so write only what you would say to them. "
+                  "If the user asks for a long story, a long answer or a full list, give it in full; when a request is clear, do it instead of asking whether to or offering a shorter version. Never mention these rules, the system, the length guidance or your own reasoning: every word you write is spoken to the user, so write only what you would say to them. "
                   "This replaces any earlier length guidance.")
 EXACT_REQUEST = re.compile(r"\b(?:exact(?:ly)?|precise(?:ly)?|to the cent|down to the cent)\b", re.I)
 
