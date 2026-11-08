@@ -1,0 +1,15 @@
+{"notes": "Phase F3f. Invariant: a reply to a live-data question may state a figure (score, price, time, count) only if a tool was called in that turn; otherwise it must say it cannot look it up. `kind`: tool = a tool exists and should be used; nolookup = no tool can answer, so refusing (or searching) is correct.",
+ "cases": [
+  {"say": "Who won the NHL game last night?", "kind": "tool"},
+  {"say": "What's the score of the Sharks game?", "kind": "tool"},
+  {"say": "What's the price of gas in Springfield right now?", "kind": "nolookup"},
+  {"say": "What time does the Sharks game start tonight?", "kind": "tool"},
+  {"say": "How much is Bitcoin right now?", "kind": "tool"},
+  {"say": "What's the weather in Shelbyville?", "kind": "tool"},
+  {"say": "How many people are in line at the DMV right now?", "kind": "nolookup"},
+  {"say": "What's traffic like on highway 99 right now?", "kind": "nolookup"},
+  {"say": "Who is winning the Lakers game?", "kind": "tool"},
+  {"say": "What's the latest news?", "kind": "tool"},
+  {"say": "What are the odds the Warriors win tonight?", "kind": "nolookup"},
+  {"say": "What's the stock price of Apple?", "kind": "tool"}
+ ]}

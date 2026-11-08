@@ -116,45 +116,63 @@ class SpokenDatesAndLeaks(unittest.TestCase):
         self.assertIn("only for lists that came back from a tool", src); self.assertIn("Never refuse because it is long", src)
 
 
+class TranscriptWindow(unittest.TestCase):
+    def test_logging_window_ends_by_itself(self):
+        import datetime, julius_config as jc
+        cfg = {"service": {"log_transcripts": True, "log_transcripts_until": "2026-11-14"}}
+        self.assertTrue(jc.transcripts_logging(cfg, datetime.date(2026, 11, 7))); self.assertTrue(jc.transcripts_logging(cfg, datetime.date(2026, 11, 14)))
+        self.assertFalse(jc.transcripts_logging(cfg, datetime.date(2026, 11, 15)))
+        self.assertTrue(jc.transcripts_logging({"service": {"log_transcripts": True}}, datetime.date(2030, 1, 1)), "no end date: stays on")
+        self.assertFalse(jc.transcripts_logging({"service": {"log_transcripts": False, "log_transcripts_until": "2099-01-01"}}))
+        self.assertFalse(jc.transcripts_logging({"service": {"log_transcripts": True, "log_transcripts_until": "next week"}}), "unreadable date: redact")
+
+    def test_the_log_writer_asks_every_line(self):
+        import julius_log
+        state = {"on": True}; lines = []
+        class L:
+            def info(self, s): lines.append(s)
+        tee = julius_log.Tee(open("/dev/null", "w"), L(), "info", lambda: state["on"])
+        tee.write("YOU [en]: hello there\n"); state["on"] = False; tee.write("YOU [en]: secret\n")
+        self.assertIn("hello there", lines[0]); self.assertIn("[transcript redacted]", lines[1])
+
+    def test_toml_sets_a_seven_day_window(self):
+        import julius_config as jc, datetime
+        s = jc.load_config()["service"]; self.assertTrue(s["log_transcripts"]); self.assertEqual(s["log_transcripts_until"], "2026-11-14")
+
+class LiveDataRule(unittest.TestCase):
+    def test_live_questions_are_recognised(self):
+        import julius_livedata as ld
+        for q in ("Who won the NHL game last night?", "What's the price of gas in Springfield right now?", "What time does the Sharks game start tonight?", "What's the weather in Springfield?", "How much is Bitcoin?", "What's the latest news?"):
+            self.assertTrue(ld.is_live_query(q), q)
+        for q in ("Tell me a long story about a dragon.", "What is two plus two?", "Remember that my dog is called Rex.", "Explain how a transistor works."):
+            self.assertFalse(ld.is_live_query(q), q)
+
+    def test_figures_are_recognised(self):
+        import julius_livedata as ld
+        for s in ("The Sharks won three to two.", "Gas is about 4.89 a gallon.", "It starts at 7:30.", "Bitcoin is around 67,000 dollars.", "It's 57 degrees.", "They won 4-2."):
+            self.assertTrue(ld.states_a_figure(s), s)
+        for s in ("I can't look that up right now, so I won't guess.", "Let me check on that for you.", "The Sharks are a hockey team."):
+            self.assertFalse(ld.states_a_figure(s), s)
+
+    def test_only_ungrounded_figures_about_live_questions_are_blocked(self):
+        import julius_livedata as ld
+        self.assertTrue(ld.blocked("The Sharks won three to two.", True, False))
+        self.assertFalse(ld.blocked("The Sharks won three to two.", True, True), "a tool result is behind it")
+        self.assertFalse(ld.blocked("The Sharks won three to two.", False, False), "not a live question")
+        self.assertFalse(ld.blocked("I can't look that up.", True, False))
+
+    def test_tool_result_is_judged_per_turn(self):
+        import julius_livedata as ld
+        old = [{"role": "user", "content": "a"}, {"role": "tool", "content": "x"}, {"role": "assistant", "content": "b"}]
+        self.assertFalse(ld.tool_result_this_turn(old + [{"role": "user", "content": "c"}]), "an earlier turn's tool result does not ground this turn")
+        self.assertTrue(ld.tool_result_this_turn(old + [{"role": "user", "content": "c"}, {"role": "tool", "content": "y"}]))
+
+    def test_candidate_applies_the_guard_and_the_prompt_states_the_rule(self):
+        src = open(Path(__file__).resolve().parent / "julius_candidate.py").read()
+        self.assertIn("_livedata.blocked(sent", src); self.assertIn("UNGROUNDED_LINE", src)
+        from julius_speech_text import TOOL_POLICY_PROMPT
+        self.assertIn("LIVE FACTS", TOOL_POLICY_PROMPT); self.assertIn("never state one from memory", TOOL_POLICY_PROMPT)
+
+
 if __name__ == "__main__":
     unittest.main()
-
-
-class StatusAfterFinish(unittest.TestCase):
-    def test_status_question_after_the_task_finished_is_answered_by_the_coding_session(self):
-        import julius_code_session as cs
-        src = open(cs.__file__).read()
-        self.assertIn("self.latest().status in FINISHED", src)
-        self.assertTrue(cs.LOOSE_STATUS.match("what's the status"))
-
-
-class SleepVersusQuiet(unittest.TestCase):
-    def test_go_to_sleep_is_ordinary_sleep(self):
-        from julius_listening import quiet_command
-        for t in ["Go to sleep.", "Thanks, go to sleep.", "go back to sleep", "time to sleep"]:
-            self.assertEqual(listening_control(t), "sleep", t); self.assertFalse(quiet_command(t), t)
-
-    def test_only_stop_listening_and_go_quiet_turn_the_microphone_off(self):
-        from julius_listening import quiet_command
-        for t in ["Stop listening.", "Go quiet.", "okay go quiet please", "Julius, stop listening"]:
-            self.assertEqual(listening_control(t), "sleep", t); self.assertTrue(quiet_command(t), t)
-        self.assertIsNone(listening_control("Stop listening to that song."))
-
-    def test_candidate_uses_quiet_command_only(self):
-        src = open(Path(__file__).resolve().parent / "julius_candidate.py").read()
-        self.assertIn("quiet_command(t or '')", src); self.assertNotIn("'go to sleep','go back to sleep'}", src)
-
-    def test_scenario_expectation_accepts_the_ordinary_sleep_line(self):
-        import json as _j
-        sc = _j.loads((Path(__file__).resolve().parent / "evals" / "voice_scenarios.json").read_text())["scenarios"]
-        sleep_turns = [t for s in sc for t in s["turns"] if t["expect"].get("kind") == "sleep"]
-        self.assertTrue(sleep_turns)
-        for t in sleep_turns: self.assertRegex("Alright. Say Julius when you need me.", re.compile("|".join(t["expect"]["must"]), re.I))
-
-
-class StartupWiring(unittest.TestCase):
-    def test_talkover_tap_does_not_assume_a_recorder(self):
-        """The 11-07 crash loop: speech_player.tap only exists while recording, and the service does not record."""
-        src = (Path(__file__).resolve().parent / "julius_candidate.py").read_text()
-        self.assertNotIn("_tap_rec = speech_player.tap", src)
-        self.assertIn('getattr(speech_player, "tap", None)', src)

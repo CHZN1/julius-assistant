@@ -32,7 +32,7 @@ class Tee(io.TextIOBase):
         self.buf += _ANSI.sub("", s).replace("\r", "\n")
         while "\n" in self.buf:
             line, self.buf = self.buf.split("\n", 1)
-            if line.strip() and not _NOISE.search(line): self.log.info(record(self.level, "console", line.strip(), self.log_transcripts))
+            if line.strip() and not _NOISE.search(line): self.log.info(record(self.level, "console", line.strip(), self.log_transcripts() if callable(self.log_transcripts) else self.log_transcripts))
         return len(s)
     def flush(self):
         try: self.inner.flush()
@@ -41,7 +41,7 @@ class Tee(io.TextIOBase):
 
 _logger = None
 def install(log_transcripts=False, path=None):
-    """Tee stdout/stderr into the JSON log. Returns the logger."""
+    """Tee stdout/stderr into the JSON log. `log_transcripts` is a bool or a callable asked for every line (so a time-limited diagnostics window ends by itself). Returns the logger."""
     global _logger
     _logger = make_logger(path); sys.stdout = Tee(sys.stdout, _logger, "info", log_transcripts); sys.stderr = Tee(sys.stderr, _logger, "error", log_transcripts)
     event("start", pid=os.getpid()); return _logger

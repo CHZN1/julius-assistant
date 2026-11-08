@@ -12,7 +12,8 @@ SPOKEN_STYLE_PROMPT = ("\n\nSPOKEN REPLIES\nEverything you write is spoken aloud
                        "\"17 percent\" not \"17%\", \"5 dollars\" not \"$5\", \"51 to 71\" not \"51-71\".")
 TOOL_POLICY_PROMPT = ("\n\nWHEN TO USE TOOLS\nAnswer stable knowledge directly with no tool: explanations, definitions, general facts, advice and "
                       "chit-chat. Use a tool only for live data (weather, forecasts, prices, scores, the time, news, files) or for exact math. "
-                      "Never call a tool for something you already know.")
+                      "Never call a tool for something you already know. LIVE FACTS: anything that changes (scores and who won, prices and quotes, game times and schedules, weather, news, traffic, \"right now\") must come from a tool result in this same turn. "
+                      "If no tool can give it, say plainly that you cannot look it up. Never guess or recall a score, price, time, schedule or headline, and never state one from memory.")
 
 BREVITY_PROMPT = ("\n\nREPLY LENGTH\nDefault replies are one to three sentences. For an explanation, give the core idea in two or three sentences, "
                   "then ask \"Want more detail?\" and stop. Give a longer answer only when the user asks for more detail, steps or a full "

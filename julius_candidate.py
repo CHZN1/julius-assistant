@@ -2,7 +2,7 @@
 import os as _os0
 if _os0.environ.get("JULIUS_SERVICE") == "1":
     import julius_config as _jc0, julius_log
-    julius_log.install(bool((_jc0.load_config().get("service") or {}).get("log_transcripts", False)))
+    julius_log.install(_jc0.transcripts_logging_cached)   # what he heard and said is logged only while [service] log_transcripts is on and log_transcripts_until has not passed
 import numpy as np, sounddevice as sd, mlx_whisper, time, re, threading
 import json as _json
 import os
@@ -517,6 +517,8 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
 
     stream_calls = []
     stalled = False
+    import julius_livedata as _livedata
+    _live_q = _livedata.is_live_query(user_text); dropped_ungrounded = []
     def _stream(messages, allow_retry=True, tools=None):
         prepare_inference()
         print("\r\033[K  JULIUS: ", end="", flush=True)
@@ -543,6 +545,8 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
                         break
                     sent, pend = pend[:mt.end()].strip(), pend[mt.end():]
                     if globals().get("META_LEAK") and META_LEAK.search(sent): sent = ""   # the model narrating its own instructions ("the length guidance gives way", "no tools needed") is never spoken
+                    if sent and _livedata.blocked(sent, _live_q, _livedata.tool_result_this_turn(messages) or bool(stream_calls)):
+                        sent = ""; dropped_ungrounded.append(1)   # a figure about something that changes, with no tool result behind it: never spoken
                     if len(sent) > 2:
                         spoken += 1
                         print(sent, end=" ", flush=True)     # print BEFORE speaking
@@ -551,10 +555,16 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
         finally:
             closer=getattr(parts,'close',None)
             if callable(closer):closer()
+        if pend.strip() and _livedata.blocked(pend.strip(), _live_q, _livedata.tool_result_this_turn(messages) or bool(stream_calls)):
+            pend = ""; dropped_ungrounded.append(1)
         if pend.strip():
             print(pend.strip(), end="", flush=True)
             if speak_fn and (not long_tool_result or spoken < 2):
                 speak_fn(pend.strip())
+        if dropped_ungrounded and not stream_calls:   # figures were withheld and no tool was called: say so once instead of leaving silence
+            dropped_ungrounded.clear(); print(_livedata.UNGROUNDED_LINE, end="", flush=True)
+            if speak_fn: speak_fn(_livedata.UNGROUNDED_LINE)
+            full = _livedata.UNGROUNDED_LINE
         print("\n", flush=True)
         return full
 

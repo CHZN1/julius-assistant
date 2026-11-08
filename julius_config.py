@@ -15,7 +15,7 @@ DEFAULTS = {
     "offline": {"model": "llama3.2:3b", "retry_seconds": 60},
     "voice": {"keep_loaded": True},
     "memory": {"announce_auto": True},
-    "service": {"wake_hotkey": "<ctrl>+<alt>+j", "log_transcripts": False},
+    "service": {"wake_hotkey": "<ctrl>+<alt>+j", "log_transcripts": False, "log_transcripts_until": ""},
     "code": {"model": "claude-opus-5-5", "default_cap_usd": 1.5, "max_cap_usd": 5.0, "timeout_minutes": 20, "daily_cap_usd": 5.0, "projects_root": "~/dev", "binary": "claude"},
     "files": {"folders": {"Documents": "write", "Desktop": "write", "Downloads": "write"}},
     "barge_in": {"hotkey": "<ctrl>+<alt>+s", "voice": True},
@@ -45,6 +45,32 @@ def load_dotenv(path=None):
         if key and value and key not in os.environ:
             os.environ[key] = value
     return True
+
+
+def transcripts_logging(config=None, today=None):
+    """Whether what he heard and said may go into the JSON log right now: [service] log_transcripts is true and, when log_transcripts_until (YYYY-MM-DD) is set,
+    today is not past it. Diagnostics windows switch themselves off."""
+    import datetime
+    service = (config if config is not None else load_config()).get("service") or {}
+    if not service.get("log_transcripts"): return False
+    until = str(service.get("log_transcripts_until") or "").strip()
+    if not until: return True
+    try: return (today or datetime.date.today()) <= datetime.date.fromisoformat(until)
+    except ValueError: return False   # an unreadable date counts as expired: privacy wins
+
+
+_transcripts_cache = [0.0, False]
+
+
+def transcripts_logging_cached(seconds=60.0, clock=None):
+    """transcripts_logging() re-read at most every `seconds`, for the log writer (so a long-running service notices the end of the window and edits to julius.toml)."""
+    import time
+    now = (clock or time.monotonic)()
+    if now - _transcripts_cache[0] >= seconds:
+        try: _transcripts_cache[1] = transcripts_logging()
+        except Exception: _transcripts_cache[1] = False
+        _transcripts_cache[0] = now
+    return _transcripts_cache[1]
 
 
 def load_config(path=None):

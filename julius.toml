@@ -27,7 +27,8 @@ announce_auto = true             # say "Noted." once after a turn in which Juliu
 
 [service]
 wake_hotkey = "<ctrl>+<alt>+j"   # leaves quiet mode (after "Julius, go to sleep"); also `python julius_service.py wake`
-log_transcripts = false         # JSON log in ~/Library/Logs/Julius redacts what you say and what he answers unless true
+log_transcripts = true          # DIAGNOSTICS WINDOW 2026-11-07 to 2026-11-14: the JSON log keeps what you say and what he answers; it switches itself back off after log_transcripts_until
+log_transcripts_until = "2026-11-14"   # last day (inclusive); after it transcripts are redacted again with no action from you. Remove the line to keep logging on
 
 [barge_in]
 hotkey = "<ctrl>+<alt>+s"      # global stop: silences Julius at once, whatever the microphone hears. macOS asks once to allow input monitoring for the terminal
