@@ -756,6 +756,35 @@ import julius_config as _code_cfg
 import julius_tools as _jt_cmd
 _code_session = CodeSession(config=_code_cfg.load_config().get("code"), tracker=cloud_tracker, api_key=_code_cfg.api_key, on_done=_code_done.append)
 _jt_cmd.file_session = _file_session; _jt_cmd.code_session = _code_session   # backup path: Haiku can hand a file or coding request to these sessions when a phrasing slips past the routers
+
+
+def _undo_coordinator_build():
+    """Bare "undo" goes to the agent that acted most recently, and says which one (julius_undo)."""
+    import julius_undo as _u
+    _clean = lambda m: re.sub(r"^(?:Undone\.|Okay,)\s*", "", str(m or "")).strip()
+    def _file_state():
+        a = jf.agent()
+        with a._locked():
+            st = a._load()
+        return st
+    def _file_mark():
+        st = _file_state(); live = [pid for pid in st["batches"] if st["plans"][pid]["status"] not in ("undone", "purged")]
+        return (live[-1], st["plans"][live[-1]]["status"]) if live else None
+    def _file_undo():
+        out = jt.dispatcher().human_file(_file_session, "undo", TURN["n"])
+        return _clean(out["message"]) if out else None
+    def _code_task(): return _code_session.latest("merged")
+    def _code_undo():
+        out = _code_session.handle("undo the merge", TURN["n"]); return _clean(out["message"]) if out else None
+    def _mem_undo(): return _clean(memory.handle("undo"))
+    return _u.UndoCoordinator({
+        "files": _u.UndoAgent("the last file change", _file_mark, lambda: _file_mark() is not None, _file_undo),
+        "code": _u.UndoAgent("the coding merge", lambda: (lambda t: (t.id, bool(t.merged)) if t else None)(_code_task()), lambda: _code_task() is not None, _code_undo),
+        "memory": _u.UndoAgent("your last memory change", lambda: (id(memory.undo_rows), id(memory.undo_correction)), lambda: bool(memory.undo_rows or memory.undo_correction), _mem_undo)})
+
+try: _undo_coordinator = _undo_coordinator_build()
+except Exception as _exc:
+    _undo_coordinator = None; print(f"  [cross-agent undo unavailable: {type(_exc).__name__}: {_exc}]", flush=True)
 if cloud_brain is not None:
     import julius_orchestrator
     julius_orchestrator.configure(file_session=_file_session, turn=lambda: TURN["n"], code_session=_code_session)
@@ -888,10 +917,12 @@ def _process(text, lang):
             except Exception as exc:
                 print(f"  [speech unavailable: {exc}]", flush=True)
 
+    if globals().get('_undo_coordinator') is not None: _undo_coordinator.observe(TURN["n"])   # whatever changed since the last turn belongs to that turn
     _lc_ask = None
     if globals().get('_lowconf_gate') is not None: _lc_action, text, _lc_ask = _lowconf_gate.step(text, globals().get('_last_asr_confidence'), voice=(lang != 'typed'))   # shaky recognition + a risky request: read it back and wait for a yes
+    _undo_said = _undo_coordinator.handle(text) if not _lc_ask and globals().get('_undo_coordinator') is not None else None   # bare "undo": the most recent action of any agent, named
     discussion=authority_discussion_reply(text)
-    routed = _lc_ask or ((discussion or "I didn't catch the full thought. Could you say that again?") if discussion or incomplete_fragment(text) else (handle_memory(text) or handle_code(text) or handle_files(text)))
+    routed = _undo_said or _lc_ask or ((discussion or "I didn't catch the full thought. Could you say that again?") if discussion or incomplete_fragment(text) else (handle_memory(text) or handle_code(text) or handle_files(text)))
     if routed is not None:
         print(f"  JULIUS: {routed}\n", flush=True)
         try:
