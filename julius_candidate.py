@@ -851,6 +851,9 @@ def handle_files(text):
     return out["message"]
 
 
+import julius_lowconf as _lowconf_mod
+_lowconf_gate = _lowconf_mod.LowConfidenceGate()
+
 def process(text,lang):
     with cancellation.activity():
         return _process(text,lang)
@@ -885,8 +888,10 @@ def _process(text, lang):
             except Exception as exc:
                 print(f"  [speech unavailable: {exc}]", flush=True)
 
+    _lc_ask = None
+    if globals().get('_lowconf_gate') is not None: _lc_action, text, _lc_ask = _lowconf_gate.step(text, globals().get('_last_asr_confidence'), voice=(lang != 'typed'))   # shaky recognition + a risky request: read it back and wait for a yes
     discussion=authority_discussion_reply(text)
-    routed = (discussion or "I didn't catch the full thought. Could you say that again?") if discussion or incomplete_fragment(text) else (handle_memory(text) or handle_code(text) or handle_files(text))
+    routed = _lc_ask or ((discussion or "I didn't catch the full thought. Could you say that again?") if discussion or incomplete_fragment(text) else (handle_memory(text) or handle_code(text) or handle_files(text)))
     if routed is not None:
         print(f"  JULIUS: {routed}\n", flush=True)
         try:
