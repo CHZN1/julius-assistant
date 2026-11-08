@@ -7,8 +7,10 @@ APP = Path(__file__).resolve().parent / "ui" / "app" / "build" / "Julius Orb.app
 SRC = (Path(__file__).resolve().parent / "ui" / "app" / "main.swift").read_text()
 
 
-def run_app(feed, seconds=5):
-    p = subprocess.run([str(APP), "--feed", feed, "--no-hotkey", "--selftest", str(seconds)], capture_output=True, text=True, timeout=60)
+def run_app(feed, seconds=5, support=None, eval_js=None):
+    import tempfile
+    env = dict(os.environ, JULIUS_ORB_SUPPORT=str(support or tempfile.mkdtemp()))   # never touch the real settings file
+    p = subprocess.run([str(APP), "--feed", feed, "--no-hotkey", "--selftest", str(seconds), *(["--eval", eval_js] if eval_js else [])], capture_output=True, text=True, timeout=60, env=env)
     return json.loads(p.stdout.strip().splitlines()[-1])
 
 
@@ -39,6 +41,45 @@ class AppEndToEnd(unittest.TestCase):
             for st in ("quiet", "asleep"):
                 hub.state = "idle"; hub.set_state(st); self.assertEqual(run_app(f"ws://127.0.0.1:{srv.port}", 4)["page"]["mode"], st)
         finally: srv.stop()
+
+
+
+@unittest.skipUnless(APP.exists(), "build the app first: ui/app/build.sh")
+class SettingsAndOffline(unittest.TestCase):
+    def test_settings_are_saved_and_restored(self):
+        import tempfile
+        d = Path(tempfile.mkdtemp())
+        run_app("ws://127.0.0.1:1", 3, d, "document.querySelector('#finishes button[data-v=\"cobalt\"]').click(); document.querySelector('#power button[data-v=\"low\"]').click(); const e=document.getElementById('swirl'); e.value=35; e.dispatchEvent(new Event('input'));")
+        saved = json.loads((d / "orb-settings.json").read_text())
+        self.assertEqual((saved["finish"], saved["power"], saved["swirl"]), ("cobalt", "low", 35))
+        r = run_app("ws://127.0.0.1:1", 3, d)["page"]["settings"]
+        self.assertEqual((r["finish"], r["power"], r["swirl"]), ("cobalt", "low", 35))
+        self.assertEqual(r["silk"], 80, "untouched settings keep the approved defaults")
+
+    def test_all_eight_finishes_selectable(self):
+        import tempfile
+        for key in ("gold", "rose", "silver", "emerald", "amethyst", "opal", "obsidian", "cobalt"):
+            d = Path(tempfile.mkdtemp())
+            run_app("ws://127.0.0.1:1", 2, d, f"document.querySelector('#finishes button[data-v=\"{key}\"]').click();")
+            self.assertEqual(json.loads((d / "orb-settings.json").read_text())["finish"], key)
+
+    def test_low_power_cap_applies(self):
+        import tempfile
+        d = Path(tempfile.mkdtemp()); (d / "orb-settings.json").write_text(json.dumps({"power": "low", "count": 2400}))
+        self.assertEqual(run_app("ws://127.0.0.1:1", 3, d)["page"]["grains"], 800000)
+
+    def test_offline_then_recovers_when_the_feed_appears(self):
+        import socket, threading
+        s = socket.socket(); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
+        hub = ev.EventHub(); box = {}
+        def later():
+            time.sleep(3.0); box["srv"] = ev.EventServer(hub, port=port).start(); hub.set_state("speaking")
+        t = threading.Thread(target=later); t.start()
+        try: r = run_app(f"ws://127.0.0.1:{port}", 9)
+        finally:
+            t.join()
+            if "srv" in box: box["srv"].stop()
+        self.assertTrue(r["feedConnected"]); self.assertEqual(r["page"]["mode"], "speaking")
 
 
 if __name__ == "__main__":
