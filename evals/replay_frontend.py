@@ -68,7 +68,7 @@ def segment(sig, th, silence=SILENCE_LEN):
     return out
 
 
-def front_end(mic, out, mode):
+def front_end(mic, out, mode, duplex=False):
     if mode == "none": return mic
     if mode == "gate":
         shut = output_mask(out); sig = mic.copy()
@@ -76,7 +76,7 @@ def front_end(mic, out, mode):
         return sig
     if mode == "aec":
         import julius_aec
-        return julius_aec.cancel(mic, out, lag=PHYS)
+        return julius_aec.cancel(mic, out, lag=0.0 if duplex else PHYS)   # duplex recordings: the reference is already sample-aligned
     raise ValueError(mode)
 
 
@@ -96,18 +96,22 @@ def replay_take(take, mode):
     scenario = json.loads((take / "scenario.json").read_text()); events = ve.read_jsonl(take / "rec" / "events.jsonl"); labels = ve.read_jsonl(take / "labels.jsonl")
     t0 = events[0]["t0"]; mic = read_wav(take / "rec" / "mic.wav"); out = read_wav(take / "rec" / "out.wav")
     n = min(len(mic), len(out)); mic, out = mic[:n], out[:n]
-    end_ev = next((e for e in events if e["kind"] == "session_end"), events[-1])
-    mic_s = end_ev.get("mic_seconds") or n / SR   # mic.wav is padded to the length of out.wav; the true microphone duration is in the session_end event
-    off = (end_ev["t"] - t0) - mic_s   # first guess: when the microphone opened relative to session_start (the session closes a little after the last sample, so this is too large)
-    shift = int(round(off * SR)); out = np.concatenate([out[shift:], np.zeros(shift, dtype=np.float32)])[:n] if shift > 0 else out
-    import julius_aec
-    lag = julius_aec.estimate_lag(mic, out)   # whatever is left is the acoustic delay (PHYS) plus the error of that guess
-    off += lag - PHYS if lag > 0.1 else 0.0
-    shift2 = int(round((lag - PHYS) * SR))
-    if lag > 0.1 and shift2 != 0:   # move out.wav so it sits at the moment each chunk was WRITTEN to the device (the live gate's clock); the echo then trails it by PHYS
-        out = np.concatenate([out[shift2:], np.zeros(shift2, dtype=np.float32)])[:n] if shift2 > 0 else np.concatenate([np.zeros(-shift2, dtype=np.float32), out])[:n]
+    duplex = any(e["kind"] == "duplex" for e in events); start_ev = next((e for e in events if e["kind"] == "mic_start"), None)
+    if duplex and start_ev is not None:
+        off = start_ev["t"] - t0   # duplex recording: mic.wav and out.wav share the callback clock and mic_start gives the offset to the event clock exactly; nothing to estimate
+    else:
+        end_ev = next((e for e in events if e["kind"] == "session_end"), events[-1])
+        mic_s = end_ev.get("mic_seconds") or n / SR   # mic.wav is padded to the length of out.wav; the true microphone duration is in the session_end event
+        off = (end_ev["t"] - t0) - mic_s   # first guess: when the microphone opened relative to session_start (the session closes a little after the last sample, so this is too large)
+        shift = int(round(off * SR)); out = np.concatenate([out[shift:], np.zeros(shift, dtype=np.float32)])[:n] if shift > 0 else out
+        import julius_aec
+        lag = julius_aec.estimate_lag(mic, out)   # whatever is left is the acoustic delay (PHYS) plus the error of that guess
+        off += lag - PHYS if lag > 0.1 else 0.0
+        shift2 = int(round((lag - PHYS) * SR))
+        if lag > 0.1 and shift2 != 0:   # move out.wav so it sits at the moment each chunk was WRITTEN to the device (the live gate's clock); the echo then trails it by PHYS
+            out = np.concatenate([out[shift2:], np.zeros(shift2, dtype=np.float32)])[:n] if shift2 > 0 else np.concatenate([np.zeros(-shift2, dtype=np.float32), out])[:n]
     t0 += off
-    sig = front_end(mic, out, mode); th = noise_threshold(mic)
+    sig = front_end(mic, out, mode, duplex=duplex); th = noise_threshold(mic)
     replies = [(e["t"] - t0, e.get("text", "")) for e in events if e["kind"] == "reply" and e.get("text")]
     spoken = [e.get("text", "") for e in events if e["kind"] == "reply"]
     segs = []

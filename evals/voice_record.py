@@ -3,6 +3,7 @@
     python evals/voice_record.py list                 the scenarios
     python evals/voice_record.py record               record all ten, in order (about 30 minutes)
     python evals/voice_record.py record s03 s07       only these (id prefixes)
+    python evals/voice_record.py record --duplex d1 d2 d3   the duplex-audio live test (evals/duplex_scenarios.json, Julius started with JULIUS_DUPLEX=1)
     python evals/voice_record.py status               how many takes exist and how much disk they use
     python evals/voice_record.py delete-all           remove EVERY recording (asks you to type a confirmation)
 
@@ -20,6 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 DATA = ROOT / "voice_data"
 SCENARIOS = Path(__file__).with_name("voice_scenarios.json")
+DUPLEX_SCENARIOS = Path(__file__).with_name("duplex_scenarios.json")
 SANDBOX = Path("~/dev/sandbox").expanduser()
 DEV = Path("~/dev").expanduser()
 STAGE = re.compile(r"\s*\[[^\]]*\]\s*")
@@ -87,11 +89,11 @@ def _keys():
     threading.Thread(target=reader, daemon=True).start(); return q
 
 
-def record_scenario(sc, take, keys):
+def record_scenario(sc, take, keys, extra_env=None):
     """Returns 'keep' | 'redo' | 'quit'."""
     rec = take / "rec"; take.mkdir(parents=True); (take / "scenario.json").write_text(json.dumps(sc, indent=1))
     memory = tempfile.mkdtemp(prefix="julius_voice_mem_")
-    env = {**os.environ, "JULIUS_SESSION_RECORD_DIR": str(rec), "JULIUS_MEMORY_DIR": memory, "JULIUS_PROFILE": "cloud"}
+    env = {**os.environ, "JULIUS_SESSION_RECORD_DIR": str(rec), "JULIUS_MEMORY_DIR": memory, "JULIUS_PROFILE": "cloud", **(extra_env or {})}
     log = open(take / "console.log", "w")
     proc = subprocess.Popen(["/bin/zsh", str(ROOT / "run_julius.sh")], env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, cwd=ROOT, start_new_session=True)
     events = rec / "events.jsonl"; labels = open(take / "labels.jsonl", "a"); result = "keep"
@@ -146,9 +148,9 @@ def record_scenario(sc, take, keys):
     return result
 
 
-def record(prefixes):
+def record(prefixes, duplex=False):
     import julius_service as svc
-    scenarios = select(load_scenarios(), prefixes)
+    scenarios = select(load_scenarios(DUPLEX_SCENARIOS if duplex else SCENARIOS), prefixes)
     for sc in scenarios:
         for p in preflight(sc): print(f"cannot record {sc['id']}: {p}"); return 1
     was_loaded = svc.status().get("loaded")
@@ -158,7 +160,7 @@ def record(prefixes):
         print(f"{len(scenarios)} conversations. Julius will show one instruction at a time; speak naturally, at your normal distance from the mic.")
         idx = 0
         while idx < len(scenarios):
-            sc = scenarios[idx]; out = record_scenario(sc, next_take(day, sc["id"]), keys)
+            sc = scenarios[idx]; out = record_scenario(sc, next_take(day, sc["id"]), keys, {"JULIUS_DUPLEX": "1"} if duplex else None)
             if out == "quit": break
             if out == "keep": idx += 1
         left = [s for s in SANDBOX.iterdir()] if SANDBOX.exists() else []
@@ -178,7 +180,8 @@ def main(argv=None):
     if cmd == "delete-all":
         u = disk_usage(); print(f"This deletes {u['takes']} recorded takes ({u['mb']} MB) in {DATA}.")
         ok, msg = delete_all(DATA, input("Type exactly: delete all recordings\n> ").strip()); print(msg); return 0 if ok else 1
-    if cmd == "record": return record(argv[1:])
+    if cmd == "record":
+        rest = [a for a in argv[1:] if a != "--duplex"]; return record(rest, duplex="--duplex" in argv[1:])
     print(__doc__); return 2
 
 

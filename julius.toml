@@ -33,6 +33,11 @@ log_transcripts = false         # JSON log in ~/Library/Logs/Julius redacts what
 hotkey = "<ctrl>+<alt>+s"      # global stop: silences Julius at once, whatever the microphone hears. macOS asks once to allow input monitoring for the terminal
 voice = true                   # spoken stop: speaking over Julius cuts his speech (julius_talkover.py); the hotkey always works
 
+[audio]
+duplex = false                  # one stream for mic + speakers with echo cancellation: the mic gate is off while Julius talks and speaking over him stops him (julius_duplex.py). JULIUS_DUPLEX=1 turns it on for one run
+duplex_rate = 48000            # stream rate; his voice plays at full quality, only the mic and the echo reference are reduced to 16 kHz
+fallback_seconds = 3.0         # echo leaking through the canceller this long (seconds of playback) puts the mic gate back automatically
+
 [wake]
 engine = "cascade"             # "cascade": openWakeWord "Julius" detector -> optional speaker verifier -> Whisper check; "whisper": transcript-regex wake (the fallback)
 level_floor = 0.0015           # speech level that counts as the speaker still talking; lower hears quieter and more distant speech (0.0045 missed 65% at 2.5x the distance, 0.0015 missed 3%)

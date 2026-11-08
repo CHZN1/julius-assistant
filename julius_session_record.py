@@ -38,6 +38,18 @@ class SessionRecorder:
             with self._lock: self._mic.write(pcm.tobytes()); self._mic_samples += len(pcm)
         except Exception: pass
 
+    def pair(self, raw, ref):
+        """Duplex audio: the microphone as captured and what the speakers played in the same callback. The reference is placed at the microphone's own sample position, so they are exactly aligned."""
+        if self._closed: return
+        if self._mic_samples == 0: self.event("mic_start")   # the exact moment sample 0 of mic.wav was captured, on the event clock (the replay needs no guessing)
+        try:
+            pcm = (np.clip(np.asarray(raw, dtype=np.float32).reshape(-1), -1, 1) * 32767).astype(np.int16)
+            a = np.asarray(ref, dtype=np.float32).reshape(-1)
+            with self._lock:
+                if np.abs(a).max(initial=0) > 1e-4: self._out.append((self._mic_samples, a.copy())); self._cursor = max(self._cursor, self._mic_samples + len(a))
+                self._mic.write(pcm.tobytes()); self._mic_samples += len(pcm)
+        except Exception: pass
+
     def out(self, audio, sample_rate):
         """Called just before each playback chunk is written to the output device. Chunks play back to back, so they are laid end to end from the first one's time."""
         if self._closed: return

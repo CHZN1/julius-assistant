@@ -53,7 +53,9 @@ _validation_turns = []
 _validation_output = os.environ.get("JULIUS_VALIDATION_OUTPUT")
 if _validation_output:
     atexit.register(lambda: Path(_validation_output).write_text(_json.dumps(_validation_turns, indent=2)))
+_duplex = None   # julius_duplex.DuplexAudio when audio.duplex is on (one stream for mic and speakers, echo cancelled); set up where the speech player is created
 def microphone_stream():
+    if globals().get('_duplex') is not None: return _duplex.running()
     return nullcontext() if _validation_no_devices else sd.InputStream(samplerate=SR, channels=1, blocksize=CHUNK, latency='high', callback=cb)
 
 TURN    = {"n": 0}
@@ -246,12 +248,29 @@ _talkover = None
 tts = SpeechEngine()
 tts.cancel_event=cancellation.event
 speech_player = None
+_audio_cfg = _asr_cfg.load_config().get('audio') or {}
+_duplex_wanted = (not _validation_no_devices) and (os.environ.get('JULIUS_DUPLEX') == '1' or (bool(_audio_cfg.get('duplex')) and os.environ.get('JULIUS_DUPLEX') != '0'))
+_duplex_monitor = _duplex_voice = None
+if _duplex_wanted and tts.backend == 'qwen-mlx':
+    try:
+        from julius_duplex import DuplexAudio, AecMonitor, CleanTalkOver
+        from julius_aec import EchoCanceller
+        _duplex_monitor = AecMonitor(on_fallback=lambda why: globals()['_duplex_fallback'](why), fail_seconds=float(_audio_cfg.get('fallback_seconds', 3.0)))
+        _duplex = DuplexAudio(sd, lambda *a: globals()['_duplex_block'](*a), rate=int(_audio_cfg.get('duplex_rate', 48000)), canceller=EchoCanceller(lag=0.0), monitor=_duplex_monitor)
+        _duplex_voice = CleanTalkOver(_duplex_monitor)
+        microphone_gate.bypass = True
+        atexit.register(_duplex.stop)
+        _rec_event("duplex", on=True, rate=_duplex.rate)
+        print(f"  [duplex audio on: echo cancelled, mic gate off, speaking over Julius stops him (falls back to the gate after {_duplex_monitor.fail_seconds:.0f} s of leaking echo)]", flush=True)
+    except Exception as _e:
+        _duplex = None; microphone_gate.bypass = False
+        print(f"  [duplex audio unavailable ({type(_e).__name__}: {_e}); using the microphone gate]", flush=True)
 if tts.backend == 'qwen-mlx':  # one persistent output stream, prefill and underflow logging for the streamed MLX voice
     from julius_audio_player import SpeechPlayer
-    speech_player = SpeechPlayer(sd, prefill_chunks=int(os.environ.get('JULIUS_AUDIO_PREFILL_CHUNKS', '1')),
+    speech_player = SpeechPlayer(_duplex.shim() if _duplex is not None else sd, prefill_chunks=int(os.environ.get('JULIUS_AUDIO_PREFILL_CHUNKS', '1')),
                                  latency=float(os.environ.get('JULIUS_AUDIO_LATENCY', '0.4')))
     microphone_gate.cover_output_latency(speech_player.latency)
-    if _rec is not None: speech_player.tap = _rec.out
+    if _rec is not None and _duplex is None: speech_player.tap = _rec.out   # duplex recordings take the reference from the audio callback instead
     if not _validation_no_devices and (_asr_cfg.load_config().get('barge_in') or {}).get('voice', True):
         from julius_talkover import TalkOver
         _talkover = TalkOver()
@@ -960,7 +979,7 @@ PRE_ROLL_CHUNKS = max(4, int(round(0.50 * SR / CHUNK)))
 pre_roll = deque(maxlen=PRE_ROLL_CHUNKS)
 
 _recent_gated = deque(maxlen=int(4.0 * SR / CHUNK))   # last ~4 s (detection can lag his first words by seconds when he speaks quietly) of microphone audio while the gate was shut, so the start of what he says over Julius is not lost
-def _talked_over():
+def _talked_over(duplex=False):
     """the user started speaking while Julius was talking: cut the speech now and listen to him."""
     if cancellation.busy.is_set():
         print('  [you spoke over Julius: stopping]', flush=True)
@@ -972,13 +991,35 @@ def _talked_over():
     globals()['_talkover_pending'] = True   # the main loop must not clear what the user said while the turn was being cancelled
     _cc = globals().get('capture_clock')
     if _cc is not None: _cc.previous = None   # the gate was shut, so the first saved block looks like a gap and would wipe everything saved
+    if duplex:   # the microphone was open the whole time: what he said is already in q (cleaned); keep the last 4 s of it
+        keep = list(q)[-int(4.0 * SR / CHUNK):]; q.clear(); q.extend(keep); return
     q.clear()
     for c in list(_recent_gated): q.append((c, time.perf_counter()))
     _recent_gated.clear()
 
+def _duplex_block(block, raw, ref, cleaned):
+    """One 1024-sample block from the duplex stream (audio thread)."""
+    if globals().get('q') is None: return
+    _r = globals().get('_rec')
+    if _r is not None: _r.pair(raw, ref)
+    cb(np.asarray(block, dtype=np.float32).reshape(-1, 1), len(block), None, None)
+
+def _duplex_fallback(why):
+    """The canceller is not removing the echo: listen to the raw microphone through the gate again (nothing else changes)."""
+    microphone_gate.bypass = False
+    if _duplex is not None: _duplex.use_cleaned = False
+    _rec_event("duplex_fallback", reason=why)
+    try:
+        import julius_log; julius_log.event('duplex_fallback', reason=why)
+    except Exception: pass
+
 def cb(indata, n, t, s):
     _r = globals().get('_rec')
-    if _r is not None: _r.mic(indata[:, 0])
+    if _r is not None and globals().get('_duplex') is None: _r.mic(indata[:, 0])
+    if globals().get('_duplex') is not None and not _duplex_monitor.fell_back and cancellation.busy.is_set() and not microphone_gate.quiet:
+        try:
+            if _duplex_voice.block(indata[:, 0]): _duplex_voice.triggered = False; _talked_over(duplex=True)
+        except Exception: pass
     if microphone_gate.accepting():q.append((indata[:, 0].copy(),time.perf_counter()))
     elif globals().get('_talkover') is not None and (cancellation.busy.is_set() or microphone_gate.settling()) and not microphone_gate.quiet:
         _recent_gated.append(indata[:, 0].copy())

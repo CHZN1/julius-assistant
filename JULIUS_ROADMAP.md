@@ -154,3 +154,25 @@ Baseline from the 10 recorded conversations (38 turns; takes were recorded acros
 `diagnostics/aec_selftest.py`: Julius's recorded voice played through ONE duplex audio stream (microphone and speaker on the same device clock), the reference being the exact block handed to the speaker.
 Result: coupling 0.068 (echo 0.0075 against 0.11 played), WebRTC AEC3 echo return loss enhancement 28.7 dB, residual 0.0003 (below the 0.0008 noise floor and the 0.0045 speech threshold), stable over 50 s.
 So echo cancellation works once the reference is sample-aligned; the recording misalignment, not the canceller, was the problem. Build: duplex stream at 16 kHz (TTS 24 kHz resampled), SpeechPlayer feeding the speaker side of the callback, cleaned microphone into the existing queue, the gate dropped, talk-over = speech detector on the cleaned signal. Behind `audio.duplex` until verified live.
+
+## 2026-11-07 — F3(a) duplex audio path (built, OFF by default, not yet live-tested)
+
+What: `julius_duplex.py` runs one `sd.Stream` at 48 kHz (his voice at full quality; 24 kHz TTS is upsampled 2x). The microphone and the exact `outdata` of the same
+callback are decimated to 16 kHz together (same filter, so they stay aligned) and go through WebRTC AEC3 (`julius_aec.EchoCanceller(lag=0)`). `SpeechPlayer` runs on
+it unchanged through a shim (`DuplexAudio.shim()`), so prefill/underflow logging/abort still work; `abort()` empties the buffer at once.
+With `audio.duplex = true` (or `JULIUS_DUPLEX=1` for one run): mic gate bypassed, cleaned audio goes into the normal `q`, `CleanTalkOver` (energy on the cleaned signal,
+not echo-correlated, 0.3 s sustained, not in the first 0.4 s of a reply) stops him and keeps the last 4 s of audio as the next turn.
+Safety: `AecMonitor` — residual above 2.5x room noise (and above 0.002) that moves with the playback loudness for `fallback_seconds` (3.0) of playback puts the mic gate back
+(`duplex_fallback` event in the session log and the recording). the user's own voice does not follow Julius's envelope, so it does not count as leaking echo.
+Recorder: duplex takes save the raw mic and the aligned reference, plus a `mic_start` event, so replay needs no clock guessing (`replay_frontend` handles both kinds).
+
+Tests (test_julius_duplex.py, 20): reference == decimated callback output sample for sample; >15 dB echo reduction on synthetic speech through a delayed room; fallback fires in
+2-7 s with a canceller that does nothing and does NOT fire with a working one or when the user talks over it; barge-in fires within 1 s of speech (also at 0.005 rms) and never on his
+own voice over 14 s; abort unblocks a waiting write; SpeechPlayer works on the shim; switch is off in DEFAULTS and julius.toml. 680 tests pass. A 3 s run on the real MacBook
+devices opened the 48 kHz duplex stream with 100 callbacks/s, 0 output underflows (1 input overflow at start), room noise 0.0003.
+
+Replay on the existing ten conversations (recorded with the write-time reference, so this is NOT a test of duplex): gate — 38 turns, mean WER 0.303, exact 20/37, split/lost 12,
+self-heard 24; aec (lag-estimated reference) — WER 0.537, exact 19/37, split/lost 15, self-heard 60. As expected the misaligned reference makes cancellation worse than the gate;
+it is the reason for this build. The duplex comparison needs new recordings: `python evals/voice_record.py record --duplex d1 d2 d3`, then `python evals/duplex_report.py`
+(self-echo turns, false interruptions, barge-in stop/understood/answered, fallbacks, echo reduction dB). Pass line: 0 self-echo turns, 0 false interruptions, every barge-in stops
+and is answered, no fallback. Until then the switch stays off.

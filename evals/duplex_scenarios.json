@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "notes": "Live test for the duplex audio switch (echo cancellation, mic gate off, speaking over Julius stops him). Same format as voice_scenarios.json.",
+  "scenarios": [
+    {"id": "d1_quiet_listen", "title": "Stay silent while he talks", "intro": "Ask for a long story, then say NOTHING until he finishes. Measures his hearing himself (self-echo) and stopping himself for no reason (false interruptions).",
+     "turns": [
+       {"say": "Julius, tell me a long story about a lighthouse keeper.", "wait_note": "then stay completely silent until he has finished (about 40 seconds)", "expect": {"kind": "long_answer", "must": ["lighthouse"]}},
+       {"say": "[say nothing]", "ref": "", "expect": {"kind": "ignored", "ignored": true}},
+       {"say": "Julius, tell me a long story about a robot who learns to paint.", "wait_note": "stay silent again until he finishes", "expect": {"kind": "long_answer", "must": ["robot"]}},
+       {"say": "[say nothing]", "ref": "", "expect": {"kind": "ignored", "ignored": true}}]},
+
+    {"id": "d2_interrupt", "title": "Talk over him: normal voice, then quiet voice", "intro": "Three times: ask for a long story, then talk over him about three seconds in. Do not wait for him to pause. The third one is said QUIETLY, as if you were across the room.",
+     "turns": [
+       {"say": "Julius, tell me a long story about a lighthouse keeper.", "expect": {"kind": "long_answer", "must": ["lighthouse"]}},
+       {"say": "Stop. What's the weather in Springfield?", "when": "during_reply", "expect": {"kind": "interrupt", "must": ["Springfield"]}},
+       {"say": "Julius, tell me about the history of the Roman Empire.", "expect": {"kind": "long_answer", "must": ["Rom"]}},
+       {"say": "Okay, that's enough. What time is it in Tokyo?", "when": "during_reply", "expect": {"kind": "interrupt", "must": ["Tokyo"]}},
+       {"say": "Julius, tell me a long story about a dragon.", "expect": {"kind": "long_answer", "must": ["dragon"]}},
+       {"say": "Stop. What's the weather in San Jose? [say this quietly]", "ref": "Stop. What's the weather in San Jose?", "when": "during_reply", "expect": {"kind": "interrupt", "must": ["San Jose"]}}]},
+
+    {"id": "d3_normal", "title": "Ordinary exchange still works", "intro": "A short normal conversation, to check nothing else broke.",
+     "turns": [
+       {"say": "Julius, what's the weather in Springfield?", "expect": {"kind": "answer", "must": ["Springfield", "degrees"]}},
+       {"say": "What about tomorrow?", "expect": {"kind": "followup", "must": ["\\d"]}},
+       {"say": "Remember that my dog is called Rex.", "expect": {"kind": "memory_add", "must": ["Rex|remember|got it|noted"]}},
+       {"say": "What's my dog called?", "expect": {"kind": "memory_recall", "must": ["Rex"]}},
+       {"say": "Thanks.", "expect": {"kind": "ack", "must_not": ["error"]}}]}
+  ]
+}

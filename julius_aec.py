@@ -54,7 +54,6 @@ class EchoCanceller:
         while len(self._mic_buf) >= FRAME:
             mic = self._mic_buf[:FRAME].copy(); self._mic_buf = self._mic_buf[FRAME:]
             ref = self._ref.popleft() if self._ref else np.zeros(FRAME, dtype=np.int16)
-            self._ref.append(np.zeros(FRAME, dtype=np.int16)) if not self._ref else None
             rf = rtc.AudioFrame(ref.tobytes(), RATE, 1, FRAME); self.apm.process_reverse_stream(rf)
             mf = rtc.AudioFrame(mic.tobytes(), RATE, 1, FRAME); self.apm.process_stream(mf)
             self._out = np.concatenate([self._out, np.frombuffer(bytes(mf.data), dtype=np.int16)])

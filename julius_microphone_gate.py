@@ -4,7 +4,7 @@ import threading,time
 class MicrophoneGate:
     def __init__(self,settle_seconds=.35,clock=time.monotonic):
         self.clock=clock;self.settle_seconds=settle_seconds
-        self._lock=threading.Lock();self._outputs=0;self._resume_at=0;self.quiet=False;self._force=False;self.on_begin=None;self.on_end=None  # optional callbacks around each playback
+        self._lock=threading.Lock();self._outputs=0;self._resume_at=0;self.quiet=False;self._force=False;self.bypass=False;self.on_begin=None;self.on_end=None  # optional callbacks around each playback
     def cover_output_latency(self,latency,base=.35):
         """Audio written to the device is heard `latency` seconds later, so the gate must stay shut that much longer after the last write."""
         self.settle_seconds=base+latency
@@ -16,9 +16,10 @@ class MicrophoneGate:
         with self._lock:self._force=True
     def settling(self):
         """Playback is over but the room echo has not died down yet: the gate is still shut."""
-        with self._lock:return self._outputs==0 and not self._force and self.clock()<self._resume_at
+        with self._lock:return not self.bypass and self._outputs==0 and not self._force and self.clock()<self._resume_at
     def accepting(self):
         with self._lock:
+            if self.bypass:return not self.quiet   # duplex audio: the echo is cancelled, so the microphone stays open while Julius speaks
             if self._force:return not self.quiet
             return not self.quiet and self._outputs==0 and self.clock()>=self._resume_at
     @contextmanager
