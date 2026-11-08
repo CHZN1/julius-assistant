@@ -518,6 +518,8 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
     stream_calls = []
     stalled = False
     import julius_livedata as _livedata
+    import julius_ack
+    _ack = julius_ack.Acknowledger(speak_fn, enabled=globals().get('cloud_brain') is not None)   # "On it." when a tool call outlasts 1.5 s with nothing said yet (streamed speech only)
     _live_q = _livedata.is_live_query(user_text); dropped_ungrounded = []
     def _stream(messages, allow_retry=True, tools=None):
         prepare_inference()
@@ -548,7 +550,7 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
                     if sent and _livedata.blocked(sent, _live_q, _livedata.tool_result_this_turn(messages) or bool(stream_calls)):
                         sent = ""; dropped_ungrounded.append(1)   # a figure about something that changes, with no tool result behind it: never spoken
                     if len(sent) > 2:
-                        spoken += 1
+                        spoken += 1; _ack.said_something()
                         print(sent, end=" ", flush=True)     # print BEFORE speaking
                         if speak_fn and (not long_tool_result or spoken <= 2):
                             speak_fn(sent)
@@ -601,11 +603,12 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
                 print(f"\r  [tool: {c.function.name}({dict(c.function.arguments)})]          ", flush=True)
             globals()['_tool_carry_next'] = True
             # Several tool_use blocks in one reply run concurrently (parallel-safe lookups) and are composed into one spoken answer.
-            batch = jt.call_many([(c.function.name, dict(c.function.arguments)) for c in calls]) if len(calls) > 1 else None
-            if batch is None:
-                c = calls[0]
-                out = jt.call(c.function.name, dict(c.function.arguments))
-                batch = [(out, jt.dispatcher().last_result['ok'])]
+            with _ack.watch():
+                batch = jt.call_many([(c.function.name, dict(c.function.arguments)) for c in calls]) if len(calls) > 1 else None
+                if batch is None:
+                    c = calls[0]
+                    out = jt.call(c.function.name, dict(c.function.arguments))
+                    batch = [(out, jt.dispatcher().last_result['ok'])]
             if not any(ok for _, ok in batch):
                 out = batch[0][0]
                 _print_tool(calls[0].function.name, out)
