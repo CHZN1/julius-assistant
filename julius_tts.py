@@ -91,14 +91,15 @@ class SpeechEngine:
                 deadline = time.monotonic() + 120
                 finished = False
                 self._stream_active = True
-                received = False
+                received = False; pending = True   # pending: the worker has not yet sent 'done' or 'error' for this reply
                 try:
                     while True:
                         line = self._worker_line(timeout=max(0, min(90, deadline-time.monotonic())))
                         if not line: raise RuntimeError('MLX speech worker stopped')
                         result = json.loads(line)
-                        if 'error' in result: raise RuntimeError(result['error'])
+                        if 'error' in result: pending = False; raise RuntimeError(result['error'])
                         if result.get('done'):
+                            pending = False
                             if not received: raise RuntimeError('MLX worker produced no speech')
                             self.worker_metrics = result
                             finished = True
@@ -111,7 +112,9 @@ class SpeechEngine:
                         yield audio, result['sample_rate']
                 finally:
                     # A partially consumed stream cannot leave stale messages for another request.
-                    if not finished: self._abandon_stream()
+                    if not finished:
+                        if pending: self._abandon_stream()   # stale chunk lines must not reach the next reply, whatever suspend() does
+                        self.suspend()
                     self._stream_active = False
                 return
             line = self._worker_line(timeout=90)
