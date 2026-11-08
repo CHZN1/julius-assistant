@@ -91,6 +91,27 @@ class GateForceOpen(unittest.TestCase):
         with g.output(): self.assertFalse(g.accepting())
 
 
+class SpokenDatesAndLeaks(unittest.TestCase):
+    def test_dates_are_said_as_ordinals(self):
+        from julius_speech_text import normalize_for_speech as n
+        self.assertEqual(n("Sunday, November 08, 2:20 PM"), "Sunday, November eighth, two twenty P M")
+        self.assertIn("March third", n("on Monday, March 3")); self.assertIn("November eighth, 2026", n("2026-11-08"))
+        self.assertNotIn("oh", n("November 08").lower())
+
+    def test_model_narrating_its_instructions_is_not_spoken(self):
+        import re
+        src = open(Path(__file__).resolve().parent / "julius_candidate.py").read()
+        rx = eval("re.compile(" + re.search(r'META_LEAK = re\.compile\((.*?)\)   #', src, re.S).group(1) + ")")
+        for leak in ("The system says replies default short, but he explicitly asked for a long one, so I'll give a fuller story, kept spoken-friendly.",
+                     "the user wants a long story, and the system says default replies are short, but he explicitly asked for a long one, so I'll give him a proper tale without tools."):
+            self.assertTrue(rx.search(leak), leak)
+        self.assertFalse(rx.search("Once there was a lighthouse keeper named Elias Varn, who had tended the light for thirty-one years."))
+
+    def test_long_requests_are_allowed_by_the_length_prompt(self):
+        from julius_speech_text import BREVITY_PROMPT
+        self.assertIn("long story", BREVITY_PROMPT); self.assertIn("Never mention these rules", BREVITY_PROMPT)
+
+
 if __name__ == "__main__":
     unittest.main()
 

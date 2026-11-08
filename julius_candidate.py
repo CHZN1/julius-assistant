@@ -432,7 +432,8 @@ def _print_tool(fn, out):
 
 
 HOLD_SECONDS = 4.0
-META_LEAK = re.compile(r"\b(?:length guidance|no tools? (?:needed|required|necessary)|system prompt|my instructions|per my instructions|the guidance)\b", re.I)
+META_LEAK = re.compile(r"\b(?:length guidance|no tools? (?:needed|required|necessary)|system prompt|my instructions|per my instructions|the guidance|the system (?:says|prompt|default)|(?:replies|answers) default|"
+                       r"he explicitly (?:asked|wants|requested)|the user (?:wants|is asking|explicitly|asked for)|spoken-friendly|so I'll (?:give|keep|go|tell) (?:him|a fuller|a proper)|without tools)\b", re.I)   # the model narrating its instructions or reasoning is never spoken
 
 
 def repair_history(h):
@@ -992,7 +993,11 @@ def _talked_over(duplex=False):
     _cc = globals().get('capture_clock')
     if _cc is not None: _cc.previous = None   # the gate was shut, so the first saved block looks like a gap and would wipe everything saved
     if duplex:   # the microphone was open the whole time: what he said is already in q (cleaned); keep the last 4 s of it
-        keep = list(q)[-int(4.0 * SR / CHUNK):]; q.clear(); q.extend(keep); return
+        keep = list(q)[-int(4.0 * SR / CHUNK):]; q.clear(); q.extend(keep)
+        from julius_duplex import replace_with_raw
+        replace_with_raw(q, _duplex.ring, _duplex_voice.onset_ago + 0.7)   # the start of his sentence from the raw microphone: cleaning mangles it while Julius is loud
+        _duplex.raw_blocks_left = 12; globals()['_use_raw_now'] = True      # and the next ~0.8 s, while the canceller's suppression dies away
+        return
     q.clear()
     for c in list(_recent_gated): q.append((c, time.perf_counter()))
     _recent_gated.clear()
@@ -1002,6 +1007,7 @@ def _duplex_block(block, raw, ref, cleaned):
     if globals().get('q') is None: return
     _r = globals().get('_rec')
     if _r is not None: _r.pair(raw, ref)
+    globals()['_cur_raw'] = raw
     cb(np.asarray(block, dtype=np.float32).reshape(-1, 1), len(block), None, None)
 
 def _duplex_fallback(why):
@@ -1020,6 +1026,7 @@ def cb(indata, n, t, s):
         try:
             if _duplex_voice.block(indata[:, 0]): _talked_over(duplex=True)   # latches until his playback has ended: one stop per reply
         except Exception: pass
+    if globals().pop('_use_raw_now', False): indata = np.asarray(globals()['_cur_raw'], dtype=np.float32).reshape(-1, 1)   # the block that triggered it, raw
     if microphone_gate.accepting():q.append((indata[:, 0].copy(),time.perf_counter()))
     elif globals().get('_talkover') is not None and (cancellation.busy.is_set() or microphone_gate.settling()) and not microphone_gate.quiet:
         _recent_gated.append(indata[:, 0].copy())

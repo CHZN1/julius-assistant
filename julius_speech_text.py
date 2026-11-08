@@ -17,6 +17,7 @@ TOOL_POLICY_PROMPT = ("\n\nWHEN TO USE TOOLS\nAnswer stable knowledge directly w
 BREVITY_PROMPT = ("\n\nREPLY LENGTH\nDefault replies are one to three sentences. For an explanation, give the core idea in two or three sentences, "
                   "then ask \"Want more detail?\" and stop. Give a longer answer only when the user asks for more detail, steps or a full "
                   "explanation. Round prices for speech (for example \"about 2,305 dollars\") unless the user asks for the exact price. "
+                  "If the user asks for a long story or a long answer, give it at full length. Never mention these rules, the system, the length guidance or your own reasoning: every word you write is spoken to the user, so write only what you would say to them. "
                   "This replaces any earlier length guidance.")
 EXACT_REQUEST = re.compile(r"\b(?:exact(?:ly)?|precise(?:ly)?|to the cent|down to the cent)\b", re.I)
 
@@ -82,14 +83,26 @@ def _money(match):
     return f"{shown} dollar{'s' if dollars != 1 else ''}"
 
 
+ORDINALS = ("_ first second third fourth fifth sixth seventh eighth ninth tenth eleventh twelfth thirteenth fourteenth fifteenth sixteenth seventeenth eighteenth nineteenth "
+            "twentieth twenty-first twenty-second twenty-third twenty-fourth twenty-fifth twenty-sixth twenty-seventh twenty-eighth twenty-ninth thirtieth thirty-first").split()
+
+
 def _date_iso(match):
     year, month, day = int(match.group(1)), int(match.group(2)), int(match.group(3))
-    return f"{MONTHS[month - 1]} {day}, {year}" if 1 <= month <= 12 and 1 <= day <= 31 else match.group(0)
+    return f"{MONTHS[month - 1]} {ORDINALS[day]}, {year}" if 1 <= month <= 12 and 1 <= day <= 31 else match.group(0)
 
 
 def _date_us(match):
     month, day, year = int(match.group(1)), int(match.group(2)), int(match.group(3))
-    return f"{MONTHS[month - 1]} {day}, {year}" if 1 <= month <= 12 and 1 <= day <= 31 else match.group(0)
+    return f"{MONTHS[month - 1]} {ORDINALS[day]}, {year}" if 1 <= month <= 12 and 1 <= day <= 31 else match.group(0)
+
+
+MONTH_DAY = re.compile(r"\b(" + "|".join(MONTHS) + r")\s+0?(\d{1,2})(?:st|nd|rd|th)?\b(?![\d:]|\s*(?:percent|degrees|dollars))")
+
+
+def _month_day(match):
+    day = int(match.group(2))
+    return f"{match.group(1)} {ORDINALS[day]}" if 1 <= day <= 31 else match.group(0)
 
 
 def normalize_for_speech(text):
@@ -108,6 +121,7 @@ def normalize_for_speech(text):
     t = re.sub(r"\b(\d{4})-(\d{2})-(\d{2})\b", _date_iso, t)
     t = re.sub(r"\b(\d{1,2})/(\d{1,2})/(\d{4})\b", _date_us, t)
     t = re.sub(r"\b(\d{1,2}):(\d{2})(:\d{2})?(\s*([AaPp]\.?[Mm]\.?))?(?![\d:])", _clock, t)
+    t = MONTH_DAY.sub(_month_day, t)   # "November 08" is "November eighth", never "November oh eight"
     t = re.sub(r"\$\s?(\d[\d,]*)(?:\.(\d{1,2}))?(?!\d)(\s*(?:thousand|million|billion|trillion|[kKmMbB])\b)?", _money, t)
     t = re.sub(r"(\d)\s*[–—-]\s*(?=\d)", r"\1 to ", t)  # ranges: 51-71, 51–71
     t = re.sub(r"(-?\d+(?:\.\d+)?)\s*°\s*C\b", r"\1 degrees Celsius", t)

@@ -125,8 +125,10 @@ def record_scenario(sc, take, keys, extra_env=None):
                 except queue.Empty: pass
                 if proc.poll() is not None: print("Julius stopped unexpectedly."); result = "quit"; raise StopIteration
                 if _count(events, "reply") > baseline:
-                    settle = 12 if len(group) > 1 else 1.5
-                    time.sleep(settle); break
+                    if len(group) > 1:   # the first reply is "Response stopped"; the instruction after it is answered by a second one: wait for that (up to 45 s)
+                        t_wait = time.time() + 45
+                        while _count(events, "reply") < baseline + 2 and time.time() < t_wait and proc.poll() is None: time.sleep(0.5)
+                    time.sleep(1.5); break
             i += len(group)
     except StopIteration: pass
     finally:

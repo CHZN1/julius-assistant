@@ -192,3 +192,11 @@ Cause (old bug, any stop while a reply is still being generated): when the consu
 JULIUS_KEEP_VOICE=1 (cloud profile), so the worker kept generating and its chunk lines stayed in the pipe; the next reply read those stale lines as its own and its cleanup had deleted the files.
 Fix: `_abandon_stream()` signals the worker (SIGUSR1), which stops, sends `done(cancelled)`, and stays loaded; the host discards everything up to that ack (0.32 s with the real worker); anything unexpected
 terminates the worker so the next reply starts fresh. test_julius_tts_cancel.py (fake worker) + a direct check against the real worker. The always-on service needs a restart to get this.
+
+### 2026-11-07 fourth d2 run: three more defects
+1) Barge-in transcript lost the start of the sentence ("In Springfield." for "Stop. What's the weather in Springfield?"): the suppressor mangles the cleaned signal for the first words while Julius is loud.
+   Fix: the duplex stream keeps the last ~5 s of raw mic blocks; on barge-in the queued blocks from (onset + 0.7 s) back are replaced by their raw versions and the next 12 blocks go out raw
+   (offline on take4: cleaned-only "What's the..." -> with raw backfill "What's the weather in Springfield?").
+2) He read his own instructions aloud ("The system says replies default short, but he explicitly asked for a long one..."). META_LEAK widened; BREVITY_PROMPT now allows long stories on request and forbids mentioning rules.
+3) Dates were read "November oh-eight": tool output used %d (zero padded) and normalize_for_speech had no month-day rule. Now %-d at the source and "November eighth" in speech (ISO and US dates too).
+Also the recording script waited only 12 s after the stop reply, so it moved on while he was still answering the interruption; it now waits for the second reply (up to 45 s).

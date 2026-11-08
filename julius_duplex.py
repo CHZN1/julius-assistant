@@ -165,7 +165,8 @@ class CleanTalkOver:
 
     def __init__(self, monitor, min_rms=0.0030, k=3.5, bursts=3, span=1.0, holdoff=0.4, warmup=3.0):
         self.mon, self.min_rms, self.k, self.bursts, self.span, self.holdoff, self.warmup = monitor, min_rms, k, bursts, span, holdoff, warmup
-        self._acc = 0.0; self._n = 0; self._hits = collections.deque(maxlen=int(span / self.WINDOW)); self.triggered = False
+        self._acc = 0.0; self._n = 0; self._hits = collections.deque(maxlen=int(span / self.WINDOW)); self._times = collections.deque(maxlen=int(span / self.WINDOW)); self._t = 0.0
+        self.triggered = False; self.onset_ago = 0.0   # onset_ago: seconds between the first burst of the speech that caused the trigger and the trigger
 
     def threshold(self):
         return max(self.min_rms, self.k * self.mon.noise)
@@ -181,12 +182,25 @@ class CleanTalkOver:
                 active = self.mon.playing_now and self.mon.play_age >= self.holdoff and self.mon.total_play >= self.warmup and not self.mon.echo_like
                 if self.triggered:   # one stop per reply: stay latched (and forget the bursts that caused it) until the playback is over
                     if not self.mon.playing_now: self.triggered = False
-                    self._hits.clear(); continue
-                self._hits.append(1 if (active and rms > self.threshold()) else 0)
-                if sum(self._hits) >= self.bursts: self.triggered = True; self._hits.clear(); return True
+                    self._hits.clear(); self._times.clear(); continue
+                self._t += self.WINDOW; self._hits.append(1 if (active and rms > self.threshold()) else 0); self._times.append(self._t)
+                if sum(self._hits) >= self.bursts:
+                    first = min(t for h, t in zip(self._hits, self._times) if h)
+                    self.onset_ago = self._t - first + self.WINDOW; self.triggered = True; self._hits.clear(); self._times.clear(); return True
         return False
 
-    def reset(self): self._acc = 0.0; self._n = 0; self._hits.clear(); self.triggered = False
+    def reset(self): self._acc = 0.0; self._n = 0; self._hits.clear(); self._times.clear(); self.triggered = False
+
+
+def replace_with_raw(q, ring, lead_seconds, block=BLOCK16):
+    """Barge-in: the canceller's suppressor eats the first words of the user's speech while Julius is loud ("Stop. What's the weather in Springfield?" reached the recognizer as "In Springfield.").
+    The queue `q` holds (block, time) entries that were cleaned; `ring` holds the raw blocks, its last entry being the block being handled right now (not yet queued).
+    Swap the last `lead_seconds` of queued blocks for their raw versions (the raw ones contain a little of Julius's voice, quieter than the user's; recognition copes with that, and with
+    the words lost it does not). Returns how many were replaced."""
+    raw = list(ring); n = min(int(math.ceil(lead_seconds * 16000 / block)), len(raw) - 1, len(q)); done = 0
+    for i in range(1, n + 1):
+        q[-i] = (raw[-1 - i], q[-i][1]); done += 1
+    return done
 
 
 # ---------------------------------------------------------------- the stream
@@ -201,6 +215,8 @@ class DuplexAudio:
         self._raw = np.zeros(0, np.float32); self._ref = np.zeros(0, np.float32); self._cln = np.zeros(0, np.float32)
         self._pend_mic = np.zeros(0, np.float32); self._pend_ref = np.zeros(0, np.float32)
         self._lock = threading.Lock(); self.callbacks = 0
+        self.ring = collections.deque(maxlen=80)   # the last ~5 s of raw microphone blocks (barge-in re-reads the start of what the user said from here)
+        self.raw_blocks_left = 0                  # while > 0, blocks go to the listener raw: the suppressor mangles the user's first words while Julius is still loud
 
     # ---- lifetime
     def start(self):
@@ -263,7 +279,10 @@ class DuplexAudio:
         while len(self._raw) >= self.block16:
             b = self.block16
             raw, ref, cln = self._raw[:b], self._ref[:b], self._cln[:b]; self._raw, self._ref, self._cln = self._raw[b:], self._ref[b:], self._cln[b:]
-            try: self.on_block(cln if self.use_cleaned else raw, raw, ref, cln)
+            self.ring.append(raw.copy())
+            use_raw = (not self.use_cleaned) or self.raw_blocks_left > 0
+            if self.raw_blocks_left > 0: self.raw_blocks_left -= 1
+            try: self.on_block(raw if use_raw else cln, raw, ref, cln)
             except Exception as e: self.log(f"  [duplex block handler failed: {type(e).__name__}: {e}]", flush=True)
 
 

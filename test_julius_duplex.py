@@ -1,5 +1,5 @@
 """Duplex audio: sample alignment of the echo reference, automatic fallback to the microphone gate, barge-in on the cleaned signal, playback abort."""
-import threading, time, unittest
+import collections, threading, time, unittest
 
 import numpy as np
 
@@ -233,6 +233,39 @@ class AbortAndAdapter(unittest.TestCase):
         res = player.play(chunks); stop.set(); th.join(1)
         self.assertEqual(res["chunks"], 5)
         player.close()
+
+
+class Backfill(unittest.TestCase):
+    def test_start_of_the_sentence_comes_from_the_raw_microphone(self):
+        B = jd.BLOCK16; ring = collections.deque(maxlen=80); q = collections.deque()
+        for i in range(20): ring.append(np.full(B, 0.01 * (i + 1), np.float32))       # raw blocks 0..19; block 19 is the one being handled now
+        for i in range(19): q.append((np.zeros(B, np.float32), 100.0 + i))             # cleaned (suppressed) versions of blocks 0..18
+        n = jd.replace_with_raw(q, ring, lead_seconds=0.7)
+        need = int(np.ceil(0.7 * 16000 / B)); self.assertEqual(n, need)
+        for i in range(1, need + 1): self.assertAlmostEqual(float(q[-i][0][0]), 0.01 * (19 - i + 1), places=5)
+        self.assertEqual([t for _, t in q], [100.0 + i for i in range(19)], "timestamps are kept")
+        self.assertEqual(float(q[0][0][0]), 0.0, "older blocks stay as they were")
+
+    def test_never_replaces_more_than_exists(self):
+        B = jd.BLOCK16; ring = collections.deque([np.ones(B, np.float32)] * 3); q = collections.deque([(np.zeros(B, np.float32), 1.0)] * 2)
+        self.assertEqual(jd.replace_with_raw(q, ring, lead_seconds=5.0), 2)
+
+    def test_detector_reports_how_long_ago_the_speech_began(self):
+        mon = jd.AecMonitor(log=lambda *a, **k: None); voice = jd.CleanTalkOver(mon, warmup=0.0, bursts=3); r = np.random.default_rng(12)
+        for _ in range(30): mon.feed(np.zeros(1600), np.zeros(1600), np.full(1600, 0.1))
+        silence = np.zeros(800, np.float32); burst = (0.02 * r.standard_normal(800)).astype(np.float32)
+        for _ in range(6): self.assertFalse(voice.block(silence))                       # 0.3 s of nothing
+        self.assertFalse(voice.block(burst)); self.assertFalse(voice.block(silence)); self.assertFalse(voice.block(burst)); self.assertFalse(voice.block(silence))
+        self.assertTrue(voice.block(burst))
+        self.assertGreater(voice.onset_ago, 0.2); self.assertLess(voice.onset_ago, 0.5, "from the first burst, not from the start of the playback")
+
+    def test_blocks_go_out_raw_after_a_barge_in(self):
+        from julius_aec import EchoCanceller
+        got = []; d = jd.DuplexAudio(FakeSD(), lambda block, raw, ref, cleaned: got.append((block, raw)), rate=RATE, canceller=EchoCanceller(lag=0.0), monitor=None)
+        d.raw_blocks_left = 2; room(d, voice_like(1.0, 21))
+        self.assertTrue(all(np.array_equal(b, r) for b, r in got[:2]), "the first two blocks are the raw microphone")
+        self.assertFalse(np.array_equal(got[5][0], got[5][1]), "after that the cleaned signal again")
+        self.assertEqual(len(d.ring), min(80, len(got)))
 
 
 class Switch(unittest.TestCase):

@@ -20,7 +20,7 @@ class NormalizeTests(unittest.TestCase):
     def test_times_and_dates(self):
         self.assertEqual(n('at 3:45 PM'),'at three forty-five P M');self.assertEqual(n('9:05 AM'),'nine oh five A M');self.assertEqual(n('3:00 PM'),'three P M')
         self.assertEqual(n('3:45 p.m.'),'three forty-five P M');self.assertEqual(n('20:34 UTC'),'twenty thirty-four U T C');self.assertEqual(n('ratio 3:1'),'ratio 3:1')
-        self.assertEqual(n('on 2026-10-26'),'on October 26, 2026');self.assertEqual(n('10/26/2026'),'October 26, 2026')
+        self.assertEqual(n('on 2026-10-26'),'on October twenty-sixth, 2026');self.assertEqual(n('10/26/2026'),'October twenty-sixth, 2026')
     def test_abbreviations(self):
         self.assertEqual(n('60 mph and 5 km'),'60 miles per hour and 5 kilometers');self.assertEqual(n('Lakers vs. Celtics, e.g. tonight'),'Lakers versus Celtics, for example tonight')
         self.assertEqual(n('10 kph'),'10 kilometers per hour');self.assertEqual(n('Tom & Jerry'),'Tom and Jerry')

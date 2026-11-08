@@ -20,9 +20,9 @@ def get_datetime(location=None, offset_days=0, **_):
     """Local time, or time in another place if location is given. offset_days=1/-1 gives tomorrow's/yesterday's date (local only)."""
     n = datetime.now().astimezone()
     if offset_days and not location:
-        return (n + timedelta(days=int(offset_days))).strftime("%A, %B %d %Y ") + "(" + str(n.tzinfo) + ")"
+        return (n + timedelta(days=int(offset_days))).strftime("%A, %B %-d %Y ") + "(" + str(n.tzinfo) + ")"
     if not location:
-        return n.strftime("%A, %B %d %Y, %-I:%M %p ") + str(n.tzinfo)
+        return n.strftime("%A, %B %-d %Y, %-I:%M %p ") + str(n.tzinfo)
     g = requests.get("https://geocoding-api.open-meteo.com/v1/search",
                      params={"name": location, "count": 1}, timeout=10).json()
     if not g.get("results"):
@@ -35,7 +35,7 @@ def get_datetime(location=None, offset_days=0, **_):
     diff = (there.utcoffset() - n.utcoffset()).total_seconds()/3600
     rel = ("same time as you" if abs(diff) < 0.1 else
            f"{abs(diff):g} hours {'ahead of' if diff > 0 else 'behind'} you")
-    return (f"{r['name']}: {there.strftime('%A, %B %d, %-I:%M %p')} "
+    return (f"{r['name']}: {there.strftime('%A, %B %-d, %-I:%M %p')} "
             f"({tz}) — {rel}.")
 
 def get_weather(location="Springfield, Illinois", **_):

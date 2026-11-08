@@ -28,7 +28,7 @@ class UtilitySession:
                 out['message']+=' The local item remains saved; Apple delivery is not confirmed.'
         if out['ok'] and kind=='reminder' and due is not None:
             when=datetime.fromtimestamp(due,ZoneInfo(zone or self.timezone_name));now=datetime.fromtimestamp(self.planner.clock(),ZoneInfo(zone or self.timezone_name))
-            day='' if when.date()==now.date() else ' tomorrow' if (when.date()-now.date()).days==1 else when.strftime(' on %A, %B %d')
+            day='' if when.date()==now.date() else ' tomorrow' if (when.date()-now.date()).days==1 else when.strftime(' on %A, %B %-d')
             spoken=f"Okay. I'll remind you to {title} at {when.strftime('%I:%M %p').lstrip('0')}{day}."
             if out['code']=='partial_sync':spoken+=' Saved locally, but Apple delivery is not confirmed. Details are on screen.'
             elif out['data'].get('apple',{}).get('ok'):spoken+=' Saved to Apple Reminders.'
