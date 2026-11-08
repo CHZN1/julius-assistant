@@ -6,6 +6,7 @@
   python julius_service.py restart
   python julius_service.py wake      leave quiet mode (same as the wake hotkey)
   python julius_service.py logs [-n 60] [--raw] [--no-follow]   recent log lines, then new ones as they arrive (Ctrl+C to stop)
+  python julius_service.py smoke [--restart]   startup smoke check: ready, hotkeys, duplex audio, no crash loop, no traceback (see julius_smoke.py)
   python julius_service.py doctor    check, the way launchd starts Julius, whether the stop and wake hotkeys register
 No API key is written into the plist: Julius reads ANTHROPIC_API_KEY from the repo's .env like a normal run."""
 import json, os, plistlib, subprocess, sys, time
@@ -112,6 +113,26 @@ def main(argv):
         try: show_logs(n, "--raw" in argv, "--no-follow" not in argv)
         except KeyboardInterrupt: pass
         return 0
+    if cmd == "smoke":
+        import datetime, julius_smoke, julius_config
+        err_path = Path("~/Library/Logs/Julius/launchd.err").expanduser()
+        size = err_path.stat().st_size if err_path.exists() else 0
+        if "--restart" in argv:
+            start = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"); run(["launchctl", "kickstart", "-k", f"{domain()}/{LABEL}"]); time.sleep(2)
+        else:
+            import psutil
+            pid = int(status().get("pid") or 0); start = datetime.datetime.fromtimestamp(psutil.Process(pid).create_time()).strftime("%Y-%m-%dT%H:%M:%S") if pid else "9999"
+            size = err_path.stat().st_size if err_path.exists() else 0   # no restart: stderr has no timestamps, so only what arrives from now on is checked (use --restart to check the whole startup)
+        def err_tail():
+            try:
+                with err_path.open("rb") as f: f.seek(size); return f.read().decode("utf-8", "replace")
+            except OSError: return ""
+        def read_log():
+            try: return LOG.read_text(errors="replace").splitlines()[-4000:]
+            except OSError: return []
+        duplex = bool((julius_config.load_config().get("audio") or {}).get("duplex", True))
+        ok, results = julius_smoke.check(status, read_log, err_tail, start, duplex=duplex)
+        print(julius_smoke.render(ok, results)); return 0 if ok else 1
     if cmd == "doctor":
         verdict, binary = doctor(); print(f"hotkey helper under launchd -> {verdict}")
         if verdict.endswith("ready stop wake") and "failed" not in verdict: print("Both hotkeys register (no Accessibility or Input Monitoring needed): Ctrl+Option+S stops, Ctrl+Option+J wakes.")
