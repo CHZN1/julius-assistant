@@ -2,7 +2,7 @@
 
 Messages (JSON text frames, server -> client only; anything a client sends is ignored apart from ping/close):
   {"type":"hello","state":"idle","level":0.0,"transcript":[...last lines...],"t":...}     on connect
-  {"type":"state","state":"idle|listening|thinking|speaking|asleep","prev":"...","t":...}  on every change
+  {"type":"state","state":"idle|listening|thinking|speaking|asleep|quiet","prev":"...","t":...}  on every change
   {"type":"level","level":0.0-1.0,"t":...}        Julius's own voice as it leaves the speakers (RMS x4, clipped), about 30 times a second while he is speaking, then one 0
   {"type":"transcript","who":"you|julius","text":"...","turn":N,"t":...}   a line the user said, or a sentence Julius is saying
 
@@ -21,7 +21,7 @@ import time
 
 GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 HOST = "127.0.0.1"
-STATES = ("idle", "listening", "thinking", "speaking", "asleep")
+STATES = ("idle", "listening", "thinking", "speaking", "asleep", "quiet")   # asleep: ordinary sleep, wakes on "Julius"; quiet: mic off until the wake hotkey
 MAX_CLIENTS = 8
 LEVEL_GAIN = 4.0
 

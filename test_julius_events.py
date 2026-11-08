@@ -65,6 +65,11 @@ class Feed(unittest.TestCase):
         s = socket.create_connection(("127.0.0.1", self.server.port)); self.socks.append(s); s.sendall(b"GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
         self.assertIn(b" 426 ", s.recv(100))
 
+    def test_quiet_is_a_distinct_state(self):
+        self.assertIn("quiet", ev.STATES); self.assertIn("asleep", ev.STATES)
+        self.hub.set_state("asleep"); self.hub.set_state("quiet"); self.assertEqual(self.hub.state, "quiet")
+        self.assertIn("'quiet'", open("julius_candidate.py").read())
+
     def test_accept_key_matches_rfc6455_example(self):
         self.assertEqual(ev.accept_key("dGhlIHNhbXBsZSBub25jZQ=="), "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=")
 
@@ -97,6 +102,18 @@ class Wiring(unittest.TestCase):
     def test_candidate_publishes(self):
         src = open("julius_candidate.py").read()
         for needle in ("julius_events", "_events_hub.say(", "_ui_state"): self.assertIn(needle, src)
+
+
+class Synthetic(unittest.TestCase):
+    def test_script_plays_the_protocol(self):
+        import julius_events_synthetic as syn
+        hub = ev.EventHub(); seen = []
+        orig = hub._send; hub._send = lambda m: (seen.append(m), orig(m))[1]
+        syn.play(hub, sleep=lambda s: None, script=syn.SCRIPT, turn=[0])
+        states = [m["state"] for m in seen if m["type"] == "state"]
+        self.assertEqual(states[:4], ["quiet", "asleep", "idle", "listening"]); self.assertIn("speaking", states)
+        self.assertTrue(any(m["type"] == "level" and m["level"] > 0.1 for m in seen))
+        self.assertEqual([m["who"] for m in seen if m["type"] == "transcript"][:2], ["you", "julius"])
 
 
 if __name__ == "__main__":

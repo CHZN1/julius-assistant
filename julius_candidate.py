@@ -298,12 +298,13 @@ def _ui_level():
     return v
 
 def _ui_state():
-    """idle / listening / thinking / speaking / asleep, for the event feed (derived, never changes behaviour)."""
+    """idle / listening / thinking / speaking / asleep / quiet, for the event feed (derived, never changes behaviour)."""
     g = globals()
     if _ui_speaking(): return 'speaking'
     if g.get('_turn_active'): return 'thinking'
     if g.get('recording'): return 'listening'
-    if julius_state.is_quiet() or time.time() >= g.get('awake_until', 0.0): return 'asleep'
+    if julius_state.is_quiet(): return 'quiet'   # mic off until the wake hotkey
+    if time.time() >= g.get('awake_until', 0.0): return 'asleep'   # ordinary sleep: wakes on "Julius"
     return 'idle'
 
 _events_hub = _events_server = None
