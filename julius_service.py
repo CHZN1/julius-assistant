@@ -106,7 +106,7 @@ def main(argv):
     cmd = (argv[1:2] or ["status"])[0]
     if cmd == "on": ok, msg = on(); print("Julius service on" if ok else f"could not start: {msg}"); return 0 if ok else 1
     if cmd == "off": print(off()[1]); return 0
-    if cmd == "restart": run(["launchctl", "kickstart", "-k", f"{domain()}/{LABEL}"]); print("restarting"); return 0
+    if cmd == "restart": import julius_logscan; julius_logscan.mark_stderr(); run(["launchctl", "kickstart", "-k", f"{domain()}/{LABEL}"]); print("restarting"); return 0
     if cmd == "wake": print("woke" if wake() else "service not running"); return 0
     if cmd == "logs":
         n = int(argv[argv.index("-n") + 1]) if "-n" in argv else 60
@@ -118,6 +118,7 @@ def main(argv):
         err_path = Path("~/Library/Logs/Julius/launchd.err").expanduser()
         size = err_path.stat().st_size if err_path.exists() else 0
         if "--restart" in argv:
+            import julius_logscan; julius_logscan.mark_stderr()
             start = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"); run(["launchctl", "kickstart", "-k", f"{domain()}/{LABEL}"]); time.sleep(2)
         else:
             import psutil

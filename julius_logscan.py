@@ -78,13 +78,36 @@ def latency(rows):
             **{k: {"p50": pct(v, .5), "p95": pct(v, .95), "max": round(max(v), 2), "n": len(v)} for k, v in vals.items() if v}}
 
 
+MARKS = "stderr_marks.json"
+
+
+def mark_stderr(log_dir=LOG_DIR, now=None):
+    """launchd's stderr/stdout files have no timestamps, so `--since` could not tell old tracebacks from new. Call this right before a restart or soak start:
+    it records the files' current sizes with the time, and tracebacks(since=...) reads only what was written after the earliest mark at or after `since`."""
+    import time as _t
+    d = Path(log_dir); d.mkdir(parents=True, exist_ok=True); f = d / MARKS
+    try: marks = json.loads(f.read_text())
+    except (OSError, ValueError): marks = []
+    marks.append({"ts": now or _t.strftime("%Y-%m-%dT%H:%M:%S"), **{n: ((d / n).stat().st_size if (d / n).exists() else 0) for n in ("launchd.err", "launchd.out")}})
+    f.write_text(json.dumps(marks[-200:])); return marks[-1]
+
+
+def _offsets(log_dir, since):
+    if not since: return {}
+    try: marks = json.loads((Path(log_dir) / MARKS).read_text())
+    except (OSError, ValueError): return {}
+    later = sorted((m for m in marks if m["ts"] >= since), key=lambda m: m["ts"])
+    return later[0] if later else (marks[-1] if marks else {})
+
+
 def tracebacks(log_dir=LOG_DIR, since=None):
-    """Exceptions in the launchd stderr/stdout files, grouped by their final line."""
-    out = collections.Counter()
+    """Exceptions in the launchd stderr/stdout files, grouped by their final line (only what was written since the mark at or after `since`, when marks exist)."""
+    out = collections.Counter(); off = _offsets(log_dir, since)
     for name in ("launchd.err", "launchd.out"):
         p = Path(log_dir) / name
         if not p.exists(): continue
-        lines = p.read_text(errors="replace").splitlines()
+        data = p.read_bytes()[off.get(name, 0):].decode("utf-8", "replace")
+        lines = data.splitlines()
         for i, line in enumerate(lines):
             if line.startswith("Traceback"):
                 j = i + 1

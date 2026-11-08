@@ -75,5 +75,19 @@ class SoakTests(unittest.TestCase):
         smp.last = (5, 10.0, smp.last[2] - 10); P.t = 12.0; b = smp.sample({"pid": "5", "state": "running", "runs": "3"}); self.assertAlmostEqual(b["cpu_pct"], 20.0, delta=2.0); self.assertEqual(b["rss_mb"], 200.0)
 
 
+
+class StderrMarkTests(unittest.TestCase):
+    def test_since_ignores_tracebacks_before_the_mark(self):
+        import tempfile, julius_logscan as ls
+        from pathlib import Path
+        d = Path(tempfile.mkdtemp()); (d / "launchd.err").write_text("Traceback (most recent call last):\n  File x\nValueError: old\n")
+        self.assertEqual(sum(ls.tracebacks(d).values()), 1)
+        ls.mark_stderr(d, now="2026-11-08T00:10:00")
+        with (d / "launchd.err").open("a") as f: f.write("Traceback (most recent call last):\n  File y\nKeyError: new\n")
+        self.assertEqual(sum(ls.tracebacks(d, "2026-11-08T00:00:00").values()), 1)
+        self.assertEqual(list(ls.tracebacks(d, "2026-11-08T00:00:00"))[0], "KeyError: new")
+        self.assertEqual(sum(ls.tracebacks(d).values()), 2, "no since: everything")
+
+
 if __name__ == "__main__":
     unittest.main()
