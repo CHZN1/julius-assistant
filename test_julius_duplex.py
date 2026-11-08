@@ -138,7 +138,7 @@ class Fallback(unittest.TestCase):
 class BargeIn(unittest.TestCase):
     def run_room(self, roy_from=None, seconds=8.0, roy_rms=0.008, canceller=True):
         from julius_aec import EchoCanceller
-        self.hits = []; mon = jd.AecMonitor(log=lambda *a, **k: None); voice = jd.CleanTalkOver(mon)
+        self.hits = []; mon = jd.AecMonitor(log=lambda *a, **k: None); voice = jd.CleanTalkOver(mon, warmup=0.0)
         def on_block(block, raw, ref, cleaned):
             if voice.block(block): self.hits.append(self.now)
         self.now = 0.0
@@ -159,16 +159,42 @@ class BargeIn(unittest.TestCase):
     def test_his_own_voice_never_triggers_it(self):
         self.run_room(roy_from=None, seconds=14.0); self.assertEqual(self.hits, [], "false interruption by his own echo")
 
+    def playing(self, mon, seconds=1.0):
+        for _ in range(int(seconds / 0.1)): mon.feed(np.zeros(1600), np.zeros(1600), np.full(1600, 0.1))   # 100 ms of loud playback
+
     def test_noise_floor_burst_does_not_trigger(self):
-        mon = jd.AecMonitor(log=lambda *a, **k: None); voice = jd.CleanTalkOver(mon); r = np.random.default_rng(3)
+        mon = jd.AecMonitor(log=lambda *a, **k: None); voice = jd.CleanTalkOver(mon, warmup=0.0); r = np.random.default_rng(3)
         for _ in range(100): mon.feed(0.0008 * r.standard_normal(1600), 0.0008 * r.standard_normal(1600), np.zeros(1600))   # silence builds the noise floor estimate
-        hits = [voice.block(0.0010 * r.standard_normal(1024)) for _ in range(40)]; self.assertFalse(any(hits))
+        self.playing(mon, 2.0)
+        self.assertFalse(any(voice.block(0.0010 * r.standard_normal(1024)) for _ in range(40)))
+
+    def test_suppressed_speech_with_only_short_bursts_still_triggers(self):
+        """What the 11-07 recording looked like: exactly 0.0000 for ~0.5 s, then a 0.1 s burst of voice, then silence again."""
+        mon = jd.AecMonitor(log=lambda *a, **k: None); voice = jd.CleanTalkOver(mon, warmup=0.0); r = np.random.default_rng(5); self.playing(mon, 2.0)
+        sig = np.zeros(16000 * 3, np.float32)
+        for start in (0.5, 1.1, 1.6): sig[int(start * 16000):int((start + 0.1) * 16000)] = 0.015 * r.standard_normal(1600)
+        fired = None
+        for k in range(0, len(sig), 1024):
+            if voice.block(sig[k:k + 1024]): fired = k / 16000; break
+        self.assertIsNotNone(fired); self.assertLess(fired, 1.8, "must not wait for a sustained level")
+
+    def test_speech_while_he_is_only_thinking_is_not_a_talk_over(self):
+        mon = jd.AecMonitor(log=lambda *a, **k: None); voice = jd.CleanTalkOver(mon, warmup=0.0); r = np.random.default_rng(6)
+        self.playing(mon, 1.0)
+        for _ in range(8): mon.feed(np.zeros(1600), np.zeros(1600), np.zeros(1600))   # playback ended 0.8 s ago
+        self.assertFalse(mon.playing_now)
+        self.assertFalse(any(voice.block(0.02 * r.standard_normal(1024)) for _ in range(20)), "he is not speaking: this is just the next turn")
+
+    def test_no_talk_over_while_the_canceller_is_still_converging(self):
+        mon = jd.AecMonitor(log=lambda *a, **k: None); voice = jd.CleanTalkOver(mon); r = np.random.default_rng(8); self.playing(mon, 1.5)   # first 1.5 s of the very first reply
+        self.assertFalse(any(voice.block(0.02 * r.standard_normal(1024)) for _ in range(20)))
+        self.playing(mon, 2.0); self.assertTrue(any(voice.block(0.02 * r.standard_normal(1024)) for _ in range(20)), "after the warm-up it listens")
 
     def test_not_in_the_first_moments_of_a_reply(self):
-        mon = jd.AecMonitor(log=lambda *a, **k: None); voice = jd.CleanTalkOver(mon, holdoff=0.4)
+        mon = jd.AecMonitor(log=lambda *a, **k: None); voice = jd.CleanTalkOver(mon, holdoff=0.4, warmup=0.0)
         loud = (0.02 * np.random.default_rng(4).standard_normal(1024)).astype(np.float32)
-        self.assertEqual(mon.play_age, 0.0)
-        self.assertFalse(any(voice.block(loud) for _ in range(4)), "residual while the canceller settles must not stop a reply that has just begun")
+        self.playing(mon, 0.1); self.assertLess(mon.play_age, 0.4)
+        self.assertFalse(any(voice.block(loud) for _ in range(2)), "residual while the canceller settles must not stop a reply that has just begun")
 
 
 class AbortAndAdapter(unittest.TestCase):

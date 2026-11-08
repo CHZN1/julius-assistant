@@ -107,7 +107,11 @@ class AecMonitor:
         self._clean = collections.deque(maxlen=40); self._ref = collections.deque(maxlen=40)   # 2 s of window levels
         self._quiet = collections.deque(maxlen=600)                                           # cleaned level while nothing plays: the room noise
         self._bad = collections.deque(maxlen=int(memory_seconds / self.WINDOW))
-        self.echo_like = False; self.play_age = 0.0; self._silent_for = 99.0; self.windows = 0
+        self.echo_like = False; self.play_age = 0.0; self._silent_for = 99.0; self.windows = 0; self.total_play = 0.0   # total_play: seconds of playback so far (the canceller needs a couple of seconds to converge on the first reply)
+
+    @property
+    def playing_now(self):
+        return self._silent_for < 0.3
 
     @property
     def noise(self):
@@ -127,7 +131,7 @@ class AecMonitor:
         self.windows += 1; playing = ref > 0.002
         if playing:
             if self._silent_for >= 1.5 or self.play_age == 0.0: self.play_age = 0.0   # a new reply starts
-            self.play_age += self.WINDOW; self._silent_for = 0.0
+            self.play_age += self.WINDOW; self._silent_for = 0.0; self.total_play += self.WINDOW
         else:
             self._silent_for += self.WINDOW
             if self._silent_for >= 1.5: self.play_age = 0.0
@@ -152,28 +156,34 @@ class AecMonitor:
 
 
 class CleanTalkOver:
-    """the user talking over Julius, judged on the echo-cancelled signal: level above max(min_rms, k x room noise) for `sustain` seconds, not moving with the playback, and not in
-    the first `holdoff` seconds of a reply (the canceller is still settling)."""
-    def __init__(self, monitor, min_rms=0.0030, k=3.5, sustain=0.30, holdoff=0.4, window=0.1):
-        self.mon, self.min_rms, self.k, self.sustain, self.holdoff, self.window = monitor, min_rms, k, sustain, holdoff, window
-        self._acc = 0.0; self._n = 0; self._run = 0.0; self.triggered = False
+    """the user talking over Julius, judged on the echo-cancelled signal.
+    The canceller's suppressor clamps down on everything while Julius is loud (recorded 11-07: the cleaned signal was exactly 0.0000 for half a second at a time, with only
+    short bursts of the user's voice getting through), so this counts BURSTS, not a sustained level: `bursts` 50 ms windows above max(min_rms, k x room noise) within the last
+    `span` seconds. It only applies while Julius is audibly speaking (not while he is thinking), not in the first `holdoff` seconds of a reply, and not when the residual
+    follows the playback envelope (echo)."""
+    WINDOW = 0.05
+
+    def __init__(self, monitor, min_rms=0.0030, k=3.5, bursts=3, span=1.0, holdoff=0.4, warmup=3.0):
+        self.mon, self.min_rms, self.k, self.bursts, self.span, self.holdoff, self.warmup = monitor, min_rms, k, bursts, span, holdoff, warmup
+        self._acc = 0.0; self._n = 0; self._hits = collections.deque(maxlen=int(span / self.WINDOW)); self.triggered = False
 
     def threshold(self):
         return max(self.min_rms, self.k * self.mon.noise)
 
     def block(self, cleaned):
-        """Feed cleaned microphone samples while Julius is speaking. True once, when the user's speech has lasted long enough."""
-        c = np.asarray(cleaned, dtype=np.float32).reshape(-1)
-        self._acc += float(np.dot(c, c)); self._n += len(c)
-        if self._n < self.window * 16000: return False
-        rms = math.sqrt(self._acc / self._n); dt = self._n / 16000; self._acc = 0.0; self._n = 0
-        if rms > self.threshold() and not self.mon.echo_like and self.mon.play_age >= self.holdoff:
-            self._run += dt
-            if self._run >= self.sustain and not self.triggered: self.triggered = True; return True
-        else: self._run = max(0.0, self._run - dt * 0.25)
+        """Feed cleaned microphone samples. True once, when the user's speech has been heard over Julius."""
+        c = np.asarray(cleaned, dtype=np.float32).reshape(-1); step = int(self.WINDOW * 16000); i = 0
+        while i < len(c):
+            take = min(step - self._n, len(c) - i); seg = c[i:i + take]
+            self._acc += float(np.dot(seg, seg)); self._n += take; i += take
+            if self._n >= step:
+                rms = math.sqrt(self._acc / self._n); self._acc = 0.0; self._n = 0
+                active = self.mon.playing_now and self.mon.play_age >= self.holdoff and self.mon.total_play >= self.warmup and not self.mon.echo_like
+                self._hits.append(1 if (active and rms > self.threshold()) else 0)
+                if sum(self._hits) >= self.bursts and not self.triggered: self.triggered = True; return True
         return False
 
-    def reset(self): self._acc = 0.0; self._n = 0; self._run = 0.0; self.triggered = False
+    def reset(self): self._acc = 0.0; self._n = 0; self._hits.clear(); self.triggered = False
 
 
 # ---------------------------------------------------------------- the stream

@@ -176,3 +176,12 @@ self-heard 24; aec (lag-estimated reference) — WER 0.537, exact 19/37, split/l
 it is the reason for this build. The duplex comparison needs new recordings: `python evals/voice_record.py record --duplex d1 d2 d3`, then `python evals/duplex_report.py`
 (self-echo turns, false interruptions, barge-in stop/understood/answered, fallbacks, echo reduction dB). Pass line: 0 self-echo turns, 0 false interruptions, every barge-in stops
 and is answered, no fallback. Until then the switch stays off.
+
+### 2026-11-07 first live duplex run (d1, d2, d3)
+Result: d1 (two ~60-80 s stories, silent) — 0 self-echo, 0 false interruptions, echo reduction 31.7 dB, no fallback. d3 normal exchange — fine. d2 barge-in: he DID stop each time, but late
+and with damaged words. Cause (from mic.wav/out.wav of the take): while Julius is loud the canceller's suppressor zeroes the cleaned signal for ~0.5 s at a time (0.0000) and only short
+bursts of the user's voice pass, so a "sustained level for 0.3 s" detector fired ~1.7 s after he started talking, i.e. at the end of the sentence; the lost/garbled words ("Third, Springfield")
+are the same suppression (double talk). Also a second talk-over fired while he was only thinking (play_age was still high), cutting the next turn.
+Fix: CleanTalkOver now counts bursts (3 x 50 ms above threshold within 1 s), only while playback is audible right now, not in the first 0.4 s of a reply, not in the first 3 s of
+playback since start (canceller converging; this removed one false trigger at 201.06 on replay). Replay of the d2 take: triggers 1.1 s and 0.7 s earlier than before, 0 false triggers in d1.
+Still to confirm live: that the words are intact now that he stops ~0.2 s after the user starts. If not, next options: transcribe the raw mic for the overlap stretch, or lower the suppressor via a different AEC.
