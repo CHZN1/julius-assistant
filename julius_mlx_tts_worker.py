@@ -19,6 +19,8 @@ def load_models():
 model,refs=load_models()
 def terminate_worker(signum, frame):raise SystemExit(0)
 signal.signal(signal.SIGTERM,terminate_worker)
+cancel_flag=[False]
+signal.signal(signal.SIGUSR1,lambda signum,frame:cancel_flag.__setitem__(0,True))   # the host abandoned this reply: stop generating, say 'done', stay alive
 print(json.dumps({'ready':True}),flush=True)
 with tempfile.TemporaryDirectory(prefix='julius_mlx_tts_',dir=__import__('julius_state').tmp_dir()) as directory:
     for line in sys.stdin:
@@ -30,7 +32,7 @@ with tempfile.TemporaryDirectory(prefix='julius_mlx_tts_',dir=__import__('julius
             gc.collect();mx.clear_cache()
             print(json.dumps({'unloaded':True,'active_memory_bytes':mx.get_active_memory()}),flush=True)
             continue
-        count=0;started=time.perf_counter()
+        count=0;started=time.perf_counter();cancel_flag[0]=False
         try:
             text=req['text']
             if not isinstance(text,str) or not text.strip() or len(text)>4096:
@@ -45,6 +47,7 @@ with tempfile.TemporaryDirectory(prefix='julius_mlx_tts_',dir=__import__('julius
             span_words=int(req.get('span_words',36))
             if not 12<=span_words<=48:raise ValueError('Speech span limit must be between 12 and 48 words')
             for span in speech_chunks(text,max_words=span_words):
+                if cancel_flag[0]:break
                 with contextlib.redirect_stdout(sys.stderr):
                     generator=model._generate_icl(text=span,ref_audio=refs[mode],ref_text=REF_TEXT,
                         language='English',temperature=config['temperature'],top_k=config['top_k'],
@@ -56,7 +59,9 @@ with tempfile.TemporaryDirectory(prefix='julius_mlx_tts_',dir=__import__('julius
                             raise FloatingPointError('Invalid MLX speech audio')
                         path=Path(directory)/f'{count}.npy';np.save(path,audio);count+=1
                         print(json.dumps({'chunk':True,'path':str(path),'sample_rate':result.sample_rate}),file=sys.__stdout__,flush=True)
-            print(json.dumps({'done':True,'delivery_mode':mode,'voice_strategy':'two-prompt',
+                        if cancel_flag[0]:break
+            if cancel_flag[0] and model is not None:model.speech_tokenizer.decoder.reset_streaming_state()
+            print(json.dumps({'done':True,'cancelled':cancel_flag[0],'delivery_mode':mode,'voice_strategy':'two-prompt',
                 'dtype':'bfloat16','chunks':count,'seconds':time.perf_counter()-started,
                 'active_memory_bytes':mx.get_active_memory(),'peak_memory_bytes':mx.get_peak_memory()}),flush=True)
         except Exception as exc:

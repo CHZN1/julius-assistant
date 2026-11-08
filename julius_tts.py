@@ -111,7 +111,7 @@ class SpeechEngine:
                         yield audio, result['sample_rate']
                 finally:
                     # A partially consumed stream cannot leave stale messages for another request.
-                    if not finished: self.suspend()
+                    if not finished: self._abandon_stream()
                     self._stream_active = False
                 return
             line = self._worker_line(timeout=90)
@@ -209,6 +209,33 @@ class SpeechEngine:
         if not parts:
             raise ValueError('No speech text')
         return np.concatenate(parts), sr
+
+    def _abandon_stream(self):
+        """The consumer stopped reading mid-reply (the user spoke over Julius, or the stop hotkey). The worker is still generating and will keep sending chunk lines; if they
+        were left in the pipe the NEXT reply would read them as its own, and its cleanup deletes their files ('No such file ... 3.npy', every later reply silent: seen
+        11-07). Ask the worker to stop (SIGUSR1), read and discard everything up to its 'done', and keep it loaded. Anything unexpected: restart it."""
+        import select, signal, time, json
+        w = self.worker
+        if w is None or w.poll() is not None: return
+        try:
+            os.kill(w.pid, signal.SIGUSR1)
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                while b'\n' not in self._worker_buffer:
+                    if time.monotonic() > deadline: raise TimeoutError('worker did not acknowledge the stop')
+                    if not select.select([w.stdout], [], [], .1)[0]: continue
+                    data = os.read(w.stdout.fileno(), 65536)
+                    if not data: raise RuntimeError('worker stopped')
+                    self._worker_buffer += data
+                line, self._worker_buffer = self._worker_buffer.split(b'\n', 1)
+                msg = json.loads(line.decode('utf-8'))
+                if msg.get('done') or 'error' in msg: return
+            raise TimeoutError('worker did not acknowledge the stop')
+        except Exception:
+            self._worker_buffer = b''
+            try: w.terminate(); w.wait(timeout=5)
+            except Exception: pass
+            self.worker = None   # synthesize() starts a fresh one
 
     def _worker_line(self, timeout):
         import select, time

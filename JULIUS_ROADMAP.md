@@ -185,3 +185,10 @@ are the same suppression (double talk). Also a second talk-over fired while he w
 Fix: CleanTalkOver now counts bursts (3 x 50 ms above threshold within 1 s), only while playback is audible right now, not in the first 0.4 s of a reply, not in the first 3 s of
 playback since start (canceller converging; this removed one false trigger at 201.06 on replay). Replay of the d2 take: triggers 1.1 s and 0.7 s earlier than before, 0 false triggers in d1.
 Still to confirm live: that the words are intact now that he stops ~0.2 s after the user starts. If not, next options: transcribe the raw mic for the overlap stretch, or lower the suppressor via a different AEC.
+
+### 2026-11-07 second d2 run: the real cause of "he stopped answering" was in the speech worker, not duplex
+First interruption worked end to end (stopped within ~0.3 s, "What's the weather in Springfield?" heard exactly and answered). Then every later reply was silent: "speech unavailable: No such file ... 3.npy".
+Cause (old bug, any stop while a reply is still being generated): when the consumer stops reading mid-reply, `julius_tts.synthesize()` -> `suspend()`, which returns immediately under
+JULIUS_KEEP_VOICE=1 (cloud profile), so the worker kept generating and its chunk lines stayed in the pipe; the next reply read those stale lines as its own and its cleanup had deleted the files.
+Fix: `_abandon_stream()` signals the worker (SIGUSR1), which stops, sends `done(cancelled)`, and stays loaded; the host discards everything up to that ack (0.32 s with the real worker); anything unexpected
+terminates the worker so the next reply starts fresh. test_julius_tts_cancel.py (fake worker) + a direct check against the real worker. The always-on service needs a restart to get this.
