@@ -126,6 +126,62 @@
    ]
   },
   {
+   "id": "d2f_fast_stop",
+   "title": "Stop and the question in one breath",
+   "intro": "Three times: ask for the list, then about three seconds in say 'Stop' and the question FAST with no gap, the way you would if you were annoyed. Press Enter to KEEP each take even when it goes wrong: the failures are what I need.",
+   "turns": [
+    {
+     "say": "Julius, list all fifty US states with their capitals.",
+     "expect": {
+      "kind": "long_answer"
+     }
+    },
+    {
+     "say": "Stop, what's the weather in Springfield?",
+     "when": "during_reply",
+     "expect": {
+      "kind": "interrupt",
+      "must": [
+       "Springfield"
+      ]
+     }
+    },
+    {
+     "say": "Julius, count from one to a hundred.",
+     "expect": {
+      "kind": "long_answer"
+     }
+    },
+    {
+     "say": "Stop what time is it in Tokyo",
+     "ref": "Stop, what time is it in Tokyo?",
+     "when": "during_reply",
+     "expect": {
+      "kind": "interrupt",
+      "must": [
+       "Tokyo"
+      ]
+     }
+    },
+    {
+     "say": "Julius, name every month of the year with its number of days, then every day of the week.",
+     "expect": {
+      "kind": "long_answer"
+     }
+    },
+    {
+     "say": "Stop, what's the weather in San Jose?",
+     "when": "during_reply",
+     "expect": {
+      "kind": "interrupt",
+      "must": [
+       "San Jose"
+      ]
+     }
+    }
+   ]
+  },
+  {
    "id": "d3_normal",
    "title": "Ordinary exchange still works",
    "intro": "A short normal conversation, to check nothing else broke.",
