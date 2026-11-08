@@ -269,9 +269,10 @@ class Backfill(unittest.TestCase):
 
 
 class Switch(unittest.TestCase):
-    def test_off_by_default_in_defaults_and_toml(self):
+    def test_on_by_default_in_defaults_and_toml_with_raw_backfill_off(self):
         import julius_config
-        self.assertFalse(julius_config.DEFAULTS["audio"]["duplex"]); self.assertFalse((julius_config.load_config().get("audio") or {}).get("duplex"), "julius.toml must keep duplex off until the live test passes")
+        self.assertTrue(julius_config.DEFAULTS["audio"]["duplex"]); self.assertTrue((julius_config.load_config().get("audio") or {}).get("duplex"))
+        self.assertFalse(julius_config.DEFAULTS["audio"]["raw_backfill"]); self.assertFalse((julius_config.load_config().get("audio") or {}).get("raw_backfill"), "the recognizer hears the echo-cancelled buffer only")
 
     def test_candidate_wires_fallback_to_the_gate(self):
         from pathlib import Path

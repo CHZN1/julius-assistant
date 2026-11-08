@@ -200,3 +200,16 @@ terminates the worker so the next reply starts fresh. test_julius_tts_cancel.py 
 2) He read his own instructions aloud ("The system says replies default short, but he explicitly asked for a long one..."). META_LEAK widened; BREVITY_PROMPT now allows long stories on request and forbids mentioning rules.
 3) Dates were read "November oh-eight": tool output used %d (zero padded) and normalize_for_speech had no month-day rule. Now %-d at the source and "November eighth" in speech (ISO and US dates too).
 Also the recording script waited only 12 s after the stop reply, so it moved on while he was still answering the interruption; it now waits for the second reply (up to 45 s).
+
+## 2026-11-07 — Voice barge-in: DONE (duplex audio is now the default)
+Decision (the user, 11-07): `audio.duplex = true` default; recognizer input comes from the echo-cancelled buffer only (`audio.raw_backfill = false`; the raw backfill recovered words but let Julius's own
+voice into transcripts, e.g. "8, 20, what's the weather in San Jose?"). Interrupted turns are stored in history as "[interrupted by the user]" and the prompt says an interruption is a change of
+topic, not a complaint (no apology, no refusal of long answers afterwards, long answers still given in full when asked).
+Live numbers (all on the real MacBook mic/speakers, recordings in voice_data/, local only):
+- d1 silent stories (2 x 60-80 s): self-echo 0, false interruptions 0, echo reduction 31.7 dB, no fallback.
+- d2 / d2q / d2f (normal, quiet "like people were sleeping", and fast "stop, <question>" in one breath): every interruption stopped him (~0.3 s after speech began, speakers silent at once),
+  was understood and answered (Springfield weather, Tokyo time, San Jose weather); no false stops; no fallback. Replay of the fast-stop take through the cleaned-only path: "Stop." transcribed in 3/3.
+- Defects found and fixed on the way: 12-fold re-trigger cancelling the next turn; speech worker left stale chunks after an abandoned reply (all later replies silent); instructions read aloud;
+  "November oh-eight"; refusing to list fifty states ("long ramble"); suppressor mangling the user's first words (burst-based detector instead of sustained level).
+Known limits: the first word of a fast interruption is occasionally garbled; Haiku may still ask "which kind?" for story requests after several interruptions in one conversation (history, not audio).
+Safety net: AecMonitor falls back to the mic gate by itself after 3 s of leaking echo (event `duplex_fallback`); `JULIUS_DUPLEX=0` disables duplex for one run.

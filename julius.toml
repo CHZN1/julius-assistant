@@ -34,8 +34,9 @@ hotkey = "<ctrl>+<alt>+s"      # global stop: silences Julius at once, whatever 
 voice = true                   # spoken stop: speaking over Julius cuts his speech (julius_talkover.py); the hotkey always works
 
 [audio]
-duplex = false                  # one stream for mic + speakers with echo cancellation: the mic gate is off while Julius talks and speaking over him stops him (julius_duplex.py). JULIUS_DUPLEX=1 turns it on for one run
+duplex = true                   # DEFAULT since 11-07: one stream for mic + speakers with echo cancellation; the mic gate is off while Julius talks and speaking over him stops him (julius_duplex.py). Falls back to the gate by itself if echo leaks. JULIUS_DUPLEX=0 turns it off for one run
 duplex_rate = 48000            # stream rate; his voice plays at full quality, only the mic and the echo reference are reduced to 16 kHz
+raw_backfill = false           # true feeds the raw mic for the first words of an interruption (recovers more words but lets Julius's own voice into the transcript); off by request
 fallback_seconds = 3.0         # echo leaking through the canceller this long (seconds of playback) puts the mic gate back automatically
 
 [wake]

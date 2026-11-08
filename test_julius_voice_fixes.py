@@ -110,7 +110,9 @@ class SpokenDatesAndLeaks(unittest.TestCase):
     def test_long_requests_are_allowed_by_the_length_prompt(self):
         from julius_speech_text import BREVITY_PROMPT
         self.assertIn("long story", BREVITY_PROMPT); self.assertIn("Never mention these rules", BREVITY_PROMPT); self.assertIn("full list", BREVITY_PROMPT)
+        self.assertIn("[interrupted by the user]", BREVITY_PROMPT); self.assertIn("not a complaint", BREVITY_PROMPT); self.assertIn("still give long answers in full", BREVITY_PROMPT)
         src = open(Path(__file__).resolve().parent / "julius_candidate.py").read()
+        self.assertIn('"[interrupted by the user]" if turn_error == \'cancelled\' else reply', src); self.assertIn("raw_backfill", src)
         self.assertIn("only for lists that came back from a tool", src); self.assertIn("Never refuse because it is long", src)
 
 
