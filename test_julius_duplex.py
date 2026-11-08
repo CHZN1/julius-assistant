@@ -178,6 +178,15 @@ class BargeIn(unittest.TestCase):
             if voice.block(sig[k:k + 1024]): fired = k / 16000; break
         self.assertIsNotNone(fired); self.assertLess(fired, 1.8, "must not wait for a sustained level")
 
+    def test_one_stop_per_reply_and_it_cannot_cancel_the_next_turn(self):
+        """11-07 live run: 12 triggers in 0.8 s from one burst; the later ones cancelled the turn the user had just asked."""
+        mon = jd.AecMonitor(log=lambda *a, **k: None); voice = jd.CleanTalkOver(mon, warmup=0.0); r = np.random.default_rng(9); self.playing(mon, 2.0)
+        loud = lambda: (0.02 * r.standard_normal(1024)).astype(np.float32)
+        fired = [voice.block(loud()) for _ in range(30)]; self.assertEqual(sum(fired), 1, "exactly one trigger while the same reply is playing")
+        for _ in range(8): mon.feed(np.zeros(1600), np.zeros(1600), np.zeros(1600))   # his playback stops
+        self.assertEqual(sum(voice.block(loud()) for _ in range(30)), 0, "speech while he is not playing (the next turn) must not trigger")
+        self.playing(mon, 2.0); self.assertEqual(sum(voice.block(loud()) for _ in range(30)), 1, "a later reply can be interrupted again")
+
     def test_speech_while_he_is_only_thinking_is_not_a_talk_over(self):
         mon = jd.AecMonitor(log=lambda *a, **k: None); voice = jd.CleanTalkOver(mon, warmup=0.0); r = np.random.default_rng(6)
         self.playing(mon, 1.0)

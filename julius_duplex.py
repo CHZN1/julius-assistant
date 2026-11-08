@@ -179,8 +179,11 @@ class CleanTalkOver:
             if self._n >= step:
                 rms = math.sqrt(self._acc / self._n); self._acc = 0.0; self._n = 0
                 active = self.mon.playing_now and self.mon.play_age >= self.holdoff and self.mon.total_play >= self.warmup and not self.mon.echo_like
+                if self.triggered:   # one stop per reply: stay latched (and forget the bursts that caused it) until the playback is over
+                    if not self.mon.playing_now: self.triggered = False
+                    self._hits.clear(); continue
                 self._hits.append(1 if (active and rms > self.threshold()) else 0)
-                if sum(self._hits) >= self.bursts and not self.triggered: self.triggered = True; return True
+                if sum(self._hits) >= self.bursts: self.triggered = True; self._hits.clear(); return True
         return False
 
     def reset(self): self._acc = 0.0; self._n = 0; self._hits.clear(); self.triggered = False

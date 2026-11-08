@@ -1018,7 +1018,7 @@ def cb(indata, n, t, s):
     if _r is not None and globals().get('_duplex') is None: _r.mic(indata[:, 0])
     if globals().get('_duplex') is not None and not _duplex_monitor.fell_back and cancellation.busy.is_set() and not microphone_gate.quiet:
         try:
-            if _duplex_voice.block(indata[:, 0]): _duplex_voice.triggered = False; _talked_over(duplex=True)
+            if _duplex_voice.block(indata[:, 0]): _talked_over(duplex=True)   # latches until his playback has ended: one stop per reply
         except Exception: pass
     if microphone_gate.accepting():q.append((indata[:, 0].copy(),time.perf_counter()))
     elif globals().get('_talkover') is not None and (cancellation.busy.is_set() or microphone_gate.settling()) and not microphone_gate.quiet:

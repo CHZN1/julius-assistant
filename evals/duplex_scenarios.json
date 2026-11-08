@@ -15,7 +15,7 @@
        {"say": "Stop. What's the weather in Springfield?", "when": "during_reply", "expect": {"kind": "interrupt", "must": ["Springfield"]}},
        {"say": "Julius, tell me about the history of the Roman Empire.", "expect": {"kind": "long_answer", "must": ["Rom"]}},
        {"say": "Okay, that's enough. What time is it in Tokyo?", "when": "during_reply", "expect": {"kind": "interrupt", "must": ["Tokyo"]}},
-       {"say": "Julius, tell me a long story about a dragon.", "expect": {"kind": "long_answer", "must": ["dragon"]}},
+       {"say": "Julius, tell me a long story about a dragon who guards a library.", "expect": {"kind": "long_answer", "must": ["dragon"]}},
        {"say": "Stop. What's the weather in San Jose? [say this quietly]", "ref": "Stop. What's the weather in San Jose?", "when": "during_reply", "expect": {"kind": "interrupt", "must": ["San Jose"]}}]},
 
     {"id": "d3_normal", "title": "Ordinary exchange still works", "intro": "A short normal conversation, to check nothing else broke.",
