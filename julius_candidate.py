@@ -995,7 +995,7 @@ def _talked_over(duplex=False):
     if duplex:   # the microphone was open the whole time: what he said is already in q (cleaned); keep the last 4 s of it
         keep = list(q)[-int(4.0 * SR / CHUNK):]; q.clear(); q.extend(keep)
         from julius_duplex import replace_with_raw
-        replace_with_raw(q, _duplex.ring, _duplex_voice.onset_ago + 0.7)   # the start of his sentence from the raw microphone: cleaning mangles it while Julius is loud
+        replace_with_raw(q, _duplex.ring, _duplex_voice.onset_ago + 0.45)   # the start of his sentence from the raw microphone: cleaning mangles it while Julius is loud
         _duplex.raw_blocks_left = 12; globals()['_use_raw_now'] = True      # and the next ~0.8 s, while the canceller's suppression dies away
         return
     q.clear()
