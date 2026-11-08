@@ -214,7 +214,7 @@ class DuplexAudio:
         self.input_overflows = self.output_underflows = 0; self.use_cleaned = True
         self._raw = np.zeros(0, np.float32); self._ref = np.zeros(0, np.float32); self._cln = np.zeros(0, np.float32)
         self._pend_mic = np.zeros(0, np.float32); self._pend_ref = np.zeros(0, np.float32)
-        self._lock = threading.Lock(); self.callbacks = 0
+        self._lock = threading.Lock(); self.callbacks = 0; self.out_level = 0.0   # RMS of the block just handed to the speakers (the UI event feed's level)
         self.ring = collections.deque(maxlen=80)   # the last ~5 s of raw microphone blocks (barge-in re-reads the start of what the user said from here)
         self.raw_blocks_left = 0                  # while > 0, blocks go to the listener raw: the suppressor mangles the user's first words while Julius is still loud
 
@@ -259,6 +259,7 @@ class DuplexAudio:
         data, starved = self.play.pull(frames)
         if starved and self.streaming: self.starved = True
         outdata[:, 0] = data
+        self.out_level = float(np.sqrt(np.mean(data * data))) if len(data) else 0.0
         if outdata.shape[1] > 1: outdata[:, 1:] = data[:, None]
         self.process(indata[:, 0], data)
 

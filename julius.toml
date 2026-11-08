@@ -34,6 +34,10 @@ log_transcripts_until = "2026-11-14"   # last day (inclusive); after it transcri
 hotkey = "<ctrl>+<alt>+s"      # global stop: silences Julius at once, whatever the microphone hears. macOS asks once to allow input monitoring for the terminal
 voice = true                   # spoken stop: speaking over Julius cuts his speech (julius_talkover.py); the hotkey always works
 
+[events]
+enabled = true                   # read-only WebSocket on 127.0.0.1 only: state, speaker level (about 30 Hz) and transcript lines for a future UI. `python julius_events_client.py` prints them
+port = 8765
+
 [audio]
 duplex = true                   # DEFAULT since 11-07: one stream for mic + speakers with echo cancellation; the mic gate is off while Julius talks and speaking over him stops him (julius_duplex.py). Falls back to the gate by itself if echo leaks. JULIUS_DUPLEX=0 turns it off for one run
 duplex_rate = 48000            # stream rate; his voice plays at full quality, only the mic and the echo reference are reduced to 16 kHz

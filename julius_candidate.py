@@ -288,6 +288,40 @@ if os.environ.get('JULIUS_VALIDATION_NO_DEVICES')!='1':
     import julius_hotkey,julius_config
     julius_hotkey.start(stop_now,(julius_config.load_config().get('barge_in') or {}).get('hotkey','<ctrl>+<alt>+s'))
 
+def _ui_speaking():
+    return time.monotonic() - globals().get('_ui_last_loud', -9.0) < 0.35
+
+def _ui_level():
+    d = globals().get('_duplex'); t = globals().get('_ui_level_tap')
+    v = float(getattr(d, 'out_level', 0.0)) if d is not None and d.running() else (t.level() if t is not None else 0.0)
+    if v > 0.003: globals()['_ui_last_loud'] = time.monotonic()
+    return v
+
+def _ui_state():
+    """idle / listening / thinking / speaking / asleep, for the event feed (derived, never changes behaviour)."""
+    g = globals()
+    if _ui_speaking(): return 'speaking'
+    if g.get('_turn_active'): return 'thinking'
+    if g.get('recording'): return 'listening'
+    if julius_state.is_quiet() or time.time() >= g.get('awake_until', 0.0): return 'asleep'
+    return 'idle'
+
+_events_hub = _events_server = None
+if os.environ.get('JULIUS_VALIDATION_NO_DEVICES') != '1':
+    try:
+        import julius_events
+        if _duplex is None and globals().get('speech_player') is not None:
+            _ui_level_tap = julius_events.LevelTap(); _prev_tap = getattr(speech_player, 'tap', None)
+            def _tap_level(audio, rate, _p=_prev_tap):
+                _ui_level_tap.out(audio, rate)
+                if _p is not None: _p(audio, rate)
+            speech_player.tap = _tap_level
+        import julius_config as _ev_cfg
+        _events_hub, _events_server = julius_events.start_from_config(_ev_cfg.load_config().get('events'), _ui_state, _ui_level)
+        if _events_server: print(f"  [ui event feed: ws://127.0.0.1:{_events_server.port} (read-only, this machine only)]", flush=True)
+    except Exception as _e:
+        _events_hub = _events_server = None; print(f"  [ui event feed unavailable: {type(_e).__name__}: {_e}]", flush=True)
+
 import julius_state,signal
 QUIET_HOTKEY=(julius_config.load_config().get('service') or {}).get('wake_hotkey','<ctrl>+<alt>+j') if os.environ.get('JULIUS_VALIDATION_NO_DEVICES')!='1' else None
 _wake_listener=None
@@ -370,6 +404,7 @@ def speak_sentence(p):
                 globals()['_first_audio_at']=time.perf_counter()
         p = clean_for_speech(p)
         if not p: return
+        if globals().get('_events_hub') is not None: _events_hub.say('julius', p, TURN["n"])
         if globals().get('self_echo') is not None: self_echo.note(p)
         # A previous failed reasoning request must not leave its model beside voice.
         if tts.backend in ('qwen-clone','qwen-mlx') and globals().get('close_backend') and not globals().get('keep_brain_loaded', lambda: False)():
@@ -884,8 +919,12 @@ import julius_lowconf as _lowconf_mod
 _lowconf_gate = _lowconf_mod.LowConfidenceGate()
 
 def process(text,lang):
-    with cancellation.activity():
-        return _process(text,lang)
+    globals()['_turn_active'] = True
+    try:
+        with cancellation.activity():
+            return _process(text,lang)
+    finally:
+        globals()['_turn_active'] = False
 
 def _process(text, lang):
     started = time.perf_counter()
@@ -899,6 +938,7 @@ def _process(text, lang):
     st = eyes.snapshot()
     vline = eyes.describe(st)
     print(f"  YOU [{lang}]: {text}")
+    if globals().get('_events_hub') is not None: _events_hub.say('you', text, TURN["n"] + 1)
     if vline: print(f"  (sees: {vline})")
 
     TURN["n"] += 1
