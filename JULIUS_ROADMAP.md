@@ -1,6 +1,20 @@
 # Julius roadmap
 
-Updated November 5, 2026. Current priority order; older milestone documents (JULIUS_TEST_RESULTS.md, JULIUS_*.md) keep the historical measurements.
+Updated November 9, 2026. Current priority order; older milestone documents (JULIUS_TEST_RESULTS.md, JULIUS_*.md) keep the historical measurements.
+
+## Status at a glance (2026-11-09)
+
+| Phase | State |
+|---|---|
+| A Evaluation harness | done |
+| B Daily driver (wake word, hotkeys, service, memory, voice barge-in) | done |
+| C Agents (file, coding, planner, research) | done; research agent and coding-agent network lockdown added 2026-11-09 |
+| D Sports analytics | paused until the user's models are ready |
+| E Open-source release | prep: audit, wake-model retrain, README, .env.example, MIT licence (see Phase E); nothing removed or rewritten yet |
+| F Voice polish and reliability | done (F1 to F3 built and live; Silero VAD skipped unless endpointing problems show; F4 soak ran 2026-11-08 to 11-09) |
+| G UI (orb app) | modes, typing, drops, installed app and login item built and in live testing; side-panel work (charts, images, vision, pixel art) waits for the user's go; image generation deferred (no provider) |
+
+Tests: 849 backend unit tests; free evals (routing, file 46/46, live data 14/14, memory); paid evals (planner, coding, research, live data).
 
 ## Completed
 
@@ -11,7 +25,7 @@ Updated November 5, 2026. Current priority order; older milestone documents (JUL
 - Router shortcuts with filler stripping and follow-up carry-forward; one round trip for simple tools.
 - Sonnet-controlled file agent with confirmation.
 - Cloud profile is the default everywhere (`python julius.py` and `run_julius.sh` use the same defaults; `--help` prints usage).
-- 530 tests passing.
+- Since then: duplex audio with voice barge-in, UI event feed and write channel, live-data guarantees, name-to-ticker resolver, research agent, coding-agent egress allowlist (details per phase below).
 
 ## Phase A: Evaluation harness (now)
 
@@ -39,7 +53,7 @@ Julius runs all day as a login service, wakes on his name, can be silenced or pu
 - [x] **Hotkeys, no permissions**: Ctrl+Option+S stops generation and speech at once (`SpeechPlayer.abort()` plus cancellation, also typed `/stop`); Ctrl+Option+J wakes from quiet mode. Both use Carbon `RegisterEventHotKey` through a small C helper (`hotkeyd/hotkeyd.c`, built on first use into `~/.julius/bin`, exits with Julius), so neither Accessibility nor Input Monitoring is needed (pynput could not be trusted under launchd). `julius_service.py doctor` checks both register. Verified live on the running service: stop mid-answer, "go to sleep" then the wake key.
 - [x] **Always-on launchd service with quiet mode** (`python julius_service.py on|off|status|restart|wake|doctor|logs`): LaunchAgent `com.julius.assistant` (starts at login, restarts on crash only, 15 s throttle, no keys in the plist); structured JSON log `~/Library/Logs/Julius/julius.jsonl` (5 MB x 5, speech redacted unless `[service] log_transcripts`); `logs` shows recent lines and follows. "Julius, go to sleep" turns the detector fully off (persisted across restarts) until Ctrl+Option+J, `julius_service.py wake` or SIGUSR1. Still unmeasured: idle CPU/memory over a full day, restart-after-crash.
 - [x] **Long-term memory** (`julius_memstore.py`, `julius_memcmd.py`, `julius_memory/memory.sqlite3`): "remember that…", "forget that / forget <topic> / forget everything", "what do you remember (about X)", "what did you just remember", "undo that", `/memories`; corrections supersede facts; automatic capture of durable facts (regex prefilter, Haiku extraction, marked auto, "Noted." once per turn; facts about Julius or secrets are never stored); forgetting hard-deletes and scrubs session logs; notes ride after the cached prompt, 400-token cap with newer facts winning, framed as data. Natural forget phrasings are caught before Haiku, a "forget that" with no target asks which one and takes the answer, and Haiku has `remember_fact` / `forget_fact` / `list_memories` tools as a backup (they only act on what the user said that turn). Eval `evals/memory_eval.py` (suite "memory" in run_all): **6/6 sections pass**: 63 command phrasings incl. negatives 100%, forgetting 0 residue, recall 100% (40 questions, 30 facts), auto-capture precision 96.2% / recall 100% (60 labelled sentences), 9 headless restart/forget/injection/tool-backup scripts all pass. Empty schema, fictional sample and README for open source in `julius_memory.example/`.
-- [ ] **Voice barge-in: parked, off** (`[barge_in] voice = false`; the hotkey covers stopping). Evaluated in isolation (`evals/bargein_eval.py`, speakers, persistent AEC; of 36 recorded double-talk takes only 23 had speech the annotator could find, 13 were skipped): WebRTC AEC ducked 7 of 8 stop takes within 300 ms (median 20 ms) and 6 of 7 questions, confirmed 6 of 8 real stops, but also confirmed 1 of 8 Julia/Julian sentences as a stop; the first 3 s of each playback are unreliable; energy cannot separate your voice from his echo. **Needs before it ships:** a small "stop" keyword model (bare "Stop." is invisible to the Julius detector), a Julia-aware confirm step, then a re-run on more takes with human-labelled onsets (revisit with the Phase F orb UI). Headphone detection is a separate low-effort item.
+- [x] **Voice barge-in: done 2026-11-07.** Duplex audio (one 48 kHz stream, WebRTC AEC3 on a sample-aligned reference) is the default (`audio.duplex = true`); speaking over Julius stops him within about 0.3 s and the interruption is understood and answered. The earlier parked attempt (energy-based, `bargein_eval.py`) is superseded; see "Voice barge-in: DONE" in the engineering log below. Known limits: the first word of a very fast interruption is occasionally garbled; the Julia/Julian confusion applies only to the wake word.
 
 Known open items:
 - Wake verifier: built but **off**; retrain on the real-usage log and re-measure on the 60-clip set.
@@ -78,7 +92,7 @@ Julius supervises my NHL/NFL/MLB/WNBA pipelines in `~/dev` as sub-agents: run to
 - MIT license.
 - Wake word: the shipped detector (`wake/models/julius.onnx`) and the default `engine = "cascade"` path must work for anyone without the personal speaker verifier. The verifier is a personal layer trained on one person's voice (`python wake/verifier.py train`) and stored outside the repo in `~/.julius/`; the repo must not contain recordings, the verifier file or `julius_memory/wake_log.jsonl`. The detector was trained with the author's wake recordings as part of its positives: before release, retrain it from synthetic voices only (or ship it clearly labelled) and document how to record a personal wake set. Confirm the openWakeWord models download step (`openwakeword.utils.download_models`) is in the setup README.
 
-## Phase F: Voice polish and reliability (before the UI; planned 2026-11-06, awaiting the user's OK to build)
+## Phase F: Voice polish and reliability: DONE (built 2026-11-06 to 11-08; Silero VAD skipped)
 
 Goal: voice conversations feel as reliable as typed ones. Text tests pass; the remaining failures are in the voice layer (ASR, echo, endpointing, pending state, Haiku improvising).
 1. **Diagnose** from the logs and the conversation record: every voice failure of the last week, grouped by cause and counted (done 2026-11-06, see "Failure breakdown" below).
@@ -100,16 +114,22 @@ Not measurable today: turn latency (not logged), real endpointing behaviour (no 
 **F1 status (2026-11-06):** built and live: `julius_logscan.py` (error and drop summary by cause, latency percentiles, wake detector stats), `julius_soak.py` (read-only sampler as its own launchd agent, baseline started 2026-11-06 19:06; `report` summarizes), a `[timing: ...]` line for every turn in the service log (speech end to first audio, ASR seconds and log-probability, no-speech probability, routed or brain, errors). Findings: the 3 hotkey failures were all before the Carbon fix (last at 20:38 on 11-05; fix 21:13), none since, so no Accessibility permission is needed. Of 387 rejected wake fires, Whisper spent 146 s in total (about 0.2% of one core over 22 hours); 2 were real wakes that were rejected because the wake gate did not accept a glued wake word ("JuliusTrashReport."), fixed with tests; about 3 more were possible quiet wakes with an empty Whisper result (cannot be confirmed from the log).
 **F2 status:** recorder built (`julius_session_record.py`, enabled only by `JULIUS_SESSION_RECORD_DIR`) and the recording script `evals/voice_record.py` with ten scenarios (`evals/voice_scenarios.json`). Recordings live in `voice_data/` (git-ignored, never released, `delete-all` command). The replay and scoring harness is built after the user records.
 
-## Phase G: UI
+## Phase G: UI (started 2026-11-08)
 
-Siri-style animated orb (listening, thinking, speaking states), transcript bubble, push-to-talk hotkey. Design details to come from me.
+The UI lives in its own **private** repo, `a private UI repo` (`a private UI repo`, split out 2026-11-09 with its history). This repo keeps only the interface: the read-only event feed (`julius_events.py`, `docs/EVENT_FEED.md`, `julius_events_client.py`, a test that the document matches the code) and the authenticated write channel (`julius_uichannel.py`, `julius_dropstage.py`, `docs/UI_CHANNEL.md`: typed text and dropped files; dropped files are only staged, nothing is opened or moved without the file agent's own yes).
 
-Note on `native/apple/bridge.js`: it is not UI. It is the JavaScript-for-Automation bridge that `julius_apple.py` pipes JSON into (via `osascript`) to read Calendar and Reminders inventories and to create, complete and cancel tokenised events and reminders. It stays an integration for Phase B reminders/calendar; Phase F needs a new front end.
+Built: the animated orb (states asleep/quiet/offline/listening/thinking/speaking, 8 finishes, shake and brush physics, power caps, settings drawer), window modes (Mini 100 px with corner snap, Floating 420 wide, Full), typing in the orb, drag and drop onto the orb, click-and-drag to move, restart sync, `Julius Orb.app` in `~/Applications` with menu-bar Quit and Cmd+Q, and a login item (`julius_orb.py on`). Details and tests are in that repo's README.
+
+Next: side-panel media (5a charts and images, 5b vision, 5c pixel art), starting when the user has tried the modes, typing and drops; 5d image generation deferred (no provider yet). The research agent already saves the images and sources the panel will show.
+
+Note on `native/apple/bridge.js`: it is not UI. It is the JavaScript-for-Automation bridge that `julius_apple.py` pipes JSON into (via `osascript`) to read Calendar and Reminders inventories and to create, complete and cancel tokenised events and reminders.
 
 ## Later
 
 Vision branch (beyond emotion detection), hosted version with subscriptions.
 
+
+## Engineering log (dated notes, newest findings last)
 
 ### Planner eval (paid), 2026-11-06
 `evals/planner_eval.py` (in `run_all.py` as "planner (paid)"): real Sonnet planner, generated Downloads shaped like the user's, 5 requests x 5 runs, about $0.27 a run of 25. Result: 25/25 runs with no protected or recent item staged and the folder unchanged; 100% of runs proposed something; 70% of the old installers and duplicates were found on average; no overreach on datasets or archives; the planner itself named a protected item (an installer opened recently or downloaded this week, a new screenshot) in 6 runs, which the agent blocked. Cautious misses: Zoom.pkg missed in 22 runs, old screenshots in 10-14.
@@ -117,17 +137,22 @@ Vision branch (beyond emotion detection), hosted version with subscriptions.
 
 ### Phase C part 2: Opus coding agent (built 2026-11-06)
 `claude -p` (Opus 5.5, `--bare`, `dontAsk`) run by `julius_code_agent.py` / `julius_code_session.py`, configured in `[code]`.
-- **Sandbox:** the project is COPIED (no secrets, caches, symlinks, music or crypto names, no git history) to `~/Library/Application Support/Julius/code/<id>/work` with a fresh git repo that has no remote. The process runs under a macOS seatbelt profile: writes only inside the task folder, no reads of `~/dev`, Documents, Desktop, Downloads, Music, keys or Julius state, network only on port 443. Environment is scrubbed (only the one API key). Tools are an allow-list; `git push`, remotes, curl, ssh, rm and package installs are denied.
+- **Sandbox:** the project is COPIED (no secrets, caches, symlinks, music or crypto names, no git history) to `~/Library/Application Support/Julius/code/<id>/work` with a fresh git repo that has no remote. The process runs under a macOS seatbelt profile: writes only inside the task folder, no reads of `~/dev`, Documents, Desktop, Downloads, Music, keys or Julius state, network only through a local allowlist proxy that reaches api.anthropic.com and nothing else (2026-11-09). Environment is scrubbed (only the one API key). Tools are an allow-list; `git push`, remotes, curl, ssh, rm and package installs are denied.
 - **Limits:** default $1.50, hard maximum $5 per task, 20-minute timeout, one task at a time, $5 a day for coding in its own budget line (never counts toward the $5 voice cap). Runaway spend past 125% of the cap is killed; timeout and cancel kill the whole process group.
 - **Voice:** "have the coding agent <goal> in <project>" stages a preview, a separate yes starts it, Julius announces the result, "show the changes", "merge it" reads the diff summary, a separate yes merges (never deletes, never overwrites a file edited since, backups kept), "undo the merge", "discard the coding task". The Sonnet planner stages tasks through `code_task` the same way.
 - **Free tests:** 56 (project vetting, copy, command and environment, a real seatbelt escape attempt, runner, voice flow, planner tool). **Paid eval** (`evals/code_eval.py`, in `run_all.py`): bugfix, push refused, other-folder refused, injection README, cap hit. 5/5 on the final run for about $0.25. Opus mostly declined the bad requests by itself (the appended rules), so the hard guarantees rest on the seatbelt tests, not on the model's behaviour.
-- **Known limits:** network is port 443 only, not host-restricted, so code the agent runs could still reach any HTTPS host (it holds no secrets to send except the project copy); the stop hotkey stops speech, not a running coding task (say "cancel the coding task"); a task cannot see other projects, so cross-project work is out of scope.
+- **Known limits:** the stop hotkey stops speech, not a running coding task (say "cancel the coding task"); a task cannot see other projects, so cross-project work is out of scope.
+
+### Network lockdown for the coding agent (2026-11-09)
+`julius_egress_proxy.py`: a CONNECT-only proxy on 127.0.0.1 (OS-chosen port) that exists only while a coding task runs and allows exactly `api.anthropic.com:443`; everything else gets 403 (plain HTTP verbs 405), names resolving to non-public addresses are refused, TLS stays end to end. The seatbelt profile now denies all network except a connection to that one local port (no direct 443, no DNS), and the child gets `HTTPS_PROXY`/`HTTP_PROXY`. Refusals are logged per task in `egress.log` (host and port only). Tests (`test_julius_egress_proxy.py`, 11) include a real sandboxed process: direct connections to a local listener and to 1.1.1.1 fail, only the proxy port opens, github.com and pypi.org are refused through it. Live: the code eval cases bugfix, push_refused, injection and other_folder pass through the proxy.
+
+### Research agent (2026-11-09)
+`julius_research.py`: the Sonnet planner calls `research_task(question)`; a Haiku sub-agent (so the voice model stays light) searches and reads pages and returns a spoken summary plus a structured result (cited findings, sources, images with the page they came from) saved to `~/.julius/research/*.json` for the side panel. Read-only: the only network verb is GET, no forms, no cookies, login pages skipped; http/https ports 80/443 only, every resolved address must be public, connection pinned to the checked address, redirects re-checked (max 3), 500 KB limit, text pages only. Page text is untrusted data (tagged, with a standing rule). A finding survives only if its URL is a page the agent actually opened; a quote counts as verified only if it appears in that page. Caps in `[research]`: 8 model calls, 5 pages, $0.10 per task (the call that would pass the cap is not made); on a limit the result is partial and says so. 25 offline tests (`test_julius_research.py`) and a paid eval on a fixture web (`evals/research_eval.py`, in `run_all.py`): 15/15 runs accurate, sourced and safe, about $0.0004 and 3 model calls per task, 3.7 s. The eval uses a fixture web so answers are known; it does not measure real-web search quality.
 
 ### Phase C status (2026-11-06)
 Built, unit-tested (588 tests) and evaluated: file agent 43/43 (free), planner eval 25/25 clean runs (paid, $0.27), coding agent eval 5/5 (paid, $0.25). **Complete (2026-11-06).** Live voice tests by the user: sandbox trash, yes and undo worked; the coding agent fixed demo_calc, showed, merged (own yes) and undid the merge. Live failures found and fixed on the way: glued wake word and ASR splits, status question dropping a pending plan, name-only trash blocked by "in the trash", bare 'undo' swallowed by the memory handler, spoken 'yes' dropped as self-echo after 'say yes to confirm', task folder under ~/.julius making every Edit fail (eval now runs at the real location), status question not recognised, garbled speech cancelling a pending start, .pyc caches listed in merge previews. Final numbers: 616 unit tests, routing 97.0% (131/135), file agent 100%, coding agent eval 5/5 ($0.21), planner eval 25/25. Known: a long garbled transcript of Julius's own voice can still slip past the echo filter and reach Haiku (dropped turns are now logged with a reason).
 
 **Known limitations**
-- Coding agent network: the sandbox allows outbound port 443 to any host (the seatbelt cannot filter by hostname). Later: restrict it to the Anthropic API with a local allow-list proxy (CONNECT proxy on localhost, sandbox allows only that port). The agent holds no secrets, but code it runs could reach any HTTPS site.
 - The stop hotkey does not cancel a coding task (by decision); say "cancel the coding task".
 - Opus 5.5 pricing is not in `julius_costs.RATES`; coding spend uses the dollar figure the CLI reports.
 - "what did you change today" now says so when nothing changed today (fixed 2026-11-06); before it listed the last change whatever its date.
@@ -222,8 +247,3 @@ Safety net: AecMonitor falls back to the mic gate by itself after 3 s of leaking
 
 **UI event feed (built 2026-11-08, during the soak; no UI yet):** `julius_events.py` is a read-only WebSocket on 127.0.0.1:8765 (`[events]` in julius.toml; stdlib only, no new package). Messages: `hello` on connect (state, level, last 20 transcript lines), `state` (idle / listening / thinking / speaking / asleep) on every change, `level` (Julius's voice as it leaves the speakers, 0-1, about 30 Hz while he speaks, then one 0), `transcript` (`you` = what the user said, `julius` = each sentence as he speaks it). Clients cannot send anything that has an effect; foreign Host or Origin headers are refused; 8 clients max; slow clients are dropped. Test client: `python julius_events_client.py [port] [--levels]`. 12 tests. **Not live in the service yet:** the service was deliberately not restarted so the soak keeps its 24 h of uninterrupted running; the feed starts at the next restart (after the soak ends, 2026-11-09 00:13).
 
-## Phase G: UI (started 2026-11-08)
-
-The UI (orb page, native Swift shell, login item, demo tools) lives in its own **private** repo, `a private UI repo` (`a private UI repo`; split out 2026-11-09 with its history). This repo keeps only the interface: the read-only event feed (`julius_events.py`, `docs/EVENT_FEED.md`, `julius_events_client.py`, a test that the document matches the code) and, later, the authenticated write channel for typed text and dropped files. The first build (orb states asleep/quiet/offline, power caps, settings drawer, 420 x 521 floating window, bubble below the orb, ⌥-drag move, corner resize, Ctrl+Option+O) is described in that repo's README and tests.
-
-Next (approved 2026-11-09): window modes (Mini 100 px / Floating / Full), write channel and typing (Ctrl+Option+Space), drag and drop onto the orb with staged confirmation, then side-panel media (charts and images, vision, pixel art); image generation (5d) deferred, no provider yet.
