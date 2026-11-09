@@ -24,6 +24,7 @@ SOAK_START = "2026-11-08T00:13"
 SOAK_END = "2026-11-09T00:13:48"
 RESULTS = ROOT / "JULIUS_POSTSOAK.md"
 FEED_PORT = 8765
+ORB_REPO = Path("a private UI repo").expanduser()   # the UI lives in its own private repo
 
 
 def feed_check(port=FEED_PORT, timeout=30.0, sleep=time.sleep, clock=time.monotonic):
@@ -56,7 +57,7 @@ def steps():
             ("Log scan (since the soak start)", lambda: sh([PY, "julius_logscan.py", "--since", SOAK_START])),
             ("Service smoke check with restart", lambda: sh([PY, "julius_service.py", "smoke", "--restart"], 400)),
             ("Event feed check", lambda: feed_check()),
-            ("Orb app build", lambda: sh([PY, "julius_orb.py", "build"], 600))]
+            ("Orb app build", lambda: sh([PY, str(ORB_REPO / "julius_orb.py"), "build"], 600))]
 
 
 def render(results, when):

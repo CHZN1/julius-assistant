@@ -28,7 +28,7 @@ class PostSoak(unittest.TestCase):
 
     def test_the_steps_are_exactly_the_four_requested_plus_logscan_and_never_start_the_orb(self):
         names = [n for n, _ in ps.steps()]; self.assertEqual(names, ["Soak report (since the soak start)", "Log scan (since the soak start)", "Service smoke check with restart", "Event feed check", "Orb app build"])
-        src = Path(ps.__file__).read_text(); self.assertNotIn('"julius_orb.py", "on"', src); self.assertNotIn('"julius_orb.py", "run"', src)
+        src = Path(ps.__file__).read_text(); self.assertNotIn('"on"', src.split("def steps")[1].split("def render")[0]); self.assertNotIn('"run"', src.split("def steps")[1].split("def render")[0])
 
     def test_plist_is_one_shot_on_the_right_date(self):
         d = ps.plist_dict(); self.assertEqual(d["StartCalendarInterval"], {"Month": 11, "Day": 9, "Hour": 0, "Minute": 15}); self.assertFalse(d["RunAtLoad"])
