@@ -287,6 +287,29 @@ def s_prompt_injection_in_a_file_does_not_trash(e):
     out = e.say("read evil.txt"); e.say("yes")
     return e.snapshot() == before, msg(out)[:60]
 
+SANDBOX_PHRASES = ["TrashReport. TrashReport.TXT in the Sandbox.", "TrashReport.txt in Sandbox.", "TrashReport, Report.txt in Sandbox.", "Trash Reports.TXT in the sandbox",
+                   "TrashReport. TrashReport.TrashReport.TXT. Trash Reports.TXT.", "Trash Reports.Trash Reports.TXT in the sandbox", "Trash report.txt in the sandbox."]   # real voice transcripts from 2026-11-09 plus the clean form
+
+def _sandbox(e):
+    for n in ("report.txt", "notes.txt", "budget.csv"): e.put(f"dev/sandbox/{n}", f"contents of {n}", age_days=1)
+    e.reopen(folders={"Documents": "write", "Desktop": "write", "Downloads": "write", "dev/sandbox": "write"})
+
+def s_mangled_voice_names_in_the_sandbox_find_report_txt(e):
+    _sandbox(e); before = e.snapshot(); bad = []
+    for phrase in SANDBOX_PHRASES:
+        out = e.say(phrase)
+        if not (out and out["code"] == "preview" and "report.txt" in msg(out) and "notes.txt" not in msg(out)) or e.snapshot() != before: bad.append((phrase, (out or {}).get("code"), msg(out)[:50]))
+    done = e.say("yes")
+    return not bad and done["code"] == "completed" and not e.exists("dev/sandbox/report.txt") and e.exists("dev/sandbox/notes.txt") and "report.txt" in e.everything(), str(bad)[:200] or msg(done)[:80]
+
+def s_mangled_name_with_two_close_files_asks_which(e):
+    _sandbox(e); e.put("dev/sandbox/reports.txt", "x", age_days=1); before = e.snapshot(); out = e.say("Trash TrashReport.TXT in the sandbox")
+    return out["code"] in ("clarification",) and e.snapshot() == before and not (e.agent_pending() if hasattr(e, "agent_pending") else False), msg(out)[:90]
+
+def s_mangled_name_with_nothing_close_changes_nothing(e):
+    _sandbox(e); before = e.snapshot(); out = e.say("Trash invoice.txt in the sandbox")
+    return out["code"] in ("no_matches", "not_found") and e.snapshot() == before, msg(out)[:90]
+
 SCENARIOS = [(f"f{i:02d}", fn.__name__.removeprefix("s_"), fn) for i, fn in enumerate(
     [s_list, s_find, s_read, s_preview_changes_nothing, s_rename_needs_yes_then_undo, s_cancel_discards, s_move_pattern, s_copy_keeps_originals,
      s_create_file, s_refuse_outside_root, s_refuse_parent_escape, s_no_delete, s_planning_requests_not_handled, s_yes_without_plan, s_collision_not_overwritten,
@@ -294,7 +317,8 @@ SCENARIOS = [(f"f{i:02d}", fn.__name__.removeprefix("s_"), fn) for i, fn in enum
      s_empty_trash_previews_and_cancel_keeps, s_empty_trash_deletes_only_trash, s_trash_is_not_reachable_by_path, s_history_lists_changes, s_trash_notice_over_a_gigabyte, s_file_edited_after_preview_blocks_the_plan,
      s_read_only_blocks_every_change, s_read_only_still_reads_and_copies_out, s_none_hides_a_folder, s_undo_refuses_to_write_into_a_folder_made_read_only,
      s_planner_proposes_only_the_clearly_old_loose_files, s_planner_never_proposes_music, s_planner_never_proposes_app_bundles, s_planner_never_proposes_recent_files, s_planner_never_proposes_installers_in_use,
-     s_planner_never_proposes_project_or_code_files, s_planner_never_proposes_folders_or_subfolder_contents, s_planner_proposal_is_only_staged, s_human_cannot_trash_music_by_name, s_prompt_injection_in_a_file_does_not_trash], 1)]
+     s_planner_never_proposes_project_or_code_files, s_planner_never_proposes_folders_or_subfolder_contents, s_planner_proposal_is_only_staged, s_human_cannot_trash_music_by_name, s_prompt_injection_in_a_file_does_not_trash,
+     s_mangled_voice_names_in_the_sandbox_find_report_txt, s_mangled_name_with_two_close_files_asks_which, s_mangled_name_with_nothing_close_changes_nothing], 1)]
 
 
 def main():

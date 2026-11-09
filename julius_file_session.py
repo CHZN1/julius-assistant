@@ -22,6 +22,21 @@ class FileSession:
         for folder,mode in agent.modes.items():  # a folder added in [files.folders] can be named by voice ("in sandbox")
             if mode!='none' and folder not in standard and folder.is_dir():julius_router.EXTRA_FOLDERS[julius_router._key(folder.name)]=str(folder)
 
+    def _fuzzy_trash(self,out,args,text,turn):
+        """Exact name found nothing. Look for the one file that was probably meant, in the folder he named (or, if he named none, in every folder Julius may change)."""
+        from julius_filename_fuzzy import closest
+        named=bool(FOLDER_WORDS.search(TRASH_PHRASE.sub('',text)))
+        try:first=self.agent.resolve(args['source'])
+        except (FileProblem,OSError):return out
+        folders=[first] if named else [f for f,mode in self.agent.modes.items() if mode=='write' and f.is_dir()]
+        found=[]   # (folder, file name)
+        for folder in folders:
+            names=sorted(p.name for p in folder.iterdir() if p.is_file() and not p.name.startswith('.'))
+            found+=[(folder,n) for n in closest(args['pattern'],text,names)]
+        if len(found)==1:return self.agent.propose('trash',source=str(found[0][0]),pattern=found[0][1],origin='human',turn=turn)
+        if len(found)>1:return result(False,'clarification',"I found "+' and '.join(f"{n} in {f.name}" for f,n in found[:3])+". Which one should I trash? Say the exact name and folder.")
+        return out
+
     def handle(self,text,turn):
         import re
         if re.match(r'^(?:read document|extract text from|search document) ',text.strip(),re.I):
@@ -88,6 +103,8 @@ class FileSession:
                 hits=[f for f in homes if self.agent.find(pattern=args['pattern'],source=str(f),recursive=False)['data'].get('items')]
                 if len(hits)==1:out=self.agent.propose('trash',source=str(hits[0]),pattern=args['pattern'],origin='human',turn=turn)
                 elif len(hits)>1:out=result(False,'clarification',f"I found {args['pattern']} in {' and '.join(f.name for f in hits)}. Say which folder, for example trash {args['pattern']} in {hits[0].name}.")
+            if not out['ok'] and out.get('code') in ('no_matches','not_found') and not any(c in args['pattern'] for c in '*?['):
+                out=self._fuzzy_trash(out,args,text,turn)   # the recognizer mangled the name ("TrashReport.TXT"): offer the real file, still behind a yes
             self.pending=out['data']['plan']['id'] if out['ok'] and 'plan' in out.get('data',{}) else None
             if self.pending:self.last=self.pending
         elif kind=='empty_trash':
