@@ -27,7 +27,7 @@ Tests: 849 backend unit tests; free evals (routing, file 46/46, live data 14/14,
 - Cloud profile is the default everywhere (`python julius.py` and `run_julius.sh` use the same defaults; `--help` prints usage).
 - Since then: duplex audio with voice barge-in, UI event feed and write channel, live-data guarantees, name-to-ticker resolver, research agent, coding-agent egress allowlist (details per phase below).
 
-## Phase A: Evaluation harness (now)
+## Phase A: Evaluation harness: complete (2026-10-30)
 
 Everything lives in `evals/`; results are dated CSVs in `evals/results/` and each run reports regressions against the previous run of the same suite.
 
@@ -180,7 +180,7 @@ Baseline from the 10 recorded conversations (38 turns; takes were recorded acros
 Result: coupling 0.068 (echo 0.0075 against 0.11 played), WebRTC AEC3 echo return loss enhancement 28.7 dB, residual 0.0003 (below the 0.0008 noise floor and the 0.0045 speech threshold), stable over 50 s.
 So echo cancellation works once the reference is sample-aligned; the recording misalignment, not the canceller, was the problem. Build: duplex stream at 16 kHz (TTS 24 kHz resampled), SpeechPlayer feeding the speaker side of the callback, cleaned microphone into the existing queue, the gate dropped, talk-over = speech detector on the cleaned signal. Behind `audio.duplex` until verified live.
 
-## 2026-11-07 — F3(a) duplex audio path (built, OFF by default, not yet live-tested)
+## 2026-11-07 — F3(a) duplex audio path (built; became the default the same day, see "Voice barge-in: DONE" below)
 
 What: `julius_duplex.py` runs one `sd.Stream` at 48 kHz (his voice at full quality; 24 kHz TTS is upsampled 2x). The microphone and the exact `outdata` of the same
 callback are decimated to 16 kHz together (same filter, so they stay aligned) and go through WebRTC AEC3 (`julius_aec.EchoCanceller(lag=0)`). `SpeechPlayer` runs on
