@@ -54,6 +54,10 @@ class ShellPage(unittest.TestCase):
         self.assertNotIn("poke(60000)", PAGE); self.assertNotIn("poke(8000)", PAGE)
         self.assertIn("if(s === 'offline') document.body.classList.add('show-ui');", PAGE)
 
+    def test_settings_drawer_can_be_closed_three_ways(self):
+        self.assertIn('id="closeDrawer"', PAGE); self.assertIn("e.key === 'Escape'", PAGE)
+        self.assertIn("e.target.closest('#drawer')", PAGE); self.assertIn("}, true);", PAGE)   # click outside, capture phase so the orb is not also shaken
+
     def test_no_external_requests(self):
         self.assertNotIn("fonts.googleapis", PAGE); self.assertNotRegex(PAGE, r"""(src|href)=["']https?://""")
 
