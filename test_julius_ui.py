@@ -48,6 +48,12 @@ class ShellPage(unittest.TestCase):
         for needle in ("quiet", "asleep", "Julius is offline", "window.julius", "webkit.messageHandlers.native", "shellAmp", "Math.min(+document.getElementById('count').value*1000, CAPS"): self.assertIn(needle, PAGE)
         self.assertIn("minimal: 400000", PAGE); self.assertIn("reduced: 800000", PAGE)
 
+    def test_bubble_sits_below_the_orb_and_shows_only_while_speaking(self):
+        self.assertIn("top:calc(var(--s) + 4px)", PAGE); self.assertIn("--s:min(100vw,calc(100vh / 1.24))", PAGE)
+        self.assertIn("const BUBBLE_HOLD = 4000;", PAGE)
+        self.assertNotIn("poke(60000)", PAGE); self.assertNotIn("poke(8000)", PAGE)
+        self.assertIn("if(s === 'offline') document.body.classList.add('show-ui');", PAGE)
+
     def test_no_external_requests(self):
         self.assertNotIn("fonts.googleapis", PAGE); self.assertNotRegex(PAGE, r"""(src|href)=["']https?://""")
 

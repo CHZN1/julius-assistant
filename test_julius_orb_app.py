@@ -17,7 +17,7 @@ def run_app(feed, seconds=5, support=None, eval_js=None):
 class Source(unittest.TestCase):
     def test_window_hotkey_and_bridge_are_as_approved(self):
         for needle in ("level = .floating", "isOpaque = false", "kVK_ANSI_O", "controlKey | optionKey", "modifierFlags.contains(.option)", "performDrag", "setPaused", "setPower", "setOffline",
-                       "127.0.0.1:8765", "var size: CGFloat = 420", "screen.maxX - args.size - 24", "Battery Power", "isLowPowerModeEnabled", "orb-settings.json", "orb-window.json"):
+                       "127.0.0.1:8765", "var size: CGFloat = 420", "let tall: CGFloat = 1.24", "screen.maxX - args.size - 24", "Battery Power", "isLowPowerModeEnabled", "orb-settings.json", "orb-window.json"):
             self.assertIn(needle, SRC)
 
 
@@ -29,7 +29,7 @@ class AppEndToEnd(unittest.TestCase):
             hub.set_state("thinking"); hub.say("you", "what is the weather", 1)
             r = run_app(f"ws://127.0.0.1:{srv.port}")
             self.assertTrue(r["feedConnected"]); self.assertEqual(r["page"]["mode"], "thinking")
-            self.assertEqual(r["window"]["w"], 420); self.assertFalse(r["window"]["opaque"]); self.assertEqual(r["window"]["level"], 3)
+            self.assertEqual((r["window"]["w"], r["window"]["h"]), (420, 521)); self.assertFalse(r["window"]["opaque"]); self.assertEqual(r["window"]["level"], 3)
             self.assertEqual(r["page"]["settings"]["finish"], "opal")
         finally: srv.stop()
         r = run_app("ws://127.0.0.1:1")   # nothing listening
