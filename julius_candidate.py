@@ -511,6 +511,9 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
         user_text = f"{user_text}\n\n[you can see: {vision_line}]"
     # Recalled notes go only to the model (router and tool hints keep seeing the plain request), and not into the stored history.
     _notes = memory.block(user_text) if globals().get('memory') is not None else ''
+    if globals().get('_drop_stage') is not None:   # files dropped on the orb: a labelled, data-only selection for the next few turns
+        _drop_block = _drop_stage.model_block()
+        if _drop_block: _notes = (_notes + "\n\n" if _notes else "") + _drop_block
 
     if globals().get('repair_history'): repair_history(history)
     globals()['_unknown_tool_retried'] = False
@@ -1146,6 +1149,12 @@ def _kbd():
             break
 threading.Thread(target=_kbd, daemon=True).start()
 _ui_channel = None
+_drop_stage = None
+def _ui_drop(paths):
+    """Files dropped on the orb: validated and staged, then Julius says what he got and asks what to do. Nothing is opened or changed."""
+    res = _drop_stage.stage(paths)
+    typed.append(julius_dropstage.DropNotice(res['notice']))
+    return {k: res[k] for k in ('accepted', 'rejected', 'expires_in')}
 def _ui_typed(text):
     """Text typed in the orb: queued exactly like a line typed in the terminal, so it takes the same path as speech (and wakes him for that turn)."""
     import julius_uichannel
@@ -1154,7 +1163,9 @@ if not _validation_no_devices:
     try:
         import julius_uichannel
         _ui_cfg = _asr_cfg.load_config().get('ui')
-        _ui_channel = julius_uichannel.start_from_config(_ui_cfg, {'typed': _ui_typed})
+        import julius_dropstage, julius_files
+        _drop_stage = julius_dropstage.DropStage(lambda p: julius_files.agent().resolve(p), lambda p: julius_files.agent().mode_of(p))
+        _ui_channel = julius_uichannel.start_from_config(_ui_cfg, {'typed': _ui_typed, 'drop': _ui_drop})
     except Exception as _e: _ui_channel = None; print(f"  [ui channel unavailable: {type(_e).__name__}: {_e}]", flush=True)
 
 print("calibrating room noise — stay quiet 2s...")
@@ -1235,6 +1246,13 @@ with microphone_stream():
                     typed.popleft()
                     raise KeyboardInterrupt
                 entry = typed.popleft()
+                if getattr(entry, 'drop_notice', False):   # files dropped on the orb: say what he got and ask; this is not a request
+                    globals()['_text_only'] = (_asr_cfg.load_config().get('ui') or {}).get('typed_reply') == 'text'
+                    try: speak(str(entry))
+                    except TurnCancelled: print('  [response stopped]', flush=True)
+                    finally: globals()['_text_only'] = False
+                    q.clear(); awake_until = time.time() + SESSION_SEC
+                    continue
                 control = listening_control(entry)
                 if control:
                     awake_until = 0.0 if control == 'sleep' else time.time() + SESSION_SEC
