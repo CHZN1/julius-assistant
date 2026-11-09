@@ -339,11 +339,18 @@ def leave_quiet(source='hotkey'):
     microphone_gate.set_quiet(False);julius_state.set_quiet(False);print(f'  [listening again: {source}]',flush=True)
     import julius_log;julius_log.event('quiet',on=False,source=source)
     if wake_engine is not None:wake_engine.reset()
+def hotkey_wake(source='hotkey'):
+    """The wake hotkey (and `julius_service.py wake`) wakes him in every state: out of quiet mode, and out of ordinary sleep too (it used to do nothing unless quiet was on).
+    The wake itself is the typed 'wake up' command, so it behaves exactly like saying Julius: awake for the session, with 'I am here.'"""
+    leave_quiet(source)
+    queue_ = globals().get('typed')
+    if queue_ is not None and time.time() >= globals().get('awake_until', 0.0):
+        print(f'  [awake: {source}]', flush=True); queue_.append('wake up')
 if julius_state.is_quiet() and os.environ.get('JULIUS_VALIDATION_NO_DEVICES')!='1':
     microphone_gate.set_quiet(True);print('  [starting in quiet mode: press the wake hotkey]',flush=True)
 if os.environ.get('JULIUS_VALIDATION_NO_DEVICES')!='1':
-    _wake_listener=julius_hotkey.start(lambda:leave_quiet('hotkey'),QUIET_HOTKEY)
-    try:signal.signal(signal.SIGUSR1,lambda *a:leave_quiet('signal'))
+    _wake_listener=julius_hotkey.start(lambda:hotkey_wake('hotkey'),QUIET_HOTKEY)
+    try:signal.signal(signal.SIGUSR1,lambda *a:hotkey_wake('signal'))
     except Exception:pass
 
 # Cloud brain: Claude Haiku answers every turn, the planner (Sonnet) is reached through escalate_to_planner.
