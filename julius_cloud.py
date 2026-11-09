@@ -167,7 +167,7 @@ class CloudBrain:
         return chosen
 
     # ---------- request building ----------
-    def request(self, messages, tools, max_tokens=None):
+    def request(self, messages, tools, max_tokens=None, force_tool=False):
         system, api_messages = convert_messages(messages)
         kwargs = {"model": self.model, "messages": api_messages, "max_tokens": max_tokens or TIERS["haiku"]["max_tokens"],
                   "cache_control": {"type": "ephemeral"}, **{k: v for k, v in TIERS["haiku"].items() if k != "max_tokens"}}
@@ -176,6 +176,7 @@ class CloudBrain:
         api_tools = convert_tools(self.tool_schemas(tools)) if tools is not None else None
         if api_tools:
             kwargs["tools"] = api_tools
+            if force_tool: kwargs["tool_choice"] = {"type": "any"}   # a live-data question: answer from a tool call made in THIS turn
         elif _has_tool_blocks(api_messages):  # history contains tool calls: tools must be declared, but not callable now
             import julius_tools as jt
             # Reuse this turn's tool list so the cached system+tools prefix from the tool phase is hit again.
@@ -186,6 +187,7 @@ class CloudBrain:
     # ---------- public entry ----------
     def chat(self, messages, tools=None, stream=False, options=None):
         import anthropic
+        options = dict(options or {}); force_tool = bool(options.pop("force_tool", False))   # cloud-only request flag; never passed on to the local fallback
         if self.auth_bad:
             if self.auth_pending:  # speak the failure exactly once, on the reply the user actually hears
                 if stream:
@@ -196,7 +198,7 @@ class CloudBrain:
         if self._clock() < self.offline_until or self.tracker.offline_required():
             return self._offline(messages, tools, stream, options, announce=False)
         try:
-            kwargs = self.request(messages, tools)  # length is steered by the prompt (brief by default, longer when asked); the local 160-token cap would cut a requested long answer mid-sentence
+            kwargs = self.request(messages, tools, force_tool=force_tool)  # length is steered by the prompt (brief by default, longer when asked); the local 160-token cap would cut a requested long answer mid-sentence
             if stream:
                 return self._stream(kwargs, messages, tools, options)
             response = self.client().messages.create(**kwargs)

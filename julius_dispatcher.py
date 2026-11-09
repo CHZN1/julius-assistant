@@ -78,8 +78,8 @@ class Dispatcher:
             resolve_days(args.get('day', 'today'))  # raises a speakable ValueError when the day can't be read
         if name == 'get_quote':
             import re
-            if not re.fullmatch(r'[A-Za-z0-9^.=-]{1,24}', args['symbol']):
-                raise ValueError('Please provide a valid ticker symbol.')
+            if not re.fullmatch(r"[A-Za-z0-9^.=&' -]{1,40}", args['symbol'].strip()):
+                raise ValueError('Please provide a valid ticker symbol or company name.')
 
     def dispatch(self, name, args=None):
         task = {'id': uuid.uuid4().hex, 'agent': OWNERS.get(name, 'unknown'),

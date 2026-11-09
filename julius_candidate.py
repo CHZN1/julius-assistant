@@ -561,14 +561,14 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
     import julius_ack
     _ack = julius_ack.Acknowledger(speak_fn, enabled=globals().get('cloud_brain') is not None)   # "On it." when a tool call outlasts 1.5 s with nothing said yet (streamed speech only)
     _live_q = _livedata.is_live_query(user_text); dropped_ungrounded = []
-    def _stream(messages, allow_retry=True, tools=None):
+    def _stream(messages, allow_retry=True, tools=None, force_tool=False):
         prepare_inference()
         print("\r\033[K  JULIUS: ", end="", flush=True)
         full, pend, spoken = "", "", 0
         stream_calls.clear()
         kw = {"tools": tools} if tools is not None else {}
         parts=llm_chat(messages=messages, think=False, stream=True, **kw,
-                             options={"temperature": 0.4, "num_predict": 160})
+                             options={"temperature": 0.4, "num_predict": 160, **({"force_tool": True} if force_tool else {})})
         try:
             for part in parts:
                 if globals().get('cancellation'):cancellation.check()
@@ -616,7 +616,7 @@ def ask_streaming(user_text, vision_line, nudge=None, speak_fn=None, before_infe
             prepare_inference()
             if globals().get('cloud_brain') is not None:
                 # Stream the reply with tools attached: text reaches TTS sentence by sentence, and a tool_use block ends it.
-                text = _stream(msgs, tools=jt.select_schemas(user_text))
+                text = _stream(msgs, tools=jt.select_schemas(user_text), force_tool=jt.live_tool_required(user_text) and not _livedata.tool_result_this_turn(msgs))
                 if text is None:
                     stalled = True
                     break

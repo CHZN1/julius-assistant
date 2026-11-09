@@ -14,7 +14,7 @@ LIVE_QUERY = re.compile(
     r"\b(?:scores?|final score|who (?:won|wins|is winning|is playing|plays|did .{0,30} beat)|did .{0,30} (?:win|lose)|results?|standings?|"
     r"prices?|how much (?:is|are|does|do|did)|cost of|costs?|trading|stocks?|share price|quotes?|odds|spread|over.under|"
     r"schedules?|(?:what time|when) (?:does|do|is|are|will)\b.{0,40}\b(?:game|match|start|play|kick|tip|puck)|game (?:tonight|today|tomorrow)|plays? tonight|"
-    r"news|headlines?|weather|forecast|temperature|how (?:hot|cold|warm)|rain|traffic|"
+    r"news|headlines?|weather|forecast|temperature|how (?:hot|cold|warm)|rain(?:ing|y)?|traffic|"
     r"right now|currently|latest|as of now|at the moment|this (?:morning|afternoon|evening)|tonight|today.s)\b", re.I)
 
 FIGURE = re.compile(

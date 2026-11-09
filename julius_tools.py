@@ -1,5 +1,5 @@
 """Tools Julius can call. Each returns a short string he reads aloud."""
-import json, requests, subprocess
+import json, re, requests, subprocess
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -126,14 +126,22 @@ def find_files(pattern, source=".", recursive=True, **_):
     return jf.render(jf.agent().find(pattern=pattern, source=source, recursive=recursive))
 
 def get_quote(symbol, **_):
-    """Live price for a stock or crypto. Crypto uses BTC-USD style tickers."""
-    s = symbol.strip().upper()
-    if s in {"BTC","ETH","SOL","XRP","DOGE","ADA","AVAX","LINK","MATIC","DOT"}:
-        s = f"{s}-USD"
-    r = requests.get(f"https://query1.finance.yahoo.com/v8/finance/chart/{s}",
-                     params={"range":"2d","interval":"1d"},
-                     headers={"User-Agent":"Mozilla/5.0"}, timeout=10).json()
-    res = (r.get("chart") or {}).get("result")
+    """Live price for a stock or crypto. Accepts a ticker or a company/crypto name (julius_tickers); crypto uses BTC-USD style tickers."""
+    import julius_tickers as tk
+    found = tk.resolve(symbol)
+    if found.ambiguous: return tk.ambiguity_message(symbol.strip(), found.ambiguous)
+    if not found.symbol: return f"No data for {symbol.strip()}."
+    s = found.symbol
+    if s in tk.CRYPTO_CODES: s = f"{s}-USD"
+    def chart(sym):
+        r = requests.get(f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}", params={"range":"2d","interval":"1d"},
+                         headers={"User-Agent":"Mozilla/5.0"}, timeout=10).json()
+        return (r.get("chart") or {}).get("result")
+    res = chart(s)
+    if not res and found.how == "ticker":   # it looked like a ticker but is not one: maybe it was a name in capitals
+        again = tk.resolve(symbol.strip().title())
+        if again.ambiguous: return tk.ambiguity_message(symbol.strip(), again.ambiguous)
+        if again.symbol and again.symbol != s: s = again.symbol; res = chart(s)
     if not res: return f"No data for {s}."
     meta = res[0]["meta"]
     price = meta.get("regularMarketPrice")
@@ -237,11 +245,12 @@ SCHEMAS = [
         "parameters":{"type":"object","properties":{
         "expression":{"type":"string"}},"required":["expression"]}}},
     {"type":"function","function":{"name":"get_quote",
-        "description":"Latest available, possibly delayed price for a stock or cryptocurrency. Use ticker symbols: "
-                    "AAPL, TSLA, SPY for stocks; BTC, ETH, SOL for crypto. "
+        "description":"Latest available, possibly delayed price for a stock or cryptocurrency. Pass the ticker (AAPL, TSLA, SPY, BTC, ETH) "
+                    "or just the company or coin name as the user said it (Apple, Home Depot, Bitcoin): names are resolved for you. "
+                    "If the result starts with AMBIGUOUS, ask the user which company he means. "
                     "ALWAYS use this for prices — never web_search, never guess.",
         "parameters":{"type":"object","properties":{
-        "symbol":{"type":"string","description":"Ticker, e.g. 'AAPL' or 'BTC'"}},
+        "symbol":{"type":"string","description":"Ticker or company/crypto name, e.g. 'AAPL', 'Apple' or 'Bitcoin'"}},
         "required":["symbol"]}}}
 ]
 
@@ -445,6 +454,33 @@ _SCHEMA_GROUPS = (
     (r"\bcod(?:e|ing)\b|\bbugs?\b|\btests?\b|refactor|\bscripts?\b|opus|merge|\bprojects?\b|programming|\bfix (?:the|my|this)\b", ("code_request",)),
     (r"remind|\btimer\b|\balarm\b|\btasks?\b|calendar|\bevents?\b|to-?do|schedule", ("list_planner_items", "set_reminder", "list_reminders", "cancel_reminder")),
 )
+
+
+LIVE_TOOLS = frozenset({"get_weather", "get_forecast", "get_quote", "get_scores", "get_news"})
+_ASKING = re.compile(r"^\W*(?:julius\W+)?(?:what|what's|whats|who|who's|whos|how|when|where|which|is|are|was|were|did|does|do|will|can|could|tell|give|check|look|show|get|any)\b", re.I)
+
+
+def live_tool_required(user_text):
+    """True when this turn asks for something that changes (a score, price, weather, schedule, news) and one of those live tools can answer it: the first model call
+    must then call a tool, even if the same topic came up earlier in the conversation (an earlier answer is stale, and a remembered one is a guess)."""
+    import julius_livedata
+    text = user_text or ""
+    if not julius_livedata.is_live_query(text): return False
+    if not ("?" in text or _ASKING.match(text)): return False   # "thanks for the score" is not a request
+    names = {s["function"]["name"] for s in select_schemas(text)}
+    if names == {s["function"]["name"] for s in SCHEMAS}: return False   # nothing specific matched
+    if names & (LIVE_TOOLS - {"get_quote"}): return True
+    return "get_quote" in names and _about_a_security(text)   # "price of gas" matches the price words but is not a stock or coin
+
+
+_SECURITY_WORDS = re.compile(r"\b(?:stocks?|shares?|crypto\w*|bitcoin|btc|ethereum|eth|ticker|trading|nasdaq|nyse|dow|s&p|quote|market)\b", re.I)
+
+
+def _about_a_security(text):
+    import julius_tickers as tk
+    if _SECURITY_WORDS.search(text): return True
+    words = " " + tk.normalize(text) + " "
+    return any(f" {k} " in words for k in tk.TABLE if len(k) >= 3)
 
 
 def select_schemas(user_text):
