@@ -12,6 +12,7 @@ DEFAULTS = {
     "models": {"haiku": "claude-haiku-5-5", "sonnet": "claude-sonnet-5-5"},
     "spend": {"daily_cap_usd": 5.0, "offline_at_multiple": 2.0},
     "orchestrator": {"max_steps": 8, "subagent_max_steps": 6},
+    "research": {"max_steps": 8, "max_pages": 5, "max_usd": 0.10, "max_bytes": 500000, "max_page_chars": 6000, "save": True, "keep": 50},
     "offline": {"model": "llama3.2:3b", "retry_seconds": 60},
     "voice": {"keep_loaded": True},
     "memory": {"announce_auto": True},

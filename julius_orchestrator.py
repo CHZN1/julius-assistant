@@ -36,6 +36,9 @@ Work like this:
   folder. Use it only when the user clearly asks for code to be written, fixed or tested, with a clear goal and a named project; if the project is
   unclear, ask which one. Never say it started or finished: it only starts after the user says yes, and changes reach the project only after a
   separate merge yes. You cannot run code or edit code yourself.
+- Research: research_task runs a read-only web research sub-agent for questions that need current or sourced facts from the web beyond a
+  quick search (comparisons, "find out about", "look up and summarise"). Give it one precise question. It returns a short answer with its
+  cited findings; speak only what it confirmed, say plainly if it could not confirm, and do not repeat URLs.
 - Never invent results. If a tool failed or found nothing, say that plainly."""
 
 SUBAGENT_FOOTER = ("\n\nYou are a sub-agent. Use only your tools, stop as soon as the task is answered, and reply with the facts "
@@ -68,6 +71,9 @@ CODE_TASK_SCHEMA = {"name": "code_task", "description": "Stage a coding task (wr
         "criteria": {"type": "string", "description": "What done looks like, e.g. which tests must pass"},
         "budget_usd": {"type": "number", "description": "Optional spend limit in dollars; the default is used when omitted and a hard maximum applies"}},
         "required": ["goal", "project"]}}
+
+RESEARCH_TASK_SCHEMA = {"name": "research_task", "description": "Run a read-only web research sub-agent (searches and reads pages, cites sources) and return a short sourced answer. The full structured result is saved for the side panel.",
+    "input_schema": {"type": "object", "properties": {"question": {"type": "string", "description": "One precise research question"}}, "required": ["question"]}}
 
 _STATE = {"file_session": None, "turn": lambda: 0, "user_text": "", "code_session": None}
 
@@ -193,7 +199,7 @@ class Planner:
         self.subagent_runs = []
 
     def tools(self):
-        return utility_tools() + [DELEGATE_SCHEMA, FILES_PROPOSE_SCHEMA, CODE_TASK_SCHEMA]
+        return utility_tools() + [DELEGATE_SCHEMA, FILES_PROPOSE_SCHEMA, CODE_TASK_SCHEMA, RESEARCH_TASK_SCHEMA]
 
     def execute(self, name, args):
         import julius_tools as jt
@@ -203,6 +209,9 @@ class Planner:
             return files_propose(args)
         if name == "code_task":
             return code_task(args)
+        if name == "research_task":
+            import julius_research
+            return julius_research.research_task(args, self.brain)
         return jt.call(name, args)
 
     def delegate(self, args):

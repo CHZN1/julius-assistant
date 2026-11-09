@@ -72,6 +72,8 @@ def main():
     if "file" not in skip: rows.append(suite("file agent", "file_eval.py", [], "file", "ok_pct", "pass", 0.0, False))
     if "planner" not in skip and not a.free:
         rows.append(suite("planner (paid)", "planner_eval.py", [], "planner", "ok_pct", "clean runs", 0.0, True))
+    if "research" not in skip and not a.free:
+        rows.append(suite("research (paid)", "research_eval.py", ["--runs", "1"], "research", "ok_pct", "cases", 0.0, True))
     if "code" not in skip and not a.free:
         rows.append(suite("coding agent (paid)", "code_eval.py", [], "code", "ok_pct", "cases", 0.0, True))
     if "audio" not in skip and not a.free:
