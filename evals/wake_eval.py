@@ -5,7 +5,7 @@
 Miss rate = wake recordings where the engine did not fire; false wakes per hour = fires on ordinary talk, with 1.5 s of silence between
 sentences, scaled to an hour. Targets: miss rate <= 3%, false wakes <= 1 per hour.
 """
-import json, sys, time
+import json, os, sys, time
 from pathlib import Path
 import numpy as np, soundfile as sf
 ROOT = Path(__file__).resolve().parent.parent
@@ -155,7 +155,8 @@ def suite():
     import pickle, julius_config as cfg
     wake_cfg = cfg.load_config()["wake"]; verify = whisper_verify()
     vpath = Path(str(wake_cfg["verifier"])).expanduser(); speaker = pickle.load(open(vpath, "rb")) if vpath.exists() else None
-    st = WakeStream(ROOT / "wake" / "models" / "julius.onnx", float(wake_cfg["threshold_low"]), verify=verify, speaker=speaker, speaker_threshold=float(wake_cfg["speaker_threshold"]))
+    model_file = Path(os.environ.get("WAKE_EVAL_MODEL") or ROOT / "wake" / "models" / "julius.onnx")   # WAKE_EVAL_MODEL: score another model (e.g. julius_public.onnx) with the same cascade
+    st = WakeStream(model_file, float(os.environ.get("WAKE_EVAL_THRESHOLD") or wake_cfg["threshold_low"]), verify=verify, speaker=speaker, speaker_threshold=float(wake_cfg["speaker_threshold"]))
     sessions = [d.name for d in sorted(REAL.glob("wake[3-9]")) if d.is_dir()]
     if not sessions: sys.exit("no fresh wake sets (wake3 ...) in diagnostics/wake_real")
     clips = [(f"{s}/{n}", a) for s in sessions for n, a in load(s)]
@@ -164,7 +165,7 @@ def suite():
     missed = [n for n, ev in w["detail"] if not any(e["accepted"] for e in ev)]; hours = t["audio_s"] / 3600
     miss_pct = round(100 * len(missed) / len(clips), 1); fw = round(t["accepted"] / hours, 1)
     breaches = ([f"miss {miss_pct}% > 3.4%"] if miss_pct > 3.4 else []) + ([f"false wakes {fw}/h > 1"] if fw > 1 else []) + ([f"Julius voice woke {j['accepted']}"] if j["accepted"] else [])
-    summary = {"suite": "wake_cascade", "date": time.strftime("%Y-%m-%d %H:%M"), "verifier": speaker is not None, "wake_sets": sessions, "wake_clips": len(clips), "missed": missed,
+    summary = {"suite": "wake_cascade", "model": model_file.name, "date": time.strftime("%Y-%m-%d %H:%M"), "verifier": speaker is not None, "wake_sets": sessions, "wake_clips": len(clips), "missed": missed,
                "miss_pct": miss_pct, "ok_pct": round(100 - miss_pct, 1), "false_wakes_per_hour": fw, "talk3_min": round(t["audio_s"] / 60, 1), "julius_voice_wakes": j["accepted"],
                "whisper_runs_per_hour": round(t["fires"] / hours, 1), "regressions_vs_previous": {"newly_failing": breaches}, "total_usd": 0.0}
     RES = ROOT / "evals" / "results"; RES.mkdir(exist_ok=True)

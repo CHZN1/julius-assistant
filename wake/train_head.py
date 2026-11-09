@@ -51,14 +51,17 @@ def clip_scores(model, embs):
     return np.array(out)
 
 def main():
-    ap = argparse.ArgumentParser(); ap.add_argument("--epochs", type=int, default=40); ap.add_argument("--real-negatives", type=int, default=4000); a = ap.parse_args()
+    ap = argparse.ArgumentParser(); ap.add_argument("--epochs", type=int, default=40); ap.add_argument("--real-negatives", type=int, default=4000)
+    ap.add_argument("--public", action="store_true", help="release build: no personal recordings (no pos/user_* clips, no diagnostics/wake_real talk sessions); writes julius_public.onnx next to the shipped model")
+    a = ap.parse_args()
+    tag = "_public" if a.public else ""
     from openwakeword.utils import AudioFeatures
     ex = AudioFeatures(inference_framework="onnx")
     manifest = {m["file"]: m for f in sorted(DATA.glob("manifest_*.json")) for m in json.load(open(f))}
     sets = {}
     for cls in ("pos", "neg_hard", "neg_general", "neg_julius"):
-        files = sorted(f for f in manifest if f.startswith(cls + "/"))
-        embs = embed([DATA / f for f in files], DATA / f"emb_{cls}.npy", ex)
+        files = sorted(f for f in manifest if f.startswith(cls + "/") and not (a.public and Path(f).name.startswith("user_")))
+        embs = embed([DATA / f for f in files], DATA / f"emb_{cls}{tag}.npy", ex)
         sets[cls] = [(manifest[f]["voice"], e) for f, e in zip(files, embs)]
     rng = random.Random(3)
     real = sorted((Path.home() / "datasets" / "CREMA_D" / "AudioWAV").glob("*.wav")) + sorted((Path.home() / "datasets" / "RAVDESS").rglob("*.wav"))
@@ -69,7 +72,7 @@ def main():
         n = int(4 * SR); w = noise.standard_normal(n).astype(np.float32)
         if i % 3 == 1: f = np.fft.rfft(w); f /= np.sqrt(np.maximum(np.arange(len(f)), 1)); w = np.fft.irfft(f, n).astype(np.float32)
         return w / np.abs(w).max() * noise.uniform(.02, .5)
-    for sess, voice in (("talk1", "user"), ("talk2", "user"), ("talk4", "user"), ("talk3", "roy_val")):  # your ordinary talk: talk1/2 train, talk3 stays held out for the false-wake eval
+    for sess, voice in (() if a.public else (("talk1", "user"), ("talk2", "user"), ("talk4", "user"), ("talk3", "roy_val"))):  # your ordinary talk: talk1/2 train, talk3 stays held out for the false-wake eval
         tf = sorted((ROOT / "diagnostics" / "wake_real" / sess).glob(f"{sess}_*.wav"))
         sets.setdefault("neg_talk", []).extend((voice, e) for e in embed(tf, DATA / f"emb_{sess}.npy", ex))
     nf = list(range(300)); sets["neg_noise"] = [("noise", e) for e in embed(nf, DATA / "emb_neg_noise.npy", ex, loader=noise_clip)]
@@ -97,10 +100,10 @@ def main():
             print(f"epoch {ep + 1} loss {total / (len(train) / 32):.4f} | held-out voice: " + ", ".join(
                 f"{c} {'recall' if c == 'pos' else 'false-fire'} {(v >= .5).mean() * 100:.1f}%" for c, v in vs.items()), flush=True)
     OUT.mkdir(exist_ok=True)
-    model.eval(); torch.onnx.export(model, torch.zeros(1, WIN, DIM), OUT / "julius.onnx", input_names=["input"], output_names=["output"],
+    model.eval(); torch.onnx.export(model, torch.zeros(1, WIN, DIM), OUT / f"julius{tag}.onnx", input_names=["input"], output_names=["output"],
                                     dynamic_axes={"input": {0: "batch"}, "output": {0: "batch"}}, opset_version=17, dynamo=False)
-    torch.save(model.state_dict(), OUT / "julius_head.pt")
-    print("wrote", OUT / "julius.onnx")
+    torch.save(model.state_dict(), OUT / f"julius_head{tag}.pt")
+    print("wrote", OUT / f"julius{tag}.onnx")
 
 if __name__ == "__main__":
     main()
