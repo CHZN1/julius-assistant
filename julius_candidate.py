@@ -406,6 +406,7 @@ def speak_sentence(p):
         p = clean_for_speech(p)
         if not p: return
         if globals().get('_events_hub') is not None: _events_hub.say('julius', p, TURN["n"])
+        if globals().get('_text_only'): return   # typed in the orb with ui.typed_reply = text: shown, not spoken
         if globals().get('self_echo') is not None: self_echo.note(p)
         # A previous failed reasoning request must not leave its model beside voice.
         if tts.backend in ('qwen-clone','qwen-mlx') and globals().get('close_backend') and not globals().get('keep_brain_loaded', lambda: False)():
@@ -1144,6 +1145,17 @@ def _kbd():
         except (EOFError, KeyboardInterrupt):
             break
 threading.Thread(target=_kbd, daemon=True).start()
+_ui_channel = None
+def _ui_typed(text):
+    """Text typed in the orb: queued exactly like a line typed in the terminal, so it takes the same path as speech (and wakes him for that turn)."""
+    import julius_uichannel
+    typed.append(julius_uichannel.TypedText(text)); return {"queued": True}
+if not _validation_no_devices:
+    try:
+        import julius_uichannel
+        _ui_cfg = _asr_cfg.load_config().get('ui')
+        _ui_channel = julius_uichannel.start_from_config(_ui_cfg, {'typed': _ui_typed})
+    except Exception as _e: _ui_channel = None; print(f"  [ui channel unavailable: {type(_e).__name__}: {_e}]", flush=True)
 
 print("calibrating room noise — stay quiet 2s...")
 with microphone_stream():
@@ -1241,7 +1253,9 @@ with microphone_stream():
                     text, lang, nsp = transcribe_input(resample_poly(audio, SR, rate))
                     if text and nsp<=.6:process(text, lang)
                 else:
-                    process(entry, "typed")
+                    globals()['_text_only'] = bool(getattr(entry, 'from_ui', False)) and (_asr_cfg.load_config().get('ui') or {}).get('typed_reply') == 'text'
+                    try: process(entry, "typed")
+                    finally: globals()['_text_only'] = False
                 q.clear()
                 awake_until = time.time() + SESSION_SEC
                 continue

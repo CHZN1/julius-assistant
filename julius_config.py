@@ -20,6 +20,7 @@ DEFAULTS = {
     "files": {"folders": {"Documents": "write", "Desktop": "write", "Downloads": "write"}},
     "barge_in": {"hotkey": "<ctrl>+<alt>+s", "voice": True},
     "events": {"enabled": True, "port": 8765},   # read-only WebSocket on 127.0.0.1 for a UI (julius_events.py)
+    "ui": {"enabled": True, "port": 8775, "typed_reply": "both"},   # write channel for the orb app (julius_uichannel.py): typed text and dropped files. typed_reply: both = speak and show, text = show only
     "audio": {"duplex": True, "duplex_rate": 48000, "fallback_seconds": 3.0, "raw_backfill": False},
     "wake": {"engine": "whisper", "threshold_low": 0.05, "level_floor": 0.0015, "speaker_threshold": 0.25, "verifier": "~/.julius/wake_verifier.pkl"},
     "asr": {"vocabulary_hint": True,
@@ -90,6 +91,8 @@ def load_config(path=None):
         raise ValueError("spend.daily_cap_usd must be positive")
     if not config["spend"]["offline_at_multiple"] > 1:
         raise ValueError("spend.offline_at_multiple must be greater than 1")
+    if config["ui"]["typed_reply"] not in ("both", "text"):
+        raise ValueError("ui.typed_reply must be 'both' or 'text'")
     code = config["code"]
     if not (0 < code["default_cap_usd"] <= code["max_cap_usd"]):
         raise ValueError("code.default_cap_usd must be positive and not above code.max_cap_usd")
