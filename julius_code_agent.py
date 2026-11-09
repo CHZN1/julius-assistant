@@ -8,7 +8,7 @@ only adds or modifies files that have not changed since the copy, backs up every
 Layers, outermost first (any one of them stops the dangerous cases on its own):
   1. project eligibility: only folders directly under the projects root (~/dev), never music, audio or crypto paths, never Julius's own state
   2. a copy with secrets removed and a fresh git repo with no remote (so `git push` has nowhere to go)
-  3. seatbelt: no writes outside the task folder, no reads of ~/dev, Documents, Desktop, Downloads, Music, keys or Julius state, network only to port 443
+  3. seatbelt: no writes outside the task folder, no reads of ~/dev, Documents, Desktop, Downloads, Music, keys or Julius state, network only to a local allowlist proxy that reaches api.anthropic.com
   4. a scrubbed environment: no keys except the one API key the CLI needs, HOME and TMPDIR inside the task folder
   5. `claude --bare` with an allow-list of tools and a deny-list that includes git push, remotes, curl, ssh, rm and package installs
 """
@@ -157,8 +157,9 @@ def prepare(task):
     return count, skipped
 
 
-def seatbelt_profile(task, home=None):
-    """macOS sandbox profile text: writes only inside the task folder, no reads of personal folders or other projects, network only on 443."""
+def seatbelt_profile(task, home=None, proxy_port=None):
+    """macOS sandbox profile text: writes only inside the task folder, no reads of personal folders or other projects, and the ONLY network
+    allowed is a connection to the local egress proxy port (julius_egress_proxy.py allows api.anthropic.com there). No proxy port = no network at all."""
     home = Path(home or Path.home()).resolve(); lines = ["(version 1)", "(allow default)", "(deny file-write*)"]
     d = task.dir.resolve()
     lines.append(f'(allow file-write* (subpath "{d}") (literal "/dev/null") (literal "/dev/tty") (regex #"^/dev/(fd|tty)"))')
@@ -166,7 +167,8 @@ def seatbelt_profile(task, home=None):
         full = Path(os.path.expanduser(p.replace("~", str(home), 1))) if p.startswith("~") else Path(p)
         lines.append(f'(deny file-read* (subpath "{full}"))')
     lines.append(f'(allow file-read* (subpath "{d}"))')
-    lines += ["(deny network*)", '(allow network-outbound (remote tcp "*:443"))', '(allow network-outbound (remote udp "*:53"))', '(allow network-outbound (remote ip "localhost:*"))', '(allow network-outbound (literal "/private/var/run/mDNSResponder"))']
+    lines.append("(deny network*)")
+    if proxy_port: lines.append(f'(allow network-outbound (remote ip "localhost:{int(proxy_port)}"))')
     return "\n".join(lines) + "\n"
 
 
@@ -176,16 +178,17 @@ def prompt_for(task):
     return text + "\nWork in the current directory only. Run the project's tests if it has any."
 
 
-def build_command(task, api_key, *, claude="claude", config=None, sandbox=True):
+def build_command(task, api_key, *, claude="claude", config=None, sandbox=True, proxy=None):
     """(argv, env, cwd) for the run. The caller starts it; tests inspect it."""
     cfg = {**DEFAULT_CONFIG, **(config or {})}
-    profile = task.dir / "sandbox.sb"; profile.write_text(seatbelt_profile(task))
+    profile = task.dir / "sandbox.sb"; profile.write_text(seatbelt_profile(task, proxy_port=proxy.port if proxy else None))
     argv = [claude, "--bare", "-p", prompt_for(task), "--model", cfg["model"], "--output-format", "stream-json", "--verbose", "--permission-mode", "dontAsk",
             "--max-budget-usd", f"{task.cap_usd:.2f}", "--tools", TOOLS, "--allowedTools", *ALLOWED, "--disallowedTools", *DENIED,
             "--no-session-persistence", "--disable-slash-commands", "--strict-mcp-config", "--append-system-prompt", RULES]
     if sandbox: argv = ["/usr/bin/sandbox-exec", "-f", str(profile)] + argv
     env = {"PATH": "/opt/miniconda3/envs/torch/bin:/usr/bin:/bin:/usr/sbin:/sbin", "HOME": str(task.dir / "home"), "TMPDIR": str(task.dir / "tmp"), "CLAUDE_CODE_TMPDIR": str(task.dir / "tmp"), "LANG": "en_US.UTF-8",
            "ANTHROPIC_API_KEY": api_key, "CLAUDE_CODE_SIMPLE": "1", "DISABLE_AUTOUPDATER": "1", "DISABLE_TELEMETRY": "1", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_TERMINAL_PROMPT": "0"}
+    if proxy: env.update(proxy.env())
     return argv, env, task.work
 
 
@@ -342,10 +345,12 @@ def start(task, *, api_key, tracker=None, config=None, claude=None, sandbox=True
 
 
 def _execute(run, api_key, tracker, cfg, claude, sandbox, on_done):
-    task, result, cost, rc = run.task, {}, 0.0, None
+    task, result, cost, rc, proxy = run.task, {}, 0.0, None, None
     try:
         count, _ = prepare(task) if not task.baseline else (0, [])
-        argv, env, cwd = build_command(task, api_key, claude=claude, config=cfg, sandbox=sandbox)
+        import julius_egress_proxy
+        proxy = julius_egress_proxy.EgressProxy(log_path=task.dir / "egress.log").start()   # Anthropic API only; see julius_egress_proxy.py
+        argv, env, cwd = build_command(task, api_key, claude=claude, config=cfg, sandbox=sandbox, proxy=proxy)
         with open(task.dir / "claude.err", "wb") as err, open(task.dir / "transcript.jsonl", "w") as transcript:
             run.proc = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=err, text=True, start_new_session=True)
             def watchdog():
@@ -365,6 +370,7 @@ def _execute(run, api_key, tracker, cfg, claude, sandbox, on_done):
     except Exception as exc:   # sandbox or launch problems must end the task cleanly, not leave it "running"
         result = {"is_error": True, "result": f"The coding task could not start: {type(exc).__name__}: {exc}"}
     finally:
+        if proxy is not None: proxy.stop()
         _finish(run, result, cost, rc, tracker)
         run.done.set()
         if on_done is not None:
