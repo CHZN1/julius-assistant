@@ -23,14 +23,9 @@ DEFAULTS = {
     "events": {"enabled": True, "port": 8765},   # read-only WebSocket on 127.0.0.1 for a UI (julius_events.py)
     "ui": {"enabled": True, "port": 8775, "typed_reply": "both"},   # write channel for the orb app (julius_uichannel.py): typed text and dropped files. typed_reply: both = speak and show, text = show only
     "audio": {"duplex": True, "duplex_rate": 48000, "fallback_seconds": 3.0, "raw_backfill": False},
-    "wake": {"engine": "whisper", "threshold_low": 0.05, "level_floor": 0.0015, "speaker_threshold": 0.25, "verifier": "~/.julius/wake_verifier.pkl"},
-    "asr": {"vocabulary_hint": True,
-            "vocabulary": ["Julius", "AcmeCorp", "Pat Example", "FER 2013", "Ethereum", "ETH", "Bitcoin", "NHL", "NFL", "MLB", "WNBA", "Springfield", "Shelbyville"],
-            "nhl_teams": ["Ducks", "Coyotes", "Bruins", "Sabres", "Flames", "Hurricanes", "Blackhawks", "Avalanche", "Blue Jackets", "Stars", "Red Wings", "Oilers", "Panthers", "Kings", "Wild",
-                          "Canadiens", "Predators", "Devils", "Islanders", "Rangers", "Senators", "Flyers", "Penguins", "Sharks", "Kraken", "Blues", "Lightning", "Maple Leafs", "Utah Mammoth",
-                          "Canucks", "Golden Knights", "Capitals", "Jets"],
-            "nfl_teams": ["Cardinals", "Falcons", "Ravens", "Bills", "Panthers", "Bears", "Bengals", "Browns", "Cowboys", "Broncos", "Lions", "Packers", "Texans", "Colts", "Jaguars", "Chiefs",
-                          "Raiders", "Chargers", "Rams", "Dolphins", "Vikings", "Patriots", "Saints", "Giants", "Jets", "Eagles", "Steelers", "49ers", "Seahawks", "Buccaneers", "Titans", "Commanders"]},
+    "wake": {"engine": "whisper", "threshold_low": 0.05, "model": "", "learn": True, "learn_after": 20, "starter_threshold": 0.0005, "level_floor": 0.0015, "speaker_threshold": 0.25, "verifier": "~/.julius/wake_verifier.pkl"},
+    "asr": {"vocabulary_hint": True, "vocabulary": ["Julius"], "nhl_teams": [], "nfl_teams": []},   # your own names go in [profile] vocabulary (julius.local.toml)
+    "profile": {"name": "", "home_city": "", "vocabulary": []},   # neutral defaults; put your values in julius.local.toml (gitignored)
 }
 
 
@@ -84,6 +79,11 @@ def load_config(path=None):
         with path.open("rb") as handle:
             for section, values in tomllib.load(handle).items():
                 config.setdefault(section, {}).update(values)
+    local = Path(os.environ.get("JULIUS_LOCAL_CONFIG") or path.parent / "julius.local.toml")   # your own values, gitignored; merged over julius.toml
+    if local.is_file():
+        with local.open("rb") as handle:
+            for section, values in tomllib.load(handle).items():
+                config.setdefault(section, {}).update(values)
     if os.environ.get("JULIUS_BRAIN"):
         config["brain"]["mode"] = os.environ["JULIUS_BRAIN"]
     if config["brain"]["mode"] not in ("cloud", "local"):
@@ -126,7 +126,7 @@ def asr_initial_prompt(config=None, wake=False):
     asr = (config or load_config())["asr"]
     if not asr.get("vocabulary_hint", True):
         return None
-    words = list(asr.get("vocabulary", [])) + list(asr.get("nhl_teams", [])) + list(asr.get("nfl_teams", []))
+    words = list(asr.get("vocabulary", [])) + list((config or load_config()).get("profile", {}).get("vocabulary", [])) + list(asr.get("nhl_teams", [])) + list(asr.get("nfl_teams", []))
     if not wake:
         return ", ".join(dict.fromkeys(words)) + "." if words else None
     words = [w for w in words if w.strip().lower() != "julius"]

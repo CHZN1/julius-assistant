@@ -1,6 +1,8 @@
 import unittest
 from julius_intents import LiveIntentRouter
 class RoutingTests(unittest.TestCase):
+ def setUp(self):
+  import testprofile;testprofile.personal(self)
  def test_locations_and_followups(self):
   r=LiveIntentRouter()
   for text, expected in [('What time is it in Tokyo?',('get_datetime',{'location':'Tokyo'})),('What about Egypt?',('get_datetime',{'location':'Egypt'})),("What's the weather today?",('get_weather',{'location':'Springfield, Illinois'})),('What about tomorrow?',('get_forecast',{'location':'Springfield, Illinois','days':2})),("What's the forecast for this week?",('get_forecast',{'location':'Springfield, Illinois','days':7}))]:

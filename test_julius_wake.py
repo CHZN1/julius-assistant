@@ -70,7 +70,7 @@ class FromConfigTests(unittest.TestCase):
     def test_cascade_builds_without_a_verifier_file(self):
         said = []
         e = jw.from_config(lambda c: (False, "", 0), tempfile.gettempdir(), {"wake": {"engine": "cascade", "verifier": "/nonexistent/v.pkl"}}, say=said.append)
-        self.assertIsNotNone(e); self.assertIsNone(e.stream.speaker); self.assertIn("cascade detector + Whisper check", said[0])
+        self.assertIsNotNone(e); self.assertIsNone(e.stream.speaker); self.assertIn("+ Whisper check", said[0])
     def test_silence_is_not_scored_by_the_detector(self):
         e = jw.from_config(lambda c: (False, "", 0), tempfile.gettempdir(), {"wake": {"engine": "cascade", "verifier": "/nonexistent/v.pkl"}}, say=lambda m: None)
         rng = np.random.default_rng(0)

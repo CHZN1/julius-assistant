@@ -100,7 +100,7 @@ def utility_tools(names=None):
     import julius_tools as jt
     schemas = [s for s in jt.SCHEMAS if names is None or s["function"]["name"] in names]
     tools = jc.convert_tools(schemas)
-    return [{k: v for k, v in t.items() if k != "cache_control"} for t in tools]
+    return jc._personalize_tools([{k: v for k, v in t.items() if k != "cache_control"} for t in tools])
 
 
 def files_propose(args):

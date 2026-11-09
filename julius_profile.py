@@ -21,3 +21,26 @@ def apply_cloud_defaults(environ=None):
     for key, value in CLOUD_DEFAULTS.items():
         environ.setdefault(key, value)
     return environ
+
+
+# ---- who the assistant is talking to ([profile] in julius.toml / julius.local.toml; neutral defaults) ----
+import re as _re
+
+def _profile():
+    import julius_config as cfg
+    return cfg.load_config().get("profile", {})
+
+def user_name():
+    """The configured name, or "the user" when none is set."""
+    return (_profile().get("name") or "").strip() or "the user"
+
+def home_city():
+    """The default city for weather and forecasts, or "" when none is set."""
+    return (_profile().get("home_city") or "").strip()
+
+def apply(text, profile=None):
+    """Swap the author's placeholder name and city in a prompt for this install's profile. Applied to the system prompt and tool descriptions on their way to the model."""
+    p = profile if profile is not None else _profile()
+    name = (p.get("name") or "").strip() or "the user"; city = (p.get("home_city") or "").strip() or "the user's home city"
+    text = _re.sub(r"\bRoy(?:'s)?\b", lambda m: name + ("'s" if m.group(0).endswith("'s") else ""), text)
+    return text.replace("Springfield, Illinois", city)

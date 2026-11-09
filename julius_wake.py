@@ -14,7 +14,8 @@ FRAME = 1280
 REPEAT_WINDOW = 5.0
 
 class WakeEngine:
-    def __init__(self, stream, log_dir, clock=time.time, repeat_window=REPEAT_WINDOW, speaker_margin=0.1):
+    def __init__(self, stream, log_dir, clock=time.time, repeat_window=REPEAT_WINDOW, speaker_margin=0.1, learner=None, reloader=None):
+        self.learner = learner; self.reloader = reloader   # learner: wake/personal.Learner (passive clips); reloader: () -> new WakeStream when a better model appeared, else None
         self.stream = stream; self.clock = clock; self.repeat_window = repeat_window; self.speaker_margin = speaker_margin
         self.log_dir = Path(log_dir); self.buffer = np.zeros(0, np.float32); self.previous = None
 
@@ -29,6 +30,11 @@ class WakeEngine:
         return accepted
 
     def reset(self):
+        if self.reloader is not None:
+            try: fresh = self.reloader()
+            except Exception: fresh = None
+            if fresh is not None: self.stream = fresh
+        if self.learner is not None: self.learner.flush()
         self.buffer = np.zeros(0, np.float32); self.stream.reset()
 
     def note_spoken_wake(self, text):
@@ -40,6 +46,7 @@ class WakeEngine:
         return {"gap_s": None if gap is None else round(gap, 2), "repeat": gap is not None and gap <= self.repeat_window}
 
     def _log(self, event):
+        if self.learner is not None: self.learner.observe(event)
         now = self.clock(); info = self._repeat_info(now); row = {
             "event": "fire", "score": round(event["score"], 3), "speaker": None if event.get("speaker") is None else round(event["speaker"], 3),
             "accepted": event["accepted"], "reason": event.get("reason", ""), "heard": event["heard"], "whisper_s": round(event["verify_s"], 3), **info}
@@ -62,12 +69,25 @@ class WakeEngine:
         self.log_dir.mkdir(parents=True, exist_ok=True)
         with (self.log_dir / "wake_log.jsonl").open("a") as fh: fh.write(json.dumps(row) + "\n")
 
+def choose_model(wake, root=None, personal_dir=None):
+    """(path, threshold, learns). An explicit [wake] model wins (your own private detector: threshold_low, no passive learning). Otherwise your personal model from
+    passive learning if there is one, else the shipped starter model; both use starter_threshold, very low because the Whisper stage keeps false wakes at zero."""
+    root = Path(root or Path(__file__).resolve().parent)
+    if str(wake.get("model") or "").strip():
+        m = Path(str(wake["model"])).expanduser(); m = m if m.is_absolute() else root / m
+        return m, float(wake.get("threshold_low", 0.05)), False
+    import importlib
+    personal = importlib.import_module("wake.personal").Store(personal_dir).model
+    thr = float(wake.get("starter_threshold", 0.0005))
+    return (personal if personal.exists() else root / "wake" / "models" / "julius_starter.onnx"), thr, bool(wake.get("learn", True))
+
+
 def from_config(verify, log_dir, config=None, say=print):
     """The engine described by [wake] in julius.toml, or None for engine = "whisper" or when the detector model is missing (falls back, saying why)."""
     import julius_config as cfg
     wake = (config or cfg.load_config())["wake"]
     if wake.get("engine", "whisper") != "cascade": return None
-    root = Path(__file__).resolve().parent; model = root / "wake" / "models" / "julius.onnx"
+    model, threshold, learns = choose_model(wake)
     if not model.exists(): say(f"  [wake: {model.name} missing, using the Whisper wake]"); return None
     try:
         from wake.stream import WakeStream
@@ -75,8 +95,18 @@ def from_config(verify, log_dir, config=None, say=print):
         if vpath.exists():
             import pickle
             with vpath.open("rb") as fh: speaker = pickle.load(fh)  # your own file, written by wake/verifier.py
-        stream = WakeStream(model, float(wake.get("threshold_low", 0.05)), verify=verify, speaker=speaker, speaker_threshold=float(wake.get("speaker_threshold", 0.25)), level_floor=float(wake.get("level_floor", 0.0015)))
+        def make(path, thr): return WakeStream(path, thr, verify=verify, speaker=speaker, speaker_threshold=float(wake.get("speaker_threshold", 0.25)), level_floor=float(wake.get("level_floor", 0.0015)))
+        stream = make(model, threshold); learner = reloader = None
+        if learns:
+            from wake.personal import Learner, Store
+            learner = Learner(Store(), learn_after=int(wake.get("learn_after", 20)))
+            loaded = [model, model.stat().st_mtime]
+            def reloader():
+                new, thr, _ = choose_model(wake)
+                if new.exists() and (new != loaded[0] or new.stat().st_mtime != loaded[1]):
+                    fresh = make(new, thr); loaded[:] = [new, new.stat().st_mtime]; return fresh
+        which = "your personal model" if model.name == "model.onnx" else model.name
     except Exception as exc:
         say(f"  [wake: cascade unavailable ({type(exc).__name__}: {exc}), using the Whisper wake]"); return None
-    say(f"  [wake: cascade detector{' + speaker verifier' if speaker is not None else ''} + Whisper check]")
-    return WakeEngine(stream, log_dir)
+    say(f"  [wake: cascade detector ({which}){' + speaker verifier' if speaker is not None else ''} + Whisper check{', learning from use' if learner else ''}]")
+    return WakeEngine(stream, log_dir, learner=learner, reloader=reloader)

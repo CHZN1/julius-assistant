@@ -65,7 +65,9 @@ class LiveIntentRouter:
             return 'get_datetime', {'location': location} if location else {}
         if re.search(r'\b(?:weather|forecast)\b', low) and not re.match(r'^(?:explain|why|teach|what is (?:weather|a forecast)|i |we )', low):
             fn = 'get_forecast' if re.search(r'forecast|tomorrow|week', low) else 'get_weather'
-            args = {'location': location or 'Springfield, Illinois'}
+            import julius_profile
+            if not (location or julius_profile.home_city()): self.last = None; return None   # no city and no home city: let the model ask which
+            args = {'location': location or julius_profile.home_city()}
             if fn == 'get_forecast': args['days'] = 2 if 'tomorrow' in low else 7
             return fn, args
         conversion=re.fullmatch(r'(?:convert )?(-?\d+(?:\.\d+)?) ([A-Za-z_°]+) (?:to|in) ([A-Za-z_°]+)',t,re.I)
@@ -91,7 +93,7 @@ class LiveIntentRouter:
             if re.fullmatch(r'(?:what|how) about (.+)', about, re.I):
                 target = re.sub(r'^(?:in|for)\s+', '', re.fullmatch(r'(?:what|how) about (.+)', about, re.I).group(1), flags=re.I)
                 if fn in ('get_weather', 'get_forecast') and re.fullmatch(r'tomorrow(?: in .+)?', target, re.I):
-                    return 'get_forecast', {'location': location or args.get('location', 'Springfield, Illinois'), 'days': 2}
+                    return 'get_forecast', {'location': location or args.get('location') or __import__('julius_profile').home_city(), 'days': 2}
                 if fn in ('get_datetime', 'get_weather', 'get_forecast'):
                     return fn, dict(args, location=target)
             # "and in Shelbyville?" / "and for Tokyo?" repeat the last lookup somewhere else.
@@ -105,7 +107,7 @@ class LiveIntentRouter:
                 return 'get_quote', {'symbol': CRYPTO_NAMES.get(name.lower(), name.upper())}
             # "and tomorrow" / "tomorrow?" after a weather answer
             if fn in ('get_weather', 'get_forecast') and re.fullmatch(r'(?:and |what about |how about )?tomorrow(?: in .+)?', t_and, re.I):
-                return 'get_forecast', {'location': location or args.get('location', 'Springfield, Illinois'), 'days': 2}
+                return 'get_forecast', {'location': location or args.get('location') or __import__('julius_profile').home_city(), 'days': 2}
             if fn in ('get_weather', 'get_forecast') and re.fullmatch(r'is that for .+', t, re.I):
                 return fn, dict(args, location=re.fullmatch(r'is that for (.+)', t, re.I).group(1))
             if fn == 'get_datetime' and re.search(r'how many hours (?:ahead|behind)', low):

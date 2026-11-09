@@ -112,6 +112,16 @@ class MissingKey(Exception):
     pass
 
 
+def _personalize_tools(tools):
+    """Tool definitions with the author's name and city replaced by this install's profile in every description."""
+    import julius_profile
+    def walk(x):
+        if isinstance(x, dict): return {k: (julius_profile.apply(v) if k == "description" and isinstance(v, str) else walk(v)) for k, v in x.items()}
+        if isinstance(x, list): return [walk(v) for v in x]
+        return x
+    return walk(tools)
+
+
 class CloudBrain:
     """Front-end brain: one instance per process. `offline(messages, tools, stream, options)` is the local fallback."""
 
@@ -169,18 +179,21 @@ class CloudBrain:
     # ---------- request building ----------
     def request(self, messages, tools, max_tokens=None, force_tool=False):
         system, api_messages = convert_messages(messages)
+        import julius_profile
+        if system: system = julius_profile.apply(system)   # the author's name and city in the prompts become this install's [profile]
         kwargs = {"model": self.model, "messages": api_messages, "max_tokens": max_tokens or TIERS["haiku"]["max_tokens"],
                   "cache_control": {"type": "ephemeral"}, **{k: v for k, v in TIERS["haiku"].items() if k != "max_tokens"}}
         if system:
             kwargs["system"] = [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
         api_tools = convert_tools(self.tool_schemas(tools)) if tools is not None else None
+        if api_tools: api_tools = _personalize_tools(api_tools)
         if api_tools:
             kwargs["tools"] = api_tools
             if force_tool: kwargs["tool_choice"] = {"type": "any"}   # a live-data question: answer from a tool call made in THIS turn
         elif _has_tool_blocks(api_messages):  # history contains tool calls: tools must be declared, but not callable now
             import julius_tools as jt
             # Reuse this turn's tool list so the cached system+tools prefix from the tool phase is hit again.
-            kwargs["tools"] = convert_tools(self._last_tools or self.tool_schemas(jt.SCHEMAS))
+            kwargs["tools"] = _personalize_tools(convert_tools(self._last_tools or self.tool_schemas(jt.SCHEMAS)))
             kwargs["tool_choice"] = {"type": "none"}
         return kwargs
 

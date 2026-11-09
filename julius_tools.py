@@ -38,7 +38,15 @@ def get_datetime(location=None, offset_days=0, **_):
     return (f"{r['name']}: {there.strftime('%A, %B %-d, %-I:%M %p')} "
             f"({tz}) — {rel}.")
 
-def get_weather(location="Springfield, Illinois", **_):
+NO_HOME = "No city was given and no home city is set. Ask which city, or set home_city under [profile] in julius.local.toml."
+
+def _home_or_ask():
+    import julius_profile
+    return julius_profile.home_city()
+
+def get_weather(location=None, **_):
+    location = location or _home_or_ask()
+    if not location: return NO_HOME
     g = requests.get("https://geocoding-api.open-meteo.com/v1/search",
                      params={"name": location, "count": 1}, timeout=10).json()
     if not g.get("results"): return f"Couldn't find {location}."
@@ -58,7 +66,9 @@ def get_weather(location="Springfield, Illinois", **_):
             f"{round(c['apparent_temperature'])}. High {round(d['temperature_2m_max'][0])}, "
             f"low {round(d['temperature_2m_min'][0])}.")
 
-def get_forecast(location="Springfield, Illinois", days=5, **_):
+def get_forecast(location=None, days=5, **_):
+    location = location or _home_or_ask()
+    if not location: return NO_HOME
     g = requests.get("https://geocoding-api.open-meteo.com/v1/search",
                      params={"name": location, "count": 1}, timeout=10).json()
     if not g.get("results"): return f"Couldn't find {location}."

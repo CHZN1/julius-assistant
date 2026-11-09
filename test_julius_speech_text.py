@@ -38,6 +38,8 @@ class NormalizeTests(unittest.TestCase):
         clean=ns['clean_for_speech']
         self.assertEqual(clean("It's 77°F and clear."),"It's 77 degrees and clear.");self.assertIn('A.I.',clean('The AI said 17% 🎉'));self.assertIn('17 percent',clean('The AI said 17% 🎉'))
 class TranscriptFixTests(unittest.TestCase):
+    def setUp(self):
+        import testprofile; testprofile.personal(self)
     def test_known_names_and_acronyms_are_repaired(self):
         from julius_speech_text import fix_transcript as fix
         self.assertEqual(fix("What's the best prize pick slip for tonight?"),"What's the best AcmeCorp slip for tonight?")

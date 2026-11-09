@@ -5,6 +5,8 @@ from unittest.mock import patch
 import julius_config as cfg
 
 class ConfigTests(unittest.TestCase):
+ def setUp(self):
+  import testprofile;testprofile.personal(self)
  def test_asr_vocabulary_hint_is_built_from_config_and_can_be_disabled(self):
   on=cfg.load_config();on['asr']['vocabulary_hint']=True
   hint=cfg.asr_initial_prompt(on)
