@@ -12,6 +12,7 @@ Updated November 9, 2026. Current priority order; older milestone documents (JUL
 | D Sports analytics | paused until the user's models are ready |
 | E Open-source release | prep: audit, wake-model retrain, README, .env.example, MIT licence (see Phase E); nothing removed or rewritten yet |
 | F Voice polish and reliability | done (F1 to F3 built and live; Silero VAD skipped unless endpointing problems show; F4 soak ran 2026-11-08 to 11-09) |
+| H Senses (vision on demand, presence and gestures, ShazamKit, speaker profiles, whiteboard to text) | planned, nothing built |
 | G UI (orb app) | modes, typing, drops, installed app and login item built and in live testing; side-panel work (charts, images, vision, pixel art) waits for the user's go; image generation deferred (no provider) |
 
 Tests: 849 backend unit tests; free evals (routing, file 46/46, live data 14/14, memory); paid evals (planner, coding, research, live data).
@@ -123,6 +124,16 @@ Built: the animated orb (states asleep/quiet/offline/listening/thinking/speaking
 Next: side-panel media (5a charts and images, 5b vision, 5c pixel art), starting when the user has tried the modes, typing and drops; 5d image generation deferred (no provider yet). The research agent already saves the images and sources the panel will show.
 
 Note on `native/apple/bridge.js`: it is not UI. It is the JavaScript-for-Automation bridge that `julius_apple.py` pipes JSON into (via `osascript`) to read Calendar and Reminders inventories and to create, complete and cancel tokenised events and reminders.
+
+## Phase H: Senses (later; plan only, nothing built)
+
+Julius gets eyes, presence and more ears, always on-device where it can be and always confirmed per use when anything goes to the cloud.
+1. **Vision on demand.** "What am I holding?", "read this", "what's on my screen?": one camera snapshot or screenshot sent to Claude vision, confirmed per use (spoken or on screen), never continuous video to the cloud. Builds on the side-panel image path and the research agent's image results.
+2. **Local, low-power presence and gestures** with Apple's Vision framework (on-device, no frames stored or sent): wake on sit-down, go quiet when you leave, thumbs-up = yes, raised hand = stop. Frame-rate and CPU budget measured like the wake word (idle cost must stay near zero); off by default; a visible indicator whenever the camera is in use.
+3. **Song recognition** with ShazamKit ("what's playing?"), on request only.
+4. **Speaker recognition** for per-person profiles and memory, reusing the speaker-verifier work (`wake/verifier.py`) and the `[profile]` section: who is talking decides name, memory namespace and permissions; unknown voices get the guest profile.
+5. **Whiteboard and handwritten notes to code, tasks or text**: a snapshot (confirmed per use) turned into a checklist, reminders, a code file proposal (staged through the coding agent, never written directly) or plain text.
+Open design points: camera and screen-recording permissions flow, the consent UI in the orb, retention (nothing stored by default), and how per-person memory is kept apart on disk.
 
 ## Later
 
