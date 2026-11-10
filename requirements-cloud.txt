@@ -1,3 +1,12 @@
 anthropic==1.17.0
 openwakeword==0.6.0
 pynput==1.8.1  # global stop hotkey
+# the runtime imports these at start-up (found by a fresh-clone test)
+soundfile==0.14.0
+psutil==7.2.2
+livekit==1.2.1       # WebRTC echo cancellation
+ddgs==9.16.1         # web search
+pypdf==7.0.0         # reading PDFs
+ollama==0.6.3        # offline fallback client (needs the Ollama app only when the API is down)
+mlx-whisper==0.4.3   # speech recognition
+mlx-lm==0.32.2
