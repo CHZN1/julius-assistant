@@ -1,5 +1,5 @@
 # Brain benchmarks (2026-10-23, M4 16 GB)
-Raw: `benchmarks.csv`; scripts `bench_brain.py` (Ollama) and `bench_mlx.py` (native MLX); logs alongside. Julius's real prompt (`conversation_messages`) and real tool schemas; `num_ctx` 4096; streaming. Machine was not idle (btc_bot, Jupyter, iCloud sync), 48% free at start. n=1 per cell, so treat as ±15%. Julius itself was not launched (microphone/voice phases; see STATUS).
+Raw: `benchmarks.csv`; scripts `bench_brain.py` (Ollama) and `bench_mlx.py` (native MLX); logs alongside. Julius's real prompt (`conversation_messages`) and real tool schemas; `num_ctx` 4096; streaming. Machine was not idle (other background jobs, Jupyter, iCloud sync), 48% free at start. n=1 per cell, so treat as ±15%. Julius itself was not launched (microphone/voice phases; see STATUS).
 
 | Model / backend | Cold load | Warm TTFT (chat) | tok/s | Tool-turn first call TTFT | Resident |
 |---|---|---|---|---|---|
