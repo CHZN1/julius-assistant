@@ -17,6 +17,7 @@ from typing import Any
 import julius.agents.code_agent as ca
 from julius.agents.code_agent import Task
 from julius.agents.file_agent import result
+from julius.agents.result import AgentResult
 from julius.brain import confirm
 from julius.costs import CostTracker
 
@@ -190,7 +191,7 @@ class CodeSession:
         return self._out(True, "preview", message, task=task.id, project=name, cap=task.cap_usd)
 
     # ---- the voice commands ----
-    def handle(self, text: str, turn: int = 0) -> Any:
+    def handle(self, text: str, turn: int = 0) -> AgentResult | None:
         """Run a spoken coding-task command, or return None when the words are not one."""
         text = " ".join(text.strip().split())
         lowered = text.rstrip(".!?").strip()

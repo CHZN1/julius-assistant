@@ -258,7 +258,7 @@ class Loop:
         brain: Any,
         tier: Any,
         system: Any,
-        tools: Any,
+        tools: list[dict[str, Any]],
         execute: Any,
         max_steps: Any,
         note: Any,
@@ -284,7 +284,7 @@ class Loop:
             ]
         self.steps = 0
 
-    def _call(self, messages: Any, **extra) -> Any:
+    def _call(self, messages: list[dict[str, Any]], **extra) -> Any:
         if self.tier == "sonnet" and self.brain.tracker.cap_reached():
             raise SpendCap()
         response = self.brain.slow_client().messages.create(

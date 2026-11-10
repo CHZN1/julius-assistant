@@ -23,7 +23,9 @@ _ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 _NOISE = re.compile(r"%\||Download complete|Reconstruction complete|^\s*$")
 
 
-def make_logger(path: Any | None = None, max_bytes: int = 5_000_000, backups: int = 5) -> Any:
+def make_logger(
+    path: str | Path | None = None, max_bytes: int = 5_000_000, backups: int = 5
+) -> Any:
     path = Path(path or LOG_DIR / "julius.jsonl")
     path.parent.mkdir(parents=True, exist_ok=True)
     log = logging.getLogger("julius.json")
@@ -94,7 +96,7 @@ class Tee(io.TextIOBase):
 _logger = None
 
 
-def install(log_transcripts: bool = False, path: Any | None = None) -> Any:
+def install(log_transcripts: bool = False, path: str | Path | None = None) -> Any:
     """Tee stdout/stderr into the JSON log. `log_transcripts` is a bool or a callable asked for every line (so a time-limited diagnostics window ends by itself). Returns the logger."""
     global _logger
     _logger = make_logger(path)

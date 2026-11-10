@@ -47,7 +47,7 @@ class Head(nn.Module):
         return self.net(x)
 
 
-def read16k(path: Any) -> Any:
+def read16k(path: str | Path) -> Any:
     x, sr = sf.read(path, dtype="float32")
     if x.ndim > 1:
         x = x[:, 0]
@@ -99,7 +99,7 @@ CLASS_WEIGHT = {
 }
 
 
-def _synthetic_sets(args: list[str], extractor: Any, tag: Any, rng: Any) -> Any:
+def _synthetic_sets(args: list[str], extractor: Any, tag: Any, rng: np.random.Generator) -> Any:
     """The generated classes (pos, hard/general/julius negatives) plus real speech negatives."""
     manifest = {
         m["file"]: m
@@ -153,7 +153,9 @@ def _talk_and_noise_sets(sets: Any, args: list[str], extractor: Any) -> None:
     ]
 
 
-def _train(model: Any, train: Any, val: Any, sets: Any, epochs: Any, rng: Any) -> None:
+def _train(
+    model: Any, train: Any, val: Any, sets: Any, epochs: int, rng: np.random.Generator
+) -> None:
     """Weighted clip-level BCE training with a held-out report every five epochs."""
     opt = torch.optim.AdamW(model.parameters(), 2e-3, weight_decay=1e-3)
     bce = nn.BCELoss(reduction="none")

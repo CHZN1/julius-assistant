@@ -6,6 +6,7 @@ from typing import Any
 
 from julius.agents.file_agent import FileAgent, FileProblem, result
 from julius.agents.file_router import clean_asr, route
+from julius.agents.result import AgentResult
 
 # Questions about the plan that is waiting for a yes: answered with the plan, which stays pending (an unrelated topic still drops it).
 ABOUT_PENDING = re.compile(
@@ -85,7 +86,7 @@ class FileSession:
             )
         return out
 
-    def handle(self, text: str, turn: int) -> Any:
+    def handle(self, text: str, turn: int) -> AgentResult | None:
         """Turn one human utterance into a file-agent result, or None when it is not a file request."""
         if DOCUMENT_COMMAND.match(text.strip()):
             self.pending = None

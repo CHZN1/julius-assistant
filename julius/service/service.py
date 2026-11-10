@@ -215,18 +215,18 @@ def doctor(
     return verdict, str(binary)
 
 
-def _cmd_on(_argv: Any) -> int:
+def _cmd_on(_argv: list[str]) -> int:
     ok, msg = on()
     print("Julius service on" if ok else f"could not start: {msg}")
     return 0 if ok else 1
 
 
-def _cmd_off(_argv: Any) -> int:
+def _cmd_off(_argv: list[str]) -> int:
     print(off()[1])
     return 0
 
 
-def _cmd_restart(_argv: Any) -> int:
+def _cmd_restart(_argv: list[str]) -> int:
     from julius.service import logscan
 
     logscan.mark_stderr()
@@ -235,7 +235,7 @@ def _cmd_restart(_argv: Any) -> int:
     return 0
 
 
-def _cmd_wake(_argv: Any) -> int:
+def _cmd_wake(_argv: list[str]) -> int:
     print("woke" if wake() else "service not running")
     return 0
 
@@ -300,7 +300,7 @@ def _cmd_smoke(argv: list[str]) -> int:
     return 0 if ok else 1
 
 
-def _cmd_doctor(_argv: Any) -> int:
+def _cmd_doctor(_argv: list[str]) -> int:
     verdict, _binary = doctor()
     print(f"hotkey helper under launchd -> {verdict}")
     if verdict.endswith("ready stop wake") and "failed" not in verdict:

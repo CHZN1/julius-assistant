@@ -320,7 +320,7 @@ def list_files(directory: str = ".", **_) -> Any:
     return jf.render(jf.agent().list(directory))
 
 
-def read_file(path: Any, max_chars: int = 2000, **_) -> Any:
+def read_file(path: str | Path, max_chars: int = 2000, **_) -> Any:
     import julius.agents.files as jf
 
     return jf.render(jf.agent().read(path, max_chars))

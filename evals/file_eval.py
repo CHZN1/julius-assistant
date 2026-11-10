@@ -341,15 +341,11 @@ def s_history_lists_changes(e):
 
 
 def s_trash_notice_over_a_gigabyte(e):
-    import julius.agents.file_agent as fa
+    from unittest.mock import patch
 
-    old = fa.TRASH_NOTICE_BYTES
-    fa.TRASH_NOTICE_BYTES = 10
-    try:
+    with patch("julius.agents.file_trash.TRASH_NOTICE_BYTES", 10):
         e.say("trash notes.txt in Downloads")
         out = e.say("yes")
-    finally:
-        fa.TRASH_NOTICE_BYTES = old
     return "empty the trash" in out["message"], msg(out)[-90:]
 
 

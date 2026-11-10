@@ -17,6 +17,7 @@ from typing import Any
 import julius.config as cfg
 import julius.costs as costs
 from julius import log
+from julius.costs import CostTracker
 
 AUTH_MESSAGE = "My API key expired or is invalid."
 CAP_MESSAGE = (
@@ -100,7 +101,7 @@ def convert_tools(schemas: Any) -> Any:
     return tools
 
 
-def convert_messages(messages: Any) -> Any:
+def convert_messages(messages: list[dict[str, Any]]) -> Any:
     """Julius messages -> (system text, API messages). Tool calls get sequential ids that tool results consume in order."""
     system, out, ids, notes, counter = [], [], [], [], 0
 
@@ -168,7 +169,7 @@ class MissingKey(Exception):
     pass
 
 
-def _personalize_tools(tools: Any) -> Any:
+def _personalize_tools(tools: list[dict[str, Any]]) -> Any:
     """Tool definitions with the author's name and city replaced by this install's profile in every description."""
     from julius import profile
 
@@ -191,7 +192,7 @@ class CloudBrain:
     def __init__(
         self,
         config: dict[str, Any],
-        tracker: Any,
+        tracker: CostTracker,
         client: Any | None = None,
         offline: Any | None = None,
         clock: Callable[[], float] = time.monotonic,
@@ -261,8 +262,8 @@ class CloudBrain:
     # ---------- request building ----------
     def request(
         self,
-        messages: Any,
-        tools: Any,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
         max_tokens: Any | None = None,
         force_tool: bool = False,
         force_planner: bool = False,
@@ -311,10 +312,10 @@ class CloudBrain:
     # ---------- public entry ----------
     def chat(
         self,
-        messages: Any,
-        tools: Any | None = None,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
         stream: bool = False,
-        options: Any | None = None,
+        options: dict[str, Any] | None = None,
     ) -> Any:
         import anthropic
 
@@ -368,7 +369,13 @@ class CloudBrain:
         ]
         return SimpleNamespace(message=SimpleNamespace(content=text, tool_calls=calls or None))
 
-    def _stream(self, kwargs: Any, messages: Any, tools: Any, options: Any) -> Any:
+    def _stream(
+        self,
+        kwargs: Any,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        options: dict[str, Any],
+    ) -> Any:
         import anthropic
 
         brain = self
@@ -431,11 +438,24 @@ class CloudBrain:
             return iter([SimpleNamespace(message=SimpleNamespace(content=AUTH_MESSAGE))])
         return SimpleNamespace(message=SimpleNamespace(content=AUTH_MESSAGE, tool_calls=None))
 
-    def _go_offline(self, messages: Any, tools: Any, stream: Any, options: Any) -> Any:
+    def _go_offline(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        stream: Any,
+        options: dict[str, Any],
+    ) -> Any:
         self.offline_until = self._clock() + self.config["offline"]["retry_seconds"]
         return self._offline(messages, tools, stream, options, announce=True)
 
-    def _offline(self, messages: Any, tools: Any, stream: Any, options: Any, announce: Any) -> Any:
+    def _offline(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        stream: Any,
+        options: dict[str, Any],
+        announce: Any,
+    ) -> Any:
         if self.offline is None:
             raise RuntimeError("Claude API unreachable and no offline model configured")
         if announce:

@@ -223,7 +223,7 @@ def decide(
     return False, "does not beat the current model on your recent clips"
 
 
-def _augment(x: Any, rng: Any) -> Any:
+def _augment(x: Any, rng: np.random.Generator) -> Any:
     """Light, dependency-free variety: gain (quiet and far takes), a small room, noise, and a little speed change."""
     from scipy import signal
 
@@ -268,7 +268,7 @@ def stream_windows(model: Any, name: str, audio: Any, lead: float = 0.5, tail: f
     return np.stack(out) if out else np.zeros((0, 16, 96), np.float32)
 
 
-def _read(path: Any) -> Any:
+def _read(path: str | Path) -> Any:
     import soundfile as sf
 
     x, sr = sf.read(path, dtype="float32")
@@ -283,7 +283,7 @@ def _read(path: Any) -> Any:
     return x
 
 
-def _noise_clips(rng: Any, count: int = 150) -> Any:
+def _noise_clips(rng: np.random.Generator, count: int = 150) -> Any:
     """White and pink-ish noise at random levels: hard negatives for the head."""
     noise = []
     for i in range(count):
@@ -296,7 +296,7 @@ def _noise_clips(rng: Any, count: int = 150) -> Any:
     return noise
 
 
-def _training_data(train_pos: Any, train_neg: Any, rng: Any, emb: Any) -> Any:
+def _training_data(train_pos: Any, train_neg: Any, rng: np.random.Generator, emb: Any) -> Any:
     """(embedding windows, label, weight) rows: augmented positives, rejected clips, noise."""
     tp = [_read(p) for p in train_pos]
     aug = [_augment(x, rng) for x in tp for _ in range(24)] + [x for x in tp]
@@ -311,7 +311,7 @@ def _training_data(train_pos: Any, train_neg: Any, rng: Any, emb: Any) -> Any:
     )
 
 
-def _fit(model: Any, data: Any, epochs: Any, seed: Any) -> None:
+def _fit(model: Any, data: Any, epochs: int, seed: Any) -> None:
     """Fine-tune the head with a clip-level (max over windows) weighted BCE loss."""
     import torch
     import torch.nn as nn
@@ -347,7 +347,7 @@ def _clip_scores(model: Any, wins: Any) -> Any:
         return np.array([float(model(torch.from_numpy(w)).max()) if len(w) else 0.0 for w in wins])
 
 
-def _judge(model: Any, val_pos_windows: Any, val_neg_windows: Any, threshold: Any) -> Any:
+def _judge(model: Any, val_pos_windows: Any, val_neg_windows: Any, threshold: float) -> Any:
     recall = (_clip_scores(model, val_pos_windows) >= threshold).mean()
     false = (_clip_scores(model, val_neg_windows) >= threshold).mean() if val_neg_windows else 0.0
     return {"recall": float(recall), "false_rate": float(false)}
@@ -395,11 +395,11 @@ def _train_and_judge(
     store: Any,
     pos: Any,
     neg: Any,
-    epochs: Any,
+    epochs: int,
     seed: Any,
     starter: Any,
     starter_head: Any,
-    threshold: Any,
+    threshold: float,
     Head: Any,
 ) -> Any:
     """Train a candidate head and compare it with the current one; returns (result, candidate)."""

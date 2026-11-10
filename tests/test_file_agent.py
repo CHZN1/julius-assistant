@@ -222,7 +222,7 @@ class MutationTests(Fixture):
         pid = self.plan()
         other = FileAgent(self.root, self.agent.state_dir)
         self.assertEqual(other.execute(pid, confirmed=True, turn=2)["code"], "stale_session")
-        with patch("julius.agents.file_agent.time.time", return_value=time.time() + 3600):
+        with patch("time.time", return_value=time.time() + 3600):
             self.assertEqual(self.agent.execute(pid, confirmed=True, turn=2)["code"], "expired")
 
     def test_oversize_checked_before_hashing(self):
@@ -586,7 +586,7 @@ class ExtendedWorkflowTests(Fixture):
             original(source, target, **kwargs)
             raise KeyboardInterrupt("simulated restart")
 
-        with patch("julius.agents.file_agent.os.link", side_effect=crash):
+        with patch("os.link", side_effect=crash):
             with self.assertRaises(KeyboardInterrupt):
                 self.agent.execute(pid, confirmed=True, turn=2)
         self.assertTrue((self.out / "note.txt").exists())
@@ -630,7 +630,7 @@ class ExtendedWorkflowTests(Fixture):
             os.replace(replacement, target)
             Path(source).write_text("source edited")
 
-        with patch("julius.agents.file_agent.os.link", side_effect=replace_after_publication):
+        with patch("os.link", side_effect=replace_after_publication):
             self.assertEqual(self.agent.execute(pid, confirmed=True, turn=2)["code"], "partial")
         self.assertEqual((self.out / "note.txt").read_text(), "another app")
         self.assertEqual(p.read_text(), "source edited")

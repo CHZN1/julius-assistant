@@ -163,7 +163,8 @@ def finalize(
     raw.unlink()
 
 
-def from_env(meta: dict[str, None] | None = None) -> None:
+def from_env(meta: dict[str, str | None] | None = None) -> SessionRecorder | None:
+    """A recorder writing to $JULIUS_SESSION_RECORD_DIR, or None when that is not set."""
     folder = os.environ.get("JULIUS_SESSION_RECORD_DIR")
     return SessionRecorder(folder, meta=meta) if folder else None
 

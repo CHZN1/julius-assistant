@@ -42,7 +42,7 @@ def windows(model: Any, name: str, audio: Any, min_score: Any, every: Any | None
     return out
 
 
-def load(path: Any) -> Any:
+def load(path: str | Path) -> Any:
     a, sr = sf.read(path, dtype="float32")
     return a if a.ndim == 1 else a[:, 0]
 
@@ -119,7 +119,7 @@ def train(
     )
 
 
-def load_verifier(path: Any | None = None) -> Any:
+def load_verifier(path: str | Path | None = None) -> Any:
     path = Path(path).expanduser() if path else DEFAULT
     return pickle.load(open(path, "rb")) if path.exists() else None
 

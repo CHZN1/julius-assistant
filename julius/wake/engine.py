@@ -179,7 +179,7 @@ def from_config(
             with vpath.open("rb") as fh:
                 speaker = pickle.load(fh)  # your own file, written by wake/verifier.py
 
-        def make(path: Any, thr: Any) -> Any:
+        def make(path: str | Path, thr: Any) -> Any:
             return WakeStream(
                 path,
                 thr,

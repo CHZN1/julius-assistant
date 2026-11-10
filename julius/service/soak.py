@@ -96,7 +96,7 @@ class Sampler:
         return row
 
 
-def run(interval: int = 60, path: Any = SAMPLES, limit_hours: Any | None = None) -> None:
+def run(interval: int = 60, path: str | Path = SAMPLES, limit_hours: Any | None = None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     s = Sampler()
     started = time.time()
@@ -109,7 +109,7 @@ def run(interval: int = 60, path: Any = SAMPLES, limit_hours: Any | None = None)
         time.sleep(interval)
 
 
-def load(path: Any = SAMPLES, since: Any | None = None) -> Any:
+def load(path: str | Path = SAMPLES, since: Any | None = None) -> Any:
     rows = []
     if Path(path).exists():
         for line in Path(path).read_text().splitlines():

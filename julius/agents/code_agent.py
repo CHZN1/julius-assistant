@@ -679,7 +679,7 @@ def start(
     task: Task,
     *,
     api_key: Any,
-    tracker: Any | None = None,
+    tracker: CostTracker | None = None,
     config: dict[str, Any] | None = None,
     claude: Any | None = None,
     sandbox: bool = True,
@@ -722,7 +722,7 @@ def start(
 def _execute(
     run: Any,
     api_key: Any,
-    tracker: Any,
+    tracker: CostTracker,
     cfg: dict[str, Any],
     claude: Any,
     sandbox: Any,
@@ -796,7 +796,7 @@ def _execute(
                 on_done(task)
 
 
-def _finish(run: Any, result: Any, cost: Any, rc: Any, tracker: Any) -> None:
+def _finish(run: Any, result: Any, cost: Any, rc: Any, tracker: CostTracker) -> None:
     task = run.task
     task.cost_usd = round(max(cost, float(result.get("total_cost_usd") or 0)), 4)
     task.finished = time.time()

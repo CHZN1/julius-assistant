@@ -223,20 +223,12 @@ class TrashTests(Base):
         self.assertFalse(out["ok"])
 
     def test_trash_notice_after_one_gigabyte(self):
-        import julius.agents.file_agent as fa
+        from unittest.mock import patch
 
         self.file("a.txt", "x" * 100)
-        old = fa.TRASH_NOTICE_BYTES
-        fa.TRASH_NOTICE_BYTES = 50
-        try:
+        with patch("julius.agents.file_trash.TRASH_NOTICE_BYTES", 50):
             r = self.apply(self.trash())
-        finally:
-            fa.TRASH_NOTICE_BYTES = old
         self.assertIn("empty the trash", r["message"])
-        self.assertNotIn(
-            "empty the trash",
-            self.apply(self.trash(self.file("c.txt", "y").name, turn=5), None)["message"],
-        ) if False else None
 
     def test_history_for_today_ignores_older_changes_and_says_so(self):
         import json

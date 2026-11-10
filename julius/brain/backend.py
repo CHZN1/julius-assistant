@@ -66,7 +66,7 @@ def _load_mlx_brain() -> Any:
     return _MLX_MODEL, _MLX_TOKENIZER
 
 
-def _normalize_mlx_messages(messages: Any) -> Any:
+def _normalize_mlx_messages(messages: list[dict[str, Any]]) -> Any:
     """Normalize Julius/Ollama-style tool-call history for Qwen's chat template."""
     out = []
     for msg in messages:
@@ -97,7 +97,9 @@ def _normalize_mlx_messages(messages: Any) -> Any:
     return out
 
 
-def _render_mlx_prompt(messages: Any, tools: Any | None = None) -> Any:
+def _render_mlx_prompt(
+    messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None
+) -> Any:
     """Apply Qwen3's native chat template with thinking explicitly disabled."""
     _, tok = _load_mlx_brain()
     msgs = _normalize_mlx_messages(messages)
@@ -140,7 +142,7 @@ def _parse_mlx_tool_calls(text: str) -> Any:
     return calls
 
 
-def _mlx_generation_kwargs(options: Any | None = None) -> Any:
+def _mlx_generation_kwargs(options: dict[str, Any] | None = None) -> Any:
     """Translate the small subset of Ollama options Julius actually uses."""
     options = options or {}
     max_tokens = int(options.get("num_predict", 256))
@@ -203,7 +205,12 @@ def _ollama_chat(**kwargs) -> Any:
     return parts()
 
 
-def _offline_chat(messages: Any, tools: Any, stream: Any, options: Any) -> Any:
+def _offline_chat(
+    messages: list[dict[str, Any]],
+    tools: list[dict[str, Any]],
+    stream: Any,
+    options: dict[str, Any],
+) -> Any:
     """Local fallback for the cloud brain: the offline model is loaded only now and released when the API is back."""
     import ollama
 
@@ -240,12 +247,12 @@ def release_offline() -> None:
 
 def llm_chat(
     *,
-    messages: Any,
-    tools: Any | None = None,
+    messages: list[dict[str, Any]],
+    tools: list[dict[str, Any]] | None = None,
     think: bool = False,
     stream: bool = False,
     keep_alive: Any = KEEP_ALIVE,
-    options: Any | None = None,
+    options: dict[str, Any] | None = None,
 ) -> Any:
     """MLX-backed drop-in adapter for the subset of ollama.chat Julius uses.
 

@@ -47,7 +47,7 @@ def pitch(x: Any, semitones: Any) -> Any:
     return librosa.effects.pitch_shift(x, sr=SR, n_steps=semitones) if abs(semitones) > 0.05 else x
 
 
-def noise_like(kind: str, n: int, rng: Any) -> Any:
+def noise_like(kind: str, n: int, rng: np.random.Generator) -> Any:
     w = rng.standard_normal(n).astype(np.float32)
     if kind == "white":
         return w
@@ -64,7 +64,7 @@ def noise_like(kind: str, n: int, rng: Any) -> Any:
     return signal.lfilter(b, a, w).astype(np.float32)  # "room": low rumble
 
 
-def augment(x: Any, rng: Any) -> Any:
+def augment(x: Any, rng: np.random.Generator) -> Any:
     x = pitch(x, rng.uniform(-2.5, 2.5))
     if rng.random() < 0.5:  # small room: exponentially decaying noise impulse response
         rt = rng.uniform(0.08, 0.45)
@@ -91,7 +91,7 @@ def augment(x: Any, rng: Any) -> Any:
     return np.clip(y, -1, 1)
 
 
-def save(path: Any, y: Any) -> None:
+def save(path: str | Path, y: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     sf.write(path, (np.clip(y, -1, 1) * 32767).astype(np.int16), SR, subtype="PCM_16")
 
@@ -137,7 +137,7 @@ def julius_voice_clips(lines: Any) -> Any:
     return out
 
 
-def user_positives(rng: Any, per_clip: int = 24) -> Any:
+def user_positives(rng: np.random.Generator, per_clip: int = 24) -> Any:
     """Your recorded wake utterances (sessions wake, wake2 and quick) with many augmentations; never the final eval sets wake3, wake4 or talk3."""
     out = []
     files = [

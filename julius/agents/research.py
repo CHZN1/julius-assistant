@@ -150,7 +150,7 @@ def check_url(url: str, resolve: Any = socket.getaddrinfo) -> Any:
 
 
 class _PinnedHTTP(http.client.HTTPConnection):
-    def __init__(self, host: Any, ip: Any, port: int, timeout: Any) -> None:
+    def __init__(self, host: Any, ip: Any, port: int, timeout: float) -> None:
         super().__init__(host, port, timeout=timeout)
         self._ip = ip
 
@@ -159,7 +159,7 @@ class _PinnedHTTP(http.client.HTTPConnection):
 
 
 class _PinnedHTTPS(http.client.HTTPSConnection):
-    def __init__(self, host: Any, ip: Any, port: int, timeout: Any) -> None:
+    def __init__(self, host: Any, ip: Any, port: int, timeout: float) -> None:
         super().__init__(host, port, timeout=timeout, context=ssl.create_default_context())
         self._ip = ip
 
@@ -323,7 +323,7 @@ class _CostLoop:
     def over(self) -> bool:
         return self.spent >= self.max_usd
 
-    def call(self, messages: Any, **extra) -> Any:
+    def call(self, messages: list[dict[str, Any]], **extra) -> Any:
         r = self.brain.slow_client().messages.create(messages=messages, **self.kwargs, **extra)
         self.brain.tracker.record("haiku", r.usage, note="research")
         self.spent += costs.cost_of("haiku", r.usage)
@@ -468,7 +468,7 @@ class ResearchAgent:
         return results, final
 
     @staticmethod
-    def _forced_wrap_up(loop: Any, messages: Any) -> Any:
+    def _forced_wrap_up(loop: Any, messages: list[dict[str, Any]]) -> Any:
         """One last call asking for research_finish while budget remains."""
         messages[-1]["content"].append(
             {
