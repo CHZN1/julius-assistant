@@ -149,29 +149,35 @@ def classify(turn):
     return {"path": "direct" if brain else "shortcut", "tool": "", "ok": not turn.get("error")}
 
 
-def repeat_stats(runs, items, rows):
-    """Median first audio and mean cost per turn by the path actually taken, plus Haiku cache use, over every pipeline run."""
-    if not runs:
-        return {}
-    med = lambda xs: sorted(xs)[len(xs) // 2] if xs else None
+def _median(xs):
+    return sorted(xs)[len(xs) // 2] if xs else None
+
+
+def _turn_cost(turn):
+    return sum((turn.get("cost_by_tier_usd") or {}).values())
+
+
+def _by_actual_path(runs):
+    """Median first audio and mean cost per turn, grouped by the path the turn actually took."""
     per = {}
     for turns, *_ in runs:
         for turn in turns:
-            c = classify(turn)
-            first = turn.get("processing_to_first_audio_seconds")
-            per.setdefault(c["path"], []).append(
-                (first, sum((turn.get("cost_by_tier_usd") or {}).values()))
+            per.setdefault(classify(turn)["path"], []).append(
+                (turn.get("processing_to_first_audio_seconds"), _turn_cost(turn))
             )
-    by_actual = {
-        p: {
+    out = {}
+    for path, v in per.items():
+        firsts = [f for f, _ in v if f is not None]
+        out[path] = {
             "n": len(v),
-            "first_audio_median_s": None
-            if not [f for f, _ in v if f is not None]
-            else round(med([f for f, _ in v if f is not None]), 2),
+            "first_audio_median_s": round(_median(firsts), 2) if firsts else None,
             "cost_mean_usd": round(sum(c for _, c in v) / len(v), 5),
         }
-        for p, v in per.items()
-    }
+    return out
+
+
+def _haiku_cache(runs):
+    """Haiku call count and prompt-cache token totals read from each run's cost log."""
     read = write = fresh = calls = 0
     for _, _, _, work in runs:
         f = work / "costs.jsonl"
@@ -182,15 +188,7 @@ def repeat_stats(runs, items, rows):
                 write += r["cache_write"]
                 fresh += r["input"]
                 calls += 1
-    total_turns = sum(len(t) for t, *_ in runs)
-    per_run_cost = [
-        sum(sum((t.get("cost_by_tier_usd") or {}).values()) for t in turns) / max(1, len(turns))
-        for turns, *_ in runs
-    ]
     return {
-        "repeats": len(runs),
-        "by_actual_path": by_actual,
-        "cost_per_turn_median_usd": round(med(per_run_cost), 5),
         "haiku_calls": calls,
         "haiku_cache_hit_pct": round(100 * read / max(1, read + write + fresh), 1),
         "haiku_cache_write_tokens_per_call": round(write / max(1, calls)),
@@ -199,18 +197,21 @@ def repeat_stats(runs, items, rows):
     }
 
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--dir", default=str(ROOT / "diagnostics" / "asr_real"))
-    ap.add_argument("--no-pipeline", action="store_true", help="ASR scoring only (free)")
-    ap.add_argument(
-        "--repeats",
-        type=int,
-        default=1,
-        help="run the headless pipeline this many times; latency and cost are medians over the runs",
-    )
-    a = ap.parse_args()
-    asr = run_asr(Path(a.dir))
+def repeat_stats(runs, items, rows):
+    """Median first audio and mean cost per turn by the path actually taken, plus Haiku cache use, over every pipeline run."""
+    if not runs:
+        return {}
+    per_run_cost = [sum(_turn_cost(t) for t in turns) / max(1, len(turns)) for turns, *_ in runs]
+    return {
+        "repeats": len(runs),
+        "by_actual_path": _by_actual_path(runs),
+        "cost_per_turn_median_usd": round(_median(per_run_cost), 5),
+        **_haiku_cache(runs),
+    }
+
+
+def build_items(asr):
+    """Typed prompts plus the recorded phrases as transcribed, each with what is expected of it."""
     items = [
         {
             "id": c["id"],
@@ -235,104 +236,143 @@ def main():
         }
         for x in asr
     ]
+    return items
+
+
+def _timing_fields(item, turn):
+    """Latency and cost columns of a result row."""
+    first = turn.get("processing_to_first_audio_seconds") if turn else None
+    ttft = turn.get("brain_first_token_seconds") if turn else None
+    estimated = first is not None and item["kind"] == "recorded"
+    return {
+        "first_audio_s": None if first is None else round(first, 2),
+        "est_end_of_speech_to_first_audio_s": round(SILENCE_WAIT + item["asr_s"] + first, 2)
+        if estimated
+        else None,
+        "brain_ttft_s": round(ttft, 2) if ttft else None,
+        "turn_s": None if not turn else round(turn["seconds"], 2),
+        "usd": round(_turn_cost(turn) if turn else 0.0, 5),
+    }
+
+
+def grade_item(item, turn):
+    """One result row: ASR quality (recorded phrases) and whether the turn took the expected path."""
+    recorded = item["kind"] == "recorded"
+    got = classify(turn) if turn else {"path": "missing", "tool": "", "ok": False}
+    w = wer(item["reference"], item["transcript"]) if recorded else None
+    miss = missed(item["n"], item["transcript"]) if recorded else []
+    # dispatcher records carry no arguments
+    case = {"expect": {k: v for k, v in item["expect"].items() if k != "args_contain"}}
+    p, t, _, s = judge(case, got) if turn else (False, False, True, False)
+    return {
+        "id": item["id"],
+        "kind": item["kind"],
+        "reference": item["reference"],
+        "transcript": item["transcript"],
+        "wer": None if w is None else round(w, 3),
+        "missed_terms": "|".join(miss),
+        "asr_s": round(item["asr_s"], 3),
+        "expected_path": item["expect"]["path"],
+        "expected_tool": item["expect"].get("tool") or "|".join(item["expect"].get("tool_in", [])),
+        "actual_path": got["path"],
+        "actual_tool": got["tool"],
+        "path_ok": p,
+        "tool_ok": t,
+        "asr_ok": (w is not None and not miss) if recorded else True,
+        "ok": bool(p and t and s and (not miss) and not (turn or {}).get("error")),
+        **_timing_fields(item, turn),
+        "error": (turn or {}).get("error") or "",
+        "answer": ((turn or {}).get("answer") or "")[:140].replace("\n", " "),
+    }
+
+
+def _mean(xs):
+    return round(sum(xs) / len(xs), 3) if xs else None
+
+
+def _pct(xs):
+    return round(100 * sum(xs) / len(xs), 1) if xs else None
+
+
+def _path_stats(pipe):
+    """Per expected path: how many turns, median first audio, mean cost."""
+    out = {}
+    for p in ("shortcut", "direct", "tool", "escalate"):
+        mine = [r for r in pipe if r["expected_path"] == p]
+        firsts = sorted(r["first_audio_s"] for r in mine if r["first_audio_s"] is not None)
+        out[p] = {
+            "n": len(mine),
+            "first_audio_median_s": firsts[len(firsts) // 2] if firsts else None,
+            "cost_mean_usd": round(sum(r["usd"] for r in mine) / max(1, len(mine)), 5),
+        }
+    return out
+
+
+def summarize_rows(rows, turns, code, seconds):
+    """The run summary: ASR accuracy, routing accuracy, latency and cost."""
+    rec = [r for r in rows if r["kind"] == "recorded"]
+    pipe = [r for r in rows if r["turn_s"] is not None]
+    firsts = sorted(r["first_audio_s"] for r in pipe if r["first_audio_s"] is not None)
+    estimates = [
+        r["est_end_of_speech_to_first_audio_s"]
+        for r in rec
+        if r["est_end_of_speech_to_first_audio_s"]
+    ]
+    return {
+        "suite": "audio_regression",
+        "date": time.strftime("%Y-%m-%d %H:%M"),
+        "recorded_phrases": len(rec),
+        "typed_prompts": len(rows) - len(rec),
+        "mean_wer": _mean([r["wer"] for r in rec]),
+        "phrases_with_missed_terms": sum(1 for r in rec if r["missed_terms"]),
+        "mean_asr_s": _mean([r["asr_s"] for r in rec]),
+        "pipeline_ran": bool(turns),
+        "pipeline_exit_code": code,
+        "pipeline_seconds": round(seconds, 1),
+        "routing_path_ok_pct": _pct([r["path_ok"] for r in pipe]),
+        "routing_tool_ok_pct": _pct([r["tool_ok"] for r in pipe]),
+        "turn_ok_pct": _pct([r["ok"] for r in rows]),
+        "first_audio_median_s": firsts[len(firsts) // 2] if firsts else None,
+        "first_audio_max_s": firsts[-1] if firsts else None,
+        "est_end_of_speech_to_first_audio_mean_s": _mean(estimates),
+        "cost_per_turn_mean_usd": round(sum(r["usd"] for r in pipe) / max(1, len(pipe)), 5),
+        "total_usd": round(sum(r["usd"] for r in pipe), 4),
+        "by_path": _path_stats(pipe),
+    }
+
+
+def print_misses(rows):
+    for r in rows:
+        if not r["ok"]:
+            print(
+                f"  MISS {r['id']} [{r['kind']}] {r['transcript'][:60]!r}: expected {r['expected_path']}/{r['expected_tool']} got {r['actual_path']}/{r['actual_tool']}"
+                + (f" missed={r['missed_terms']}" if r["missed_terms"] else "")
+                + (f" error={r['error']}" if r["error"] else "")
+            )
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("--dir", default=str(ROOT / "diagnostics" / "asr_real"))
+    ap.add_argument("--no-pipeline", action="store_true", help="ASR scoring only (free)")
+    ap.add_argument(
+        "--repeats",
+        type=int,
+        default=1,
+        help="run the headless pipeline this many times; latency and cost are medians over the runs",
+    )
+    a = ap.parse_args()
+    items = build_items(run_asr(Path(a.dir)))
     runs = (
         []
         if a.no_pipeline
         else [run_pipeline([i["transcript"] for i in items]) for _ in range(max(1, a.repeats))]
     )
     turns, code, seconds, work = runs[-1] if runs else ([], None, 0, None)
-    rows = []
-    for k, item in enumerate(items):
-        turn = turns[k] if k < len(turns) else None
-        got = classify(turn) if turn else {"path": "missing", "tool": "", "ok": False}
-        w = wer(item["reference"], item["transcript"]) if item["kind"] == "recorded" else None
-        miss = missed(item["n"], item["transcript"]) if item["kind"] == "recorded" else []
-        case = {
-            "expect": {k: v for k, v in item["expect"].items() if k != "args_contain"}
-        }  # dispatcher records carry no arguments
-        p, t, _, s = judge(case, got) if turn else (False, False, True, False)
-        cost = sum((turn.get("cost_by_tier_usd") or {}).values()) if turn else 0.0
-        first = turn.get("processing_to_first_audio_seconds") if turn else None
-        rows.append(
-            {
-                "id": item["id"],
-                "kind": item["kind"],
-                "reference": item["reference"],
-                "transcript": item["transcript"],
-                "wer": None if w is None else round(w, 3),
-                "missed_terms": "|".join(miss),
-                "asr_s": round(item["asr_s"], 3),
-                "expected_path": item["expect"]["path"],
-                "expected_tool": item["expect"].get("tool")
-                or "|".join(item["expect"].get("tool_in", [])),
-                "actual_path": got["path"],
-                "actual_tool": got["tool"],
-                "path_ok": p,
-                "tool_ok": t,
-                "asr_ok": (w is not None and not miss) if item["kind"] == "recorded" else True,
-                "ok": bool(p and t and s and (not miss) and not (turn or {}).get("error")),
-                "first_audio_s": None if first is None else round(first, 2),
-                "est_end_of_speech_to_first_audio_s": None
-                if first is None or item["kind"] != "recorded"
-                else round(SILENCE_WAIT + item["asr_s"] + first, 2),
-                "brain_ttft_s": None
-                if not turn or not turn.get("brain_first_token_seconds")
-                else round(turn["brain_first_token_seconds"], 2),
-                "turn_s": None if not turn else round(turn["seconds"], 2),
-                "usd": round(cost, 5),
-                "error": (turn or {}).get("error") or "",
-                "answer": ((turn or {}).get("answer") or "")[:140].replace("\n", " "),
-            }
-        )
-    rec = [r for r in rows if r["kind"] == "recorded"]
-    pipe = [r for r in rows if r["turn_s"] is not None]
-    mean = lambda xs: round(sum(xs) / len(xs), 3) if xs else None
-    pct = lambda xs: round(100 * sum(xs) / len(xs), 1) if xs else None
-    firsts = sorted(r["first_audio_s"] for r in pipe if r["first_audio_s"] is not None)
-    summary = {
-        "suite": "audio_regression",
-        "date": time.strftime("%Y-%m-%d %H:%M"),
-        "recorded_phrases": len(rec),
-        "typed_prompts": len(rows) - len(rec),
-        "mean_wer": mean([r["wer"] for r in rec]),
-        "phrases_with_missed_terms": sum(1 for r in rec if r["missed_terms"]),
-        "mean_asr_s": mean([r["asr_s"] for r in rec]),
-        "pipeline_ran": bool(turns),
-        "pipeline_exit_code": code,
-        "pipeline_seconds": round(seconds, 1),
-        "routing_path_ok_pct": pct([r["path_ok"] for r in pipe]),
-        "routing_tool_ok_pct": pct([r["tool_ok"] for r in pipe]),
-        "turn_ok_pct": pct([r["ok"] for r in rows]),
-        "first_audio_median_s": firsts[len(firsts) // 2] if firsts else None,
-        "first_audio_max_s": firsts[-1] if firsts else None,
-        "est_end_of_speech_to_first_audio_mean_s": mean(
-            [
-                r["est_end_of_speech_to_first_audio_s"]
-                for r in rec
-                if r["est_end_of_speech_to_first_audio_s"]
-            ]
-        ),
-        "cost_per_turn_mean_usd": round(sum(r["usd"] for r in pipe) / max(1, len(pipe)), 5),
-        "total_usd": round(sum(r["usd"] for r in pipe), 4),
-        "by_path": {
-            p: {
-                "n": sum(1 for r in pipe if r["expected_path"] == p),
-                "first_audio_median_s": (lambda xs: xs[len(xs) // 2] if xs else None)(
-                    sorted(
-                        r["first_audio_s"]
-                        for r in pipe
-                        if r["expected_path"] == p and r["first_audio_s"] is not None
-                    )
-                ),
-                "cost_mean_usd": round(
-                    sum(r["usd"] for r in pipe if r["expected_path"] == p)
-                    / max(1, sum(1 for r in pipe if r["expected_path"] == p)),
-                    5,
-                ),
-            }
-            for p in ("shortcut", "direct", "tool", "escalate")
-        },
-    }
+    rows = [
+        grade_item(item, turns[k] if k < len(turns) else None) for k, item in enumerate(items)
+    ]
+    summary = summarize_rows(rows, turns, code, seconds)
     summary.update(repeat_stats(runs, items, rows))
     path, previous = common.write_results("audio", rows, summary)
     broke, fixed, vs = common.regressions(rows, previous)
@@ -344,13 +384,7 @@ def main():
     path.with_suffix(".summary.json").write_text(json.dumps(summary, indent=1))
     print(json.dumps({k: v for k, v in summary.items() if k != "by_path"}, indent=1))
     print("by_path:", json.dumps(summary["by_path"]))
-    for r in rows:
-        if not r["ok"]:
-            print(
-                f"  MISS {r['id']} [{r['kind']}] {r['transcript'][:60]!r}: expected {r['expected_path']}/{r['expected_tool']} got {r['actual_path']}/{r['actual_tool']}"
-                + (f" missed={r['missed_terms']}" if r["missed_terms"] else "")
-                + (f" error={r['error']}" if r["error"] else "")
-            )
+    print_misses(rows)
     print(f"results: {path.name}" + (f"; work dir {work}" if work else ""))
     return 1 if broke else 0
 
