@@ -27,15 +27,16 @@ RESULTS = ROOT / "evals" / "results"
 NAMES = re.compile(r"julia|julian|jealous|julie|jules", re.I)
 
 
-def main():
+def make_transcriber():
+    """A seeded Whisper transcriber with the wake vocabulary hint."""
     hint = cfg.asr_initial_prompt(wake=True)
     repo = "mlx-community/whisper-small.en-mlx"
 
-    def tr(a):
+    def transcribe(audio):
         mx.random.seed(1301)
         return fix_transcript(
             mlx_whisper.transcribe(
-                a,
+                audio,
                 path_or_hf_repo=repo,
                 condition_on_previous_text=False,
                 language="en",
@@ -44,6 +45,11 @@ def main():
             )["text"].strip()
         )
 
+    return transcribe
+
+
+def collect_cases():
+    """(id, wav path, must wake, sentence): name sentences that must not wake, wake recordings that must."""
     cases = []
     for d in sorted(REAL.glob("talk*")):
         prompts = json.loads((d / "prompts.json").read_text())
@@ -53,13 +59,14 @@ def main():
     for d in sorted(REAL.glob("wake*")):
         if d.is_dir():
             cases += [(f"{d.name}/{p.stem}", p, True, "") for p in sorted(d.glob("wake*_*.wav"))]
-    if not cases:
-        sys.exit("no recordings in diagnostics/wake_real")
-    tr(np.zeros(16000, np.float32))
+    return cases
+
+
+def run_cases(cases, transcribe):
+    transcribe(np.zeros(16000, np.float32))
     rows = []
-    for cid, p, want, text in cases:
-        x = sf.read(p, dtype="float32")[0]
-        heard = tr(x)
+    for cid, p, want, _text in cases:
+        heard = transcribe(sf.read(p, dtype="float32")[0])
         rows.append(
             {
                 "id": cid,
@@ -69,18 +76,24 @@ def main():
                 "ok": has_wake(heard) == want,
             }
         )
-    stamp = time.strftime("%Y%m%d_%H%M%S")
+    return rows
+
+
+def write_csv(rows, stamp):
     RESULTS.mkdir(exist_ok=True)
     with open(RESULTS / f"wake_{stamp}.csv", "w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=list(rows[0]))
         w.writeheader()
         w.writerows(rows)
-    prev = sorted(RESULTS.glob("wake_*.csv"))[:-1]
-    was = {r["id"]: r["ok"] == "True" for r in csv.DictReader(open(prev[-1]))} if prev else {}
+
+
+def summarize(rows, previous):
+    """The summary dict; previous is the earlier run's csv path or None."""
+    was = {r["id"]: r["ok"] == "True" for r in csv.DictReader(open(previous))} if previous else {}
     fail = [r["id"] for r in rows if not r["ok"]]
     nm = [r for r in rows if not r["must_wake"]]
     wk = [r for r in rows if r["must_wake"]]
-    summary = {
+    return {
         "suite": "wake_regression",
         "date": time.strftime("%Y-%m-%d %H:%M"),
         "cases": len(rows),
@@ -91,11 +104,25 @@ def main():
         "wake_recordings": len(wk),
         "failing": fail,
         "regressions_vs_previous": {"newly_failing": [i for i in fail if was.get(i, True)]}
-        if prev
+        if previous
         else {},
         "total_usd": 0.0,
     }
+
+
+def main():
+    """Replay the real wake recordings through Whisper and report false wakes and misses."""
+    cases = collect_cases()
+    if not cases:
+        sys.exit("no recordings in diagnostics/wake_real")
+    rows = run_cases(cases, make_transcriber())
+    stamp = time.strftime("%Y%m%d_%H%M%S")
+    write_csv(rows, stamp)
+    earlier = sorted(RESULTS.glob("wake_*.csv"))[:-1]
+    summary = summarize(rows, earlier[-1] if earlier else None)
     (RESULTS / f"wake_{stamp}.summary.json").write_text(json.dumps(summary, indent=1))
+    nm = [r for r in rows if not r["must_wake"]]
+    wk = [r for r in rows if r["must_wake"]]
     print(
         f"wake regression: {summary['ok_pct']}% ({summary['false_wakes']} false wakes of {len(nm)} name sentences, {summary['wake_misses']} misses of {len(wk)} wake recordings)"
     )

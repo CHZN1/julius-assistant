@@ -131,7 +131,72 @@ def transcribe(audio):
     return r["text"].strip(), nsp
 
 
+def align_streams(events, t0, mic, out, duplex):
+    """-> (offset of the mic clock to the event clock, out.wav moved to when chunks were written)."""
+    n = len(mic)
+    start_ev = next((e for e in events if e["kind"] == "mic_start"), None)
+    if duplex and start_ev is not None:
+        # duplex recording: mic.wav and out.wav share the callback clock and mic_start gives the offset to the event clock exactly; nothing to estimate
+        return start_ev["t"] - t0, out
+    end_ev = next((e for e in events if e["kind"] == "session_end"), events[-1])
+    # mic.wav is padded to the length of out.wav; the true microphone duration is in the session_end event
+    mic_s = end_ev.get("mic_seconds") or n / SR
+    # first guess: when the microphone opened relative to session_start (the session closes a little after the last sample, so this is too large)
+    off = (end_ev["t"] - t0) - mic_s
+    shift = int(round(off * SR))
+    if shift > 0:
+        out = np.concatenate([out[shift:], np.zeros(shift, dtype=np.float32)])[:n]
+    from julius.audio import aec
+
+    lag = aec.estimate_lag(mic, out)  # the acoustic delay (PHYS) plus the error of that guess
+    off += lag - PHYS if lag > 0.1 else 0.0
+    shift2 = int(round((lag - PHYS) * SR))
+    if lag > 0.1 and shift2 != 0:
+        # move out.wav so it sits at the moment each chunk was WRITTEN to the device (the live gate's clock); the echo then trails it by PHYS
+        if shift2 > 0:
+            out = np.concatenate([out[shift2:], np.zeros(shift2, dtype=np.float32)])[:n]
+        else:
+            out = np.concatenate([np.zeros(-shift2, dtype=np.float32), out])[:n]
+    return off, out
+
+
+def transcribe_segments(sig, threshold):
+    """Speech segments of the cleaned signal that Whisper hears as words."""
+    segs = []
+    for a, b in segment(sig, threshold):
+        text, nsp = transcribe(sig[a:b])
+        if text and re.search(r"\w", text) and nsp <= 0.6:
+            segs.append({"t": a / SR, "end": b / SR, "text": text})
+    return segs
+
+
+def grade_turn(scenario, lab, segs, window, said):
+    """One result row: what the user said, what the cleaned front end heard, and the WER."""
+    a, b = window
+    group = scenario["turns"][lab["turn"] : lab["turn"] + lab.get("group", 1)]
+    ignored = (group[0].get("expect") or {}).get("ignored")
+    ref = " ".join(re.sub(r"\s*\[[^\]]*\]\s*", " ", t.get("ref") or t["say"]) for t in group)
+    mine = [s for s in segs if a <= s["t"] < b]
+    selfheard = [
+        s for s in mine if ve_overlap(s["text"], said) >= 0.6 and ve.wer(ref, s["text"]) > 0.5
+    ]
+    roys = [s for s in mine if s not in selfheard]
+    hyp = " ".join(s["text"] for s in roys)
+    return {
+        "scenario": scenario["id"],
+        "turn": lab["turn"],
+        "say": ref,
+        "heard": hyp,
+        "wer": None if ignored else round(ve.wer(ref, hyp), 3),
+        "utterances": len(roys),
+        "expected_utterances": 0 if ignored else len(group),
+        "self_heard": len(selfheard),
+        "ignored": bool(ignored),
+    }
+
+
 def replay_take(take, mode):
+    """Replay one recorded take through the front end: (result rows, heard segments)."""
     scenario = json.loads((take / "scenario.json").read_text())
     events = ve.read_jsonl(take / "rec" / "events.jsonl")
     labels = ve.read_jsonl(take / "labels.jsonl")
@@ -141,81 +206,17 @@ def replay_take(take, mode):
     n = min(len(mic), len(out))
     mic, out = mic[:n], out[:n]
     duplex = any(e["kind"] == "duplex" for e in events)
-    start_ev = next((e for e in events if e["kind"] == "mic_start"), None)
-    if duplex and start_ev is not None:
-        off = (
-            start_ev["t"] - t0
-        )  # duplex recording: mic.wav and out.wav share the callback clock and mic_start gives the offset to the event clock exactly; nothing to estimate
-    else:
-        end_ev = next((e for e in events if e["kind"] == "session_end"), events[-1])
-        mic_s = (
-            end_ev.get("mic_seconds") or n / SR
-        )  # mic.wav is padded to the length of out.wav; the true microphone duration is in the session_end event
-        off = (
-            (end_ev["t"] - t0) - mic_s
-        )  # first guess: when the microphone opened relative to session_start (the session closes a little after the last sample, so this is too large)
-        shift = int(round(off * SR))
-        out = (
-            np.concatenate([out[shift:], np.zeros(shift, dtype=np.float32)])[:n]
-            if shift > 0
-            else out
-        )
-        from julius.audio import aec
-
-        lag = aec.estimate_lag(
-            mic, out
-        )  # whatever is left is the acoustic delay (PHYS) plus the error of that guess
-        off += lag - PHYS if lag > 0.1 else 0.0
-        shift2 = int(round((lag - PHYS) * SR))
-        if (
-            lag > 0.1 and shift2 != 0
-        ):  # move out.wav so it sits at the moment each chunk was WRITTEN to the device (the live gate's clock); the echo then trails it by PHYS
-            out = (
-                np.concatenate([out[shift2:], np.zeros(shift2, dtype=np.float32)])[:n]
-                if shift2 > 0
-                else np.concatenate([np.zeros(-shift2, dtype=np.float32), out])[:n]
-            )
+    off, out = align_streams(events, t0, mic, out, duplex)
     t0 += off
     sig = front_end(mic, out, mode, duplex=duplex)
-    th = noise_threshold(mic)
-    replies = [
-        (e["t"] - t0, e.get("text", "")) for e in events if e["kind"] == "reply" and e.get("text")
+    segs = transcribe_segments(sig, noise_threshold(mic))
+    said = " ".join(
+        e["text"] for e in events if e["kind"] == "reply" and e.get("text")
+    )
+    rows = [
+        grade_turn(scenario, lab, segs, (a - t0, b - t0), said)
+        for lab, a, b in ve.turn_windows(labels, events[-1]["t"] + 1)
     ]
-    spoken = [e.get("text", "") for e in events if e["kind"] == "reply"]
-    segs = []
-    for a, b in segment(sig, th):
-        text, nsp = transcribe(sig[a:b])
-        if text and re.search(r"\w", text) and nsp <= 0.6:
-            segs.append({"t": a / SR, "end": b / SR, "text": text})
-    end_t = (events[-1]["t"] - t0) + 1
-    rows = []
-    refs_all = []
-    for lab, a, b in ve.turn_windows(labels, events[-1]["t"] + 1):
-        a, b = a - t0, b - t0
-        group = scenario["turns"][lab["turn"] : lab["turn"] + lab.get("group", 1)]
-        ignored = (group[0].get("expect") or {}).get("ignored")
-        ref = " ".join(re.sub(r"\s*\[[^\]]*\]\s*", " ", t.get("ref") or t["say"]) for t in group)
-        refs_all.append(ref)
-        mine = [s for s in segs if a <= s["t"] < b]
-        said = " ".join(x for _, x in replies)
-        selfheard = [
-            s for s in mine if ve_overlap(s["text"], said) >= 0.6 and ve.wer(ref, s["text"]) > 0.5
-        ]
-        roys = [s for s in mine if s not in selfheard]
-        hyp = " ".join(s["text"] for s in roys)
-        rows.append(
-            {
-                "scenario": scenario["id"],
-                "turn": lab["turn"],
-                "say": ref,
-                "heard": hyp,
-                "wer": None if ignored else round(ve.wer(ref, hyp), 3),
-                "utterances": len(roys),
-                "expected_utterances": 0 if ignored else len(group),
-                "self_heard": len(selfheard),
-                "ignored": bool(ignored),
-            }
-        )
     return rows, segs
 
 
