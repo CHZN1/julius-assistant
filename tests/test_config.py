@@ -79,7 +79,7 @@ class ConfigTests(unittest.TestCase):
                 self.assertEqual(os.environ["ANTHROPIC_API_KEY"], "sk-test-secret-value")
                 with patch.dict(os.environ, {"JULIUS_ENV_FILE": str(p)}):
                     self.assertNotIn("secret", cfg.describe_key())
-                    self.assertEqual(cfg.describe_key(), "set (20 chars)")
+                    self.assertEqual(cfg.describe_key(), "set")
             with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "existing"}, clear=True):
                 cfg.load_dotenv(p)
                 self.assertEqual(os.environ["ANTHROPIC_API_KEY"], "existing")

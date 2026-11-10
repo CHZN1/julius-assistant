@@ -52,7 +52,7 @@ logs/
 *.keras
 *.onnx
 
-# Migrated from the old fer2013-emotion-cnn folder: never commit
+# Migrated from an old emotion-project folder: never commit
 artifacts/
 legacy/
 *.wav

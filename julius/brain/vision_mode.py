@@ -1,4 +1,4 @@
-"""Optional perception: disabled mode imports and loads no vision dependencies. Julius ships no implementation; an enabled install names a module (JULIUS_VISION_MODULE, default julius_perception) that provides Perception and describe."""
+"""Optional perception: disabled mode imports and loads no vision dependencies. Julius ships no implementation; an enabled install names a module (JULIUS_VISION_MODULE, default julius_perception) that provides Perception and describe, for example the one in https://github.com/CHZN1/julius-vision."""
 
 import importlib
 import os

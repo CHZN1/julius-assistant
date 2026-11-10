@@ -174,9 +174,9 @@ def api_key() -> str | None:
 
 
 def describe_key() -> str:
-    """Safe status for logs: whether a key is present and how long it is, never the value."""
+    """Safe status for logs: whether a key is present, never the value or its length."""
     key = api_key()
-    return f"set ({len(key)} chars)" if key else "missing"
+    return "set" if key else "missing"
 
 
 WAKE_CONTRAST = "Julius. Hey Julius. Julia. Julian. Julie. Jules."

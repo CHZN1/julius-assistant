@@ -79,7 +79,7 @@ Numbers come from the author's Mac (M-series, 16 GB) and the suites in `evals/`.
 6. Run in the foreground: `python -m julius`, or install as a login service: `python -m julius.service.service on`. Type a request at the prompt or say "Julius".
 7. Check it: `python -m julius.service.service doctor`, then `python -m julius.service.service smoke`.
 
-Vision is off and ships without an implementation. To add one, point `JULIUS_VISION_MODULE` at a module exposing `Perception` and `describe`; [fer2013-emotion-cnn](https://github.com/CHZN1/fer2013-emotion-cnn) is one such plugin.
+Vision is off and ships without an implementation. To add one, point `JULIUS_VISION_MODULE` at a module exposing `Perception` and `describe`; [Julius Vision](https://github.com/CHZN1/julius-vision) is the companion module (facial-expression recognition today, more senses later).
 
 ## Security model
 
