@@ -41,6 +41,21 @@ OWNERS = {
 PARALLEL_SAFE = {"time", "weather", "sports", "markets", "calculator", "news", "research"}
 
 
+_JSON_TYPES = {"string": str, "integer": int, "boolean": bool, "number": (int, float)}
+
+
+def _check_value(key, value, typ):
+    """Reject an argument of the wrong type or an empty or oversized string."""
+    if typ in _JSON_TYPES and (
+        not isinstance(value, _JSON_TYPES[typ])
+        or typ in {"integer", "number"}
+        and isinstance(value, bool)
+    ):
+        raise ValueError(f"{key} has the wrong type.")
+    if isinstance(value, str) and (not value.strip() or len(value) > 2048):
+        raise ValueError(f"{key} must contain 1–2048 characters.")
+
+
 class Dispatcher:
     def __init__(self, registry, schemas, file_agent=None, history_limit=64):
         self.registry = registry
@@ -81,17 +96,13 @@ class Dispatcher:
             raise ValueError("Unexpected utility argument.")
         if any(k not in args for k in schema.get("required", [])):
             raise ValueError("A required utility argument is missing.")
-        types = {"string": str, "integer": int, "boolean": bool, "number": (int, float)}
         for key, value in args.items():
-            typ = props[key].get("type")
-            if typ in types and (
-                not isinstance(value, types[typ])
-                or typ in {"integer", "number"}
-                and isinstance(value, bool)
-            ):
-                raise ValueError(f"{key} has the wrong type.")
-            if isinstance(value, str) and (not value.strip() or len(value) > 2048):
-                raise ValueError(f"{key} must contain 1–2048 characters.")
+            _check_value(key, value, props[key].get("type"))
+        self._check_tool_rules(name, args)
+
+    @staticmethod
+    def _check_tool_rules(name, args):
+        """Per-tool limits that the generic schema cannot express."""
         if name == "get_forecast" and not 1 <= args.get("days", 7) <= 16:
             raise ValueError("Forecast length must be between 1 and 16 days.")
         if name == "get_scores":
