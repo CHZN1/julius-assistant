@@ -11,66 +11,73 @@ MAX_TEXT = 20000
 MAX_PAGES = 20
 
 
-def extract(raw, suffix):
+def _pdf_chunks(raw):
+    """-> (page chunks, truncated, warnings)."""
+    from pypdf import PdfReader
+
+    reader = PdfReader(io.BytesIO(raw))
+    if reader.is_encrypted:
+        raise ValueError("This PDF is encrypted. Provide an unencrypted copy.")
+    total = len(reader.pages)
+    chunks = []
+    for i in range(min(total, MAX_PAGES)):
+        page = reader.pages[i]
+        stream = page.get_contents()
+        if stream is not None and len(stream.get_data()) > 8 * 1024 * 1024:
+            raise ValueError("A PDF page exceeds the safe extraction budget.")
+        chunks.append({"location": f"page {i + 1}", "text": page.extract_text() or ""})
+    warnings = []
+    empty = [c["location"] for c in chunks if not c["text"].strip()]
+    if empty:
+        warnings.append(
+            "No text layer found on "
+            + ", ".join(empty)
+            + ". These pages may be scans/images; OCR is not enabled."
+        )
+    return chunks, total > MAX_PAGES, warnings
+
+
+def _docx_chunks(raw):
+    with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+        info = archive.getinfo("word/document.xml")
+        if info.file_size > 8 * 1024 * 1024:
+            raise ValueError("DOCX content exceeds the extraction budget.")
+        xml = archive.read(info)
+    if b"<!DOCTYPE" in xml.upper() or b"<!ENTITY" in xml.upper():
+        raise ValueError("XML entity declarations are not supported.")
+    root = ET.fromstring(xml)
+    ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
     chunks = []
     truncated = False
-    warnings = []
-    if suffix == ".pdf":
-        from pypdf import PdfReader
+    for i, paragraph in enumerate(root.findall(".//w:p", ns)):
+        text = "".join(node.text or "" for node in paragraph.findall(".//w:t", ns))
+        if text:
+            chunks.append({"location": f"paragraph {i + 1}", "text": text})
+        if len(chunks) >= 200:
+            truncated = True
+            break
+    warnings = ["DOCX body text only; headers, footers, comments and layout are not extracted."]
+    return chunks, truncated, warnings
 
-        reader = PdfReader(io.BytesIO(raw))
-        if reader.is_encrypted:
-            raise ValueError("This PDF is encrypted. Provide an unencrypted copy.")
-        total = len(reader.pages)
-        truncated = total > MAX_PAGES
-        for i in range(min(total, MAX_PAGES)):
-            page = reader.pages[i]
-            stream = page.get_contents()
-            if stream is not None and len(stream.get_data()) > 8 * 1024 * 1024:
-                raise ValueError("A PDF page exceeds the safe extraction budget.")
-            chunks.append({"location": f"page {i + 1}", "text": page.extract_text() or ""})
-        empty = [c["location"] for c in chunks if not c["text"].strip()]
-        if empty:
-            warnings.append(
-                "No text layer found on "
-                + ", ".join(empty)
-                + ". These pages may be scans/images; OCR is not enabled."
-            )
-    elif suffix == ".docx":
-        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
-            info = archive.getinfo("word/document.xml")
-            if info.file_size > 8 * 1024 * 1024:
-                raise ValueError("DOCX content exceeds the extraction budget.")
-            xml = archive.read(info)
-        if b"<!DOCTYPE" in xml.upper() or b"<!ENTITY" in xml.upper():
-            raise ValueError("XML entity declarations are not supported.")
-        root = ET.fromstring(xml)
-        ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
-        for i, paragraph in enumerate(root.findall(".//w:p", ns)):
-            text = "".join(node.text or "" for node in paragraph.findall(".//w:t", ns))
-            if text:
-                chunks.append({"location": f"paragraph {i + 1}", "text": text})
-            if len(chunks) >= 200:
-                truncated = True
-                break
-        warnings.append(
-            "DOCX body text only; headers, footers, comments and layout are not extracted."
-        )
-    elif suffix in {".txt", ".md", ".csv", ".json", ".log"}:
-        if b"\x00" in raw[:8192]:
-            raise ValueError("This file contains binary data.")
-        text = raw.decode("utf-8-sig")
-        for i, line in enumerate(text.splitlines()):
-            if line.strip():
-                chunks.append({"location": f"line {i + 1}", "text": line})
-            if len(chunks) >= 200:
-                truncated = True
-                break
-    else:
-        raise ValueError(
-            "Supported documents: PDF, DOCX and UTF-8 text. Legacy .doc files and OCR are not supported."
-        )
+
+def _text_chunks(raw):
+    if b"\x00" in raw[:8192]:
+        raise ValueError("This file contains binary data.")
+    chunks = []
+    truncated = False
+    for i, line in enumerate(raw.decode("utf-8-sig").splitlines()):
+        if line.strip():
+            chunks.append({"location": f"line {i + 1}", "text": line})
+        if len(chunks) >= 200:
+            truncated = True
+            break
+    return chunks, truncated, []
+
+
+def _bounded(chunks):
+    """Clip the chunks to MAX_TEXT characters in all; returns (chunks, whether anything was cut)."""
     bounded = []
+    truncated = False
     remaining = MAX_TEXT
     for chunk in chunks:
         if remaining <= 0:
@@ -81,19 +88,31 @@ def extract(raw, suffix):
             truncated = True
         bounded.append(dict(chunk, text=clipped))
         remaining -= len(clipped)
+    return bounded, truncated
+
+
+def extract(raw, suffix):
+    """Extract bounded text chunks from PDF, DOCX or text bytes into a result dict."""
+    if suffix == ".pdf":
+        chunks, truncated, warnings = _pdf_chunks(raw)
+    elif suffix == ".docx":
+        chunks, truncated, warnings = _docx_chunks(raw)
+    elif suffix in {".txt", ".md", ".csv", ".json", ".log"}:
+        chunks, truncated, warnings = _text_chunks(raw)
+    else:
+        raise ValueError(
+            "Supported documents: PDF, DOCX and UTF-8 text. Legacy .doc files and OCR are not supported."
+        )
+    bounded, cut = _bounded(chunks)
+    data = {"chunks": bounded, "warnings": warnings, "truncated": truncated or cut}
     if not any(c["text"].strip() for c in bounded):
         return {
             "ok": False,
             "code": "no_text",
             "message": "No readable text was extracted. This may require OCR or another format.",
-            "data": {"chunks": bounded, "warnings": warnings, "truncated": truncated},
+            "data": data,
         }
-    return {
-        "ok": True,
-        "code": "extracted",
-        "message": "Document text extracted.",
-        "data": {"chunks": bounded, "warnings": warnings, "truncated": truncated},
-    }
+    return {"ok": True, "code": "extracted", "message": "Document text extracted.", "data": data}
 
 
 if __name__ == "__main__":

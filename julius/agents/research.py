@@ -419,29 +419,7 @@ class ResearchAgent:
             if not uses:
                 stopped = "no_answer"
                 break
-            results = []
-            for b in uses:
-                args = dict(b.input)
-                if b.name == "research_finish" and final is None:
-                    final = args
-                    results.append({"type": "tool_result", "tool_use_id": b.id, "content": "Done."})
-                elif b.name == "research_search":
-                    results.append(
-                        {"type": "tool_result", "tool_use_id": b.id, "content": self._search(args)}
-                    )
-                elif b.name == "research_open":
-                    results.append(
-                        {"type": "tool_result", "tool_use_id": b.id, "content": self._open(args)}
-                    )
-                else:
-                    results.append(
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": b.id,
-                            "content": f"{b.name} is not available.",
-                            "is_error": True,
-                        }
-                    )
+            results, final = self._run_tools(uses, final)
             if final is not None:
                 break
             messages.append({"role": "user", "content": results})
@@ -454,21 +432,45 @@ class ResearchAgent:
             and not loop.over()
             and messages[-1]["role"] == "user"
         ):
-            # one forced wrap-up while budget remains
-            messages[-1]["content"].append(
-                {
-                    "type": "text",
-                    "text": "Limit reached. Call research_finish now with only what you confirmed.",
-                }
-            )
-            try:
-                r = loop.call(messages, tool_choice={"type": "tool", "name": "research_finish"})
-                for b in r.content:
-                    if getattr(b, "type", "") == "tool_use" and b.name == "research_finish":
-                        final = dict(b.input)
-            except Exception:
-                pass
+            final = self._forced_wrap_up(loop, messages)
         return self._result(question, final, stopped, loop)
+
+    def _run_tools(self, uses, final):
+        """Run the model's tool calls; returns (tool_result blocks, the finish arguments if given)."""
+        results = []
+        for b in uses:
+            args = dict(b.input)
+            block = {"type": "tool_result", "tool_use_id": b.id}
+            if b.name == "research_finish" and final is None:
+                final = args
+                block["content"] = "Done."
+            elif b.name == "research_search":
+                block["content"] = self._search(args)
+            elif b.name == "research_open":
+                block["content"] = self._open(args)
+            else:
+                block.update(content=f"{b.name} is not available.", is_error=True)
+            results.append(block)
+        return results, final
+
+    @staticmethod
+    def _forced_wrap_up(loop, messages):
+        """One last call asking for research_finish while budget remains."""
+        messages[-1]["content"].append(
+            {
+                "type": "text",
+                "text": "Limit reached. Call research_finish now with only what you confirmed.",
+            }
+        )
+        final = None
+        try:
+            r = loop.call(messages, tool_choice={"type": "tool", "name": "research_finish"})
+            for b in r.content:
+                if getattr(b, "type", "") == "tool_use" and b.name == "research_finish":
+                    final = dict(b.input)
+        except Exception:
+            pass
+        return final
 
     def _result(self, question, final, stopped, loop):
         findings, dropped = self._verify((final or {}).get("findings"))

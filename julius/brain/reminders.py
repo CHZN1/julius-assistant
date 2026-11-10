@@ -60,16 +60,8 @@ def _clock(text):
     return None
 
 
-def parse_when(phrase, now, tz="America/Los_Angeles"):
-    """Epoch seconds for a spoken time phrase, always in the future. Raises ValueError with a speakable reason."""
-    text = re.sub(r"\s+", " ", phrase.lower().strip().strip(".,!?"))
-    text = (
-        re.sub(r"^(?:at|on|for)\s+", "", text)
-        if not re.match(r"(?:at|on|for)\s+(?:\d|noon|midnight)", text)
-        else text
-    )
-    zone = ZoneInfo(tz)
-    local = datetime.fromtimestamp(now, zone)
+def _relative_time(text, now):
+    """"in 20 minutes", "in half an hour": epoch seconds, or None when it is not relative."""
     rel = re.fullmatch(
         r"in (?:about |around )?(\d+(?:\.\d+)?|half an?|an?|one|two|three|four|five|six|seven|eight|nine|ten|fifteen|twenty|thirty|forty[- ]five|sixty) ?(seconds?|secs?|minutes?|mins?|hours?|hrs?|days?|weeks?)(?: and a half)?",
         text,
@@ -89,16 +81,24 @@ def parse_when(phrase, now, tz="America/Los_Angeles"):
         return now + seconds
     if text in ("in half an hour", "in an hour and a half"):
         return now + (1800 if text[3:] == "half an hour" else 5400)
-    day_offset, day_word = None, None
+    return None
+
+
+def _day_of(text, local):
+    """(days from today, the day word) for "tomorrow", "today"/"tonight" or a weekday."""
     if re.search(r"\btomorrow\b", text):
-        day_offset, day_word = 1, "tomorrow"
-    elif re.search(r"\b(?:today|this (?:morning|afternoon|evening)|tonight)\b", text):
-        day_offset, day_word = 0, "today"
-    else:
-        wd = re.search(r"\b(?:next |on )?(" + "|".join(WEEKDAYS) + r")\b", text)
-        if wd:
-            ahead = (WEEKDAYS.index(wd.group(1)) - local.weekday()) % 7
-            day_offset, day_word = ahead or 7, wd.group(1)
+        return 1, "tomorrow"
+    if re.search(r"\b(?:today|this (?:morning|afternoon|evening)|tonight)\b", text):
+        return 0, "today"
+    wd = re.search(r"\b(?:next |on )?(" + "|".join(WEEKDAYS) + r")\b", text)
+    if wd:
+        ahead = (WEEKDAYS.index(wd.group(1)) - local.weekday()) % 7
+        return ahead or 7, wd.group(1)
+    return None, None
+
+
+def _clock_for(text, day_offset):
+    """(hour, minute) for the phrase; ValueError when the time is missing or lacks AM/PM."""
     clock = _clock(text)
     if clock is None:
         part = re.search(r"\b(morning|afternoon|evening|tonight|night)\b", text)
@@ -117,6 +117,24 @@ def parse_when(phrase, now, tz="America/Los_Angeles"):
         and not re.search(r"noon|midnight|morning|afternoon|evening|tonight|night", text)
     ):
         raise ValueError("Please say AM or PM for that time.")
+    return clock
+
+
+def parse_when(phrase, now, tz="America/Los_Angeles"):
+    """Epoch seconds for a spoken time phrase, always in the future. Raises ValueError with a speakable reason."""
+    text = re.sub(r"\s+", " ", phrase.lower().strip().strip(".,!?"))
+    text = (
+        re.sub(r"^(?:at|on|for)\s+", "", text)
+        if not re.match(r"(?:at|on|for)\s+(?:\d|noon|midnight)", text)
+        else text
+    )
+    zone = ZoneInfo(tz)
+    local = datetime.fromtimestamp(now, zone)
+    relative = _relative_time(text, now)
+    if relative is not None:
+        return relative
+    day_offset, day_word = _day_of(text, local)
+    clock = _clock_for(text, day_offset)
     target = local.replace(tzinfo=None, hour=clock[0], minute=clock[1], second=0, microsecond=0)
     if day_offset is not None:
         target += timedelta(days=day_offset)
