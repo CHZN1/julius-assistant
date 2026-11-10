@@ -1,3 +1,5 @@
+"""Unit tests for uichannel."""
+
 import http.client
 import json
 import os

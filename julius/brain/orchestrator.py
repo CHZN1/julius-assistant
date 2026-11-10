@@ -148,7 +148,7 @@ RESEARCH_TASK_SCHEMA = {
 _STATE = {"file_session": None, "turn": lambda: 0, "user_text": "", "code_session": None}
 
 
-def configure(file_session=None, turn=None, user_text=None, code_session=None):
+def configure(file_session=None, turn=None, user_text=None, code_session=None) -> None:
     """The runtime supplies the human FileSession that owns confirmations, the turn number, and each turn's exact words."""
     if user_text is not None:
         _STATE["user_text"] = user_text
@@ -246,7 +246,7 @@ def code_task(args):
 class Loop:
     """A bounded Messages API tool loop for one tier."""
 
-    def __init__(self, brain, tier, system, tools, execute, max_steps, note):
+    def __init__(self, brain, tier, system, tools, execute, max_steps, note) -> None:
         self.brain, self.tier, self.execute, self.max_steps, self.note = (
             brain,
             tier,
@@ -330,7 +330,7 @@ class SpendCap(Exception):
 
 
 class Planner:
-    def __init__(self, brain, dispatcher=None):
+    def __init__(self, brain, dispatcher=None) -> None:
         self.brain, self.dispatcher = brain, dispatcher
         self.config = brain.config
         self.subagent_runs = []
@@ -358,7 +358,7 @@ class Planner:
             return research.research_task(args, self.brain)
         return jt.call(name, args)
 
-    def delegate(self, args):
+    def delegate(self, args) -> str:
         import julius.brain.tools as jt
 
         names = [n for n in args.get("tools", []) if n in SUBAGENT_TOOLS]

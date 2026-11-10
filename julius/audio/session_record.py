@@ -15,14 +15,16 @@ import os
 import threading
 import time
 import wave
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
+from numpy import ndarray
 
 RATE = 16000
 
 
-def _resample(audio, src, dst=RATE):
+def _resample(audio: str | ndarray, src: int, dst: int = RATE) -> ndarray:
     audio = np.asarray(audio, dtype=np.float32).reshape(-1)
     if src == dst or len(audio) == 0:
         return audio
@@ -33,7 +35,13 @@ def _resample(audio, src, dst=RATE):
 
 
 class SessionRecorder:
-    def __init__(self, folder, rate=RATE, clock=time.time, meta=None):
+    def __init__(
+        self,
+        folder: Path,
+        rate: int = RATE,
+        clock: Callable = time.time,
+        meta: dict[str, str] | None = None,
+    ) -> None:
         self.dir = Path(folder)
         self.dir.mkdir(parents=True, exist_ok=True)
         self.rate = rate
@@ -49,7 +57,7 @@ class SessionRecorder:
         self.event("session_start", rate=rate, t0=self.t0, **(meta or {}))
 
     # ---- inputs ----
-    def mic(self, chunk):
+    def mic(self, chunk: ndarray | None) -> None:
         """Called from the audio callback with each float32 microphone block. Never raises: recording must not break the voice loop."""
         if self._closed:
             return
@@ -63,7 +71,7 @@ class SessionRecorder:
         except Exception:
             pass
 
-    def pair(self, raw, ref):
+    def pair(self, raw, ref) -> None:
         """Duplex audio: the microphone as captured and what the speakers played in the same callback. The reference is placed at the microphone's own sample position, so they are exactly aligned."""
         if self._closed:
             return
@@ -85,7 +93,7 @@ class SessionRecorder:
         except Exception:
             pass
 
-    def out(self, audio, sample_rate):
+    def out(self, audio: str | ndarray, sample_rate: int) -> None:
         """Called just before each playback chunk is written to the output device. Chunks play back to back, so they are laid end to end from the first one's time."""
         if self._closed:
             return
@@ -99,7 +107,7 @@ class SessionRecorder:
         except Exception:
             pass
 
-    def event(self, kind, **fields):
+    def event(self, kind: str, **fields) -> None:
         try:
             with self._lock:
                 self._events.write(
@@ -110,7 +118,7 @@ class SessionRecorder:
             pass
 
     # ---- finish ----
-    def close(self):
+    def close(self) -> None:
         if self._closed:
             return
         with self._lock:
@@ -132,7 +140,9 @@ class SessionRecorder:
         finalize(self.dir, self.rate, out_track=track, length=length)
 
 
-def finalize(folder, rate=RATE, out_track=None, length=None):
+def finalize(
+    folder: Path, rate: int = RATE, out_track: ndarray | None = None, length: int | None = None
+) -> None:
     """mic.raw -> mic.wav (padded to `length`), out track -> out.wav. Also usable on a folder left by a crash (no out track then)."""
     folder = Path(folder)
     raw = folder / "mic.raw"
@@ -152,12 +162,12 @@ def finalize(folder, rate=RATE, out_track=None, length=None):
     raw.unlink()
 
 
-def from_env(meta=None):
+def from_env(meta: dict[str, None] | None = None) -> None:
     folder = os.environ.get("JULIUS_SESSION_RECORD_DIR")
     return SessionRecorder(folder, meta=meta) if folder else None
 
 
-def read_wav(path):
+def read_wav(path: Path) -> tuple[ndarray, int]:
     with wave.open(str(path), "rb") as w:
         rate = w.getframerate()
         data = (
@@ -166,7 +176,7 @@ def read_wav(path):
     return data, rate
 
 
-def read_events(folder):
+def read_events(folder: Path) -> list[dict[str, str | float | int]]:
     out = []
     p = Path(folder) / "events.jsonl"
     if p.exists():

@@ -1,3 +1,5 @@
+"""Benchmark MLX language models for speed on Julius's prompt shapes."""
+
 import csv
 import os
 import sys

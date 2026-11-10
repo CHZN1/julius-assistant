@@ -1,3 +1,5 @@
+"""Unit tests for hotkey."""
+
 import subprocess
 import sys
 import tempfile

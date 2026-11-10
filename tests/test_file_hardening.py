@@ -1,3 +1,5 @@
+"""Unit tests for file hardening."""
+
 import os
 import tempfile
 import time

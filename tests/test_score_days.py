@@ -1,3 +1,5 @@
+"""Unit tests for score days."""
+
 import unittest
 from datetime import date
 

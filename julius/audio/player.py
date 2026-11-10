@@ -9,24 +9,30 @@ after an underflow and relaxes it after clean sentences, and (5) records every u
 import contextlib
 import threading
 import time
+from collections.abc import Callable, Iterator
+from typing import Any
+from unittest.mock import Mock
 
 import numpy as np
+from numpy import ndarray
+
+from julius.audio.duplex import _OutputAdapter
 
 
 class SpeechPlayer:
     def __init__(
         self,
-        sd,
-        prefill_chunks=1,
-        latency=0.4,
-        idle_seconds=1.5,
-        max_prefill=4,
-        tail_seconds=0.02,
-        clock=time.perf_counter,
-        log=print,
-        sleep=time.sleep,
-        drain_margin=0.05,
-    ):
+        sd: Mock | Any,
+        prefill_chunks: int = 1,
+        latency: float = 0.4,
+        idle_seconds: int | float = 1.5,
+        max_prefill: int = 4,
+        tail_seconds: float = 0.02,
+        clock: Callable = time.perf_counter,
+        log: Callable = print,
+        sleep: Callable = time.sleep,
+        drain_margin: float = 0.05,
+    ) -> None:
         self.sd, self.base_prefill, self.latency, self.idle_seconds, self.max_prefill = (
             sd,
             prefill_chunks,
@@ -46,7 +52,7 @@ class SpeechPlayer:
         self._timer = None
 
     # ---- stream lifetime ----
-    def _open(self, rate):
+    def _open(self, rate: int) -> _OutputAdapter | Any | Mock:
         if self.stream is not None and self.rate != rate:
             self._close_stream()
         if self.stream is None:
@@ -60,7 +66,7 @@ class SpeechPlayer:
             self._timer = None
         return self.stream
 
-    def _close_stream(self, abort=False):
+    def _close_stream(self, abort: bool = False) -> None:
         stream, self.stream, self.rate = self.stream, None, None
         if stream is None:
             return
@@ -69,19 +75,19 @@ class SpeechPlayer:
         finally:
             stream.close()
 
-    def _idle_close(self):
+    def _idle_close(self) -> None:
         with self._lock:
             self._timer = None
             self._close_stream()
 
-    def abort(self):
+    def abort(self) -> None:
         """Silence the speakers now, from any thread (the stop hotkey). Does not take the playback lock: play() may be blocked in write()."""
         stream = self.stream
         if stream is not None:
             with contextlib.suppress(Exception):
                 stream.abort()
 
-    def close(self):
+    def close(self) -> None:
         with self._lock:
             if self._timer is not None:
                 self._timer.cancel()
@@ -89,14 +95,19 @@ class SpeechPlayer:
             self._close_stream()
 
     # ---- playback ----
-    def _tap_audio(self, audio, sample_rate):
+    def _tap_audio(self, audio: ndarray, sample_rate: int) -> None:
         """Hand a copy of the audio to the session recorder; it may never disturb playback."""
         tap = getattr(self, "tap", None)
         if tap is not None:
             with contextlib.suppress(Exception):
                 tap(audio, sample_rate)
 
-    def play(self, chunks, cancel_check=None, on_start=None):
+    def play(
+        self,
+        chunks: Iterator[Any],
+        cancel_check: Callable | None = None,
+        on_start: Callable | None = None,
+    ) -> dict[str, int]:
         """Play (float32 chunk, sample_rate) pairs from a generator. Returns {'chunks', 'underflows', 'prefill_chunks'}."""
         with self._lock:
             it = iter(chunks)
@@ -117,7 +128,7 @@ class SpeechPlayer:
             started, sentence_underflows, written, seconds_written = self.clock(), 0, 0, 0.0
             try:
 
-                def put(audio, sample_rate, index):
+                def put(audio, sample_rate, index) -> None:
                     nonlocal sentence_underflows, written, seconds_written
                     if sample_rate != rate:
                         raise RuntimeError("Speech sample rate changed")
@@ -203,7 +214,7 @@ class SpeechPlayer:
                 "prefill_chunks": self.prefill_chunks,
             }
 
-    def _adapt(self, underflows):
+    def _adapt(self, underflows: int) -> None:
         """More prefill after an underflow (up to max_prefill), back toward the base after five clean sentences."""
         if underflows:
             self.prefill_chunks = min(self.max_prefill, self.prefill_chunks + 1)
@@ -214,6 +225,6 @@ class SpeechPlayer:
                 self.prefill_chunks -= 1
                 self._clean_run = 0
 
-    def pop_events(self):
+    def pop_events(self) -> list[Any | dict[str, float | int]]:
         events, self.events = self.events, []
         return events

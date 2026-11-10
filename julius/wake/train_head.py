@@ -28,7 +28,7 @@ HOLDOUT_VOICES = ("bf_emma", "af_sky", "bm_george")
 
 
 class Head(nn.Module):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.net = nn.Sequential(
             nn.Flatten(),
@@ -123,7 +123,7 @@ def _synthetic_sets(args, extractor, tag, rng):
     return sets
 
 
-def _talk_and_noise_sets(sets, args, extractor):
+def _talk_and_noise_sets(sets, args, extractor) -> None:
     """Ordinary talk (talk3 held out for the false-wake eval) and background-noise negatives."""
     noise = np.random.default_rng(0)
 
@@ -152,7 +152,7 @@ def _talk_and_noise_sets(sets, args, extractor):
     ]
 
 
-def _train(model, train, val, sets, epochs, rng):
+def _train(model, train, val, sets, epochs, rng) -> None:
     """Weighted clip-level BCE training with a held-out report every five epochs."""
     opt = torch.optim.AdamW(model.parameters(), 2e-3, weight_decay=1e-3)
     bce = nn.BCELoss(reduction="none")
@@ -182,7 +182,7 @@ def _train(model, train, val, sets, epochs, rng):
             _report(model, val, sets, ep, total / (len(train) / 32))
 
 
-def _report(model, val, sets, ep, loss):
+def _report(model, val, sets, ep, loss) -> None:
     scores = {
         c: clip_scores(model, [e for k, e in val if k == c])
         for c in sets
@@ -198,7 +198,7 @@ def _report(model, val, sets, ep, loss):
     )
 
 
-def main():
+def main() -> None:
     """Train the wake head on the generated, real and recorded clips and write it as ONNX."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--epochs", type=int, default=40)

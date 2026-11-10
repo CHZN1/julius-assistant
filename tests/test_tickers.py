@@ -1,3 +1,5 @@
+"""Unit tests for tickers."""
+
 import unittest
 from unittest import mock
 

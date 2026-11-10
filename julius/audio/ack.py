@@ -8,12 +8,19 @@ he says a short "On it." once, so silence never reads as "he didn't hear me". Fa
 import contextlib
 import itertools
 import threading
+from collections.abc import Callable
 
 PHRASES = ("On it.", "One moment.", "Working on it.")
 
 
 class Acknowledger:
-    def __init__(self, speak_fn, delay=1.5, phrases=PHRASES, enabled=True):
+    def __init__(
+        self,
+        speak_fn: Callable | None,
+        delay: float = 1.5,
+        phrases: tuple[str, str, str] = PHRASES,
+        enabled: bool = True,
+    ) -> None:
         self.speak_fn, self.delay, self.phrases, self.enabled = (
             speak_fn,
             delay,
@@ -25,7 +32,7 @@ class Acknowledger:
         self._done = False
         self.spoken = 0
 
-    def _fire(self):
+    def _fire(self) -> None:
         with self._lock:
             if self._done or not self.enabled or self.speak_fn is None:
                 return
@@ -35,7 +42,7 @@ class Acknowledger:
         with contextlib.suppress(Exception):
             self.speak_fn(phrase)
 
-    def said_something(self):
+    def said_something(self) -> None:
         with self._lock:
             self._done = True
             if self._timer:

@@ -8,6 +8,7 @@ from pathlib import Path
 import mlx_whisper
 import numpy as np
 import soundfile as sf
+from numpy import ndarray
 
 import julius.memory.sessions as jm
 from julius.audio.asr_resources import recognition_resources
@@ -44,7 +45,7 @@ def _free_memory_for_recognition(s: Session) -> None:
         close_backend()
 
 
-def _whisper(s: Session, audio, wake: bool) -> dict:
+def _whisper(s: Session, audio: ndarray, wake: bool) -> dict:
     """One mlx-whisper run with the wake or the request vocabulary hint."""
     resident_default = "0" if s.tts.backend in CLONE_BACKENDS else "1"
     language = os.environ.get("JULIUS_ASR_LANGUAGE", "en")
@@ -60,7 +61,7 @@ def _whisper(s: Session, audio, wake: bool) -> dict:
         )
 
 
-def transcribe(s: Session, audio, wake: bool = False) -> tuple[str, str, float]:
+def transcribe(s: Session, audio: ndarray | None, wake: bool = False) -> tuple[str, str, float]:
     """Text, language and no-speech probability for one utterance."""
     started = time.perf_counter()
     # A wake clip already passed the detector and its noise gate; quiet or distant speech sits
@@ -93,7 +94,7 @@ def transcribe(s: Session, audio, wake: bool = False) -> tuple[str, str, float]:
     return text, result.get("language", "?"), no_speech
 
 
-def transcribe_input(s: Session, audio, wake: bool = False) -> tuple[str, str, float]:
+def transcribe_input(s: Session, audio: list[int], wake: bool = False) -> tuple[str, str, float]:
     """A failed recognition turn must not stop listening or invent a request."""
     try:
         result = transcribe(s, audio, wake)

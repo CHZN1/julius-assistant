@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install ruff
+      - run: ruff check .
+      - run: ruff format --check .
+
+  test:
+    # Apple silicon: the speech and language-model packages (MLX) only install on macOS.
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install the packages the unit tests import
+        run: |
+          pip install numpy scipy soundfile psutil requests httpx pypdf \
+            anthropic sounddevice livekit ollama ddgs pynput openwakeword \
+            mlx-lm mlx-whisper
+      - name: Download the openwakeword base models
+        run: python -c "import openwakeword.utils as u; u.download_models()"
+      - name: Free unit tests (no network, no API key, no models)
+        run: python -m unittest discover -s tests -t .

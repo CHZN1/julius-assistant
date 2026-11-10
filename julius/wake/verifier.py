@@ -45,7 +45,9 @@ def load(path):
     return a if a.ndim == 1 else a[:, 0]
 
 
-def train(out, holdout=None, min_score=0.05, seed=0, sessions="wake,wake2,quick", model=None):
+def train(
+    out, holdout=None, min_score=0.05, seed=0, sessions="wake,wake2,quick", model=None
+) -> None:
     import build_dataset as bd
     from openwakeword.model import Model
     from sklearn.linear_model import LogisticRegression

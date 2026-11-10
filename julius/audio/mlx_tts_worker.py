@@ -16,6 +16,8 @@ from julius.paths import REPO_ROOT
 ROOT = REPO_ROOT
 os.environ.setdefault("HF_HOME", str(ROOT / ".cache/huggingface-mlx-tts"))
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
+from typing import Never
+
 import mlx.core as mx
 import numpy as np
 
@@ -43,7 +45,7 @@ def load_models():
 model, refs = load_models()
 
 
-def terminate_worker(signum, frame):
+def terminate_worker(signum, frame) -> Never:
     raise SystemExit(0)
 
 

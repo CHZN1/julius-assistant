@@ -148,20 +148,20 @@ def check_url(url, resolve=socket.getaddrinfo):
 
 
 class _PinnedHTTP(http.client.HTTPConnection):
-    def __init__(self, host, ip, port, timeout):
+    def __init__(self, host, ip, port, timeout) -> None:
         super().__init__(host, port, timeout=timeout)
         self._ip = ip
 
-    def connect(self):
+    def connect(self) -> None:
         self.sock = socket.create_connection((self._ip, self.port), self.timeout)
 
 
 class _PinnedHTTPS(http.client.HTTPSConnection):
-    def __init__(self, host, ip, port, timeout):
+    def __init__(self, host, ip, port, timeout) -> None:
         super().__init__(host, port, timeout=timeout, context=ssl.create_default_context())
         self._ip = ip
 
-    def connect(self):
+    def connect(self) -> None:
         sock = socket.create_connection((self._ip, self.port), self.timeout)
         self.sock = self._context.wrap_socket(sock, server_hostname=self.host)
 
@@ -190,7 +190,9 @@ def network_get(parsed, ip, max_bytes, timeout=10):
 
 
 class Fetcher:
-    def __init__(self, max_bytes=500_000, resolve=socket.getaddrinfo, transport=network_get):
+    def __init__(
+        self, max_bytes=500_000, resolve=socket.getaddrinfo, transport=network_get
+    ) -> None:
         self.max_bytes, self.resolve, self.transport = max_bytes, resolve, transport
 
     def fetch(self, url):
@@ -218,12 +220,12 @@ class Fetcher:
 class _Extract(html.parser.HTMLParser):
     SKIP = {"script", "style", "noscript", "svg", "form", "iframe", "template", "head"}
 
-    def __init__(self, base):
+    def __init__(self, base) -> None:
         super().__init__(convert_charrefs=True)
         self.base, self.title, self.parts, self.images, self.login = base, "", [], [], False
         self._skip, self._in_title = 0, False
 
-    def handle_starttag(self, tag, attrs):
+    def handle_starttag(self, tag, attrs) -> None:
         a = dict(attrs)
         if tag == "title":
             self._in_title = True
@@ -236,19 +238,19 @@ class _Extract(html.parser.HTMLParser):
         if tag in self.SKIP and tag != "head":
             self._skip += 1
 
-    def handle_endtag(self, tag):
+    def handle_endtag(self, tag) -> None:
         if tag == "title":
             self._in_title = False
         if tag in self.SKIP and tag != "head" and self._skip:
             self._skip -= 1
 
-    def handle_data(self, data):
+    def handle_data(self, data) -> None:
         if self._in_title:
             self.title += data
         elif not self._skip and data.strip():
             self.parts.append(data.strip())
 
-    def _img(self, src, alt):
+    def _img(self, src, alt) -> None:
         u = urllib.parse.urljoin(self.base, src.strip())
         if (
             u.startswith(("http://", "https://"))
@@ -301,7 +303,7 @@ def default_search(query, n=5):
 class _CostLoop:
     """Haiku tool loop with per-task step and dollar limits. The call that would begin past the cap is not made."""
 
-    def __init__(self, brain, system, tools, max_usd):
+    def __init__(self, brain, system, tools, max_usd) -> None:
         self.brain, self.max_usd, self.spent, self.calls = brain, max_usd, 0.0, 0
         settings = jc.TIERS["haiku"]
         self.kwargs = {
@@ -325,7 +327,7 @@ class _CostLoop:
 
 
 class ResearchAgent:
-    def __init__(self, brain, fetcher=None, search=None, directory=None, clock=time.time):
+    def __init__(self, brain, fetcher=None, search=None, directory=None, clock=time.time) -> None:
         c = brain.config.get("research", {})
         self.brain, self.search_fn = brain, search or default_search
         self.max_steps, self.max_pages, self.max_usd = (
@@ -358,7 +360,7 @@ class ResearchAgent:
             or "No results."
         )
 
-    def _open(self, args):
+    def _open(self, args) -> str:
         url = str(args.get("url", "")).strip()
         if url in self.pages:
             return "Already read that page."

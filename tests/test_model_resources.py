@@ -1,3 +1,5 @@
+"""Unit tests for model resources."""
+
 import unittest
 from unittest.mock import Mock
 

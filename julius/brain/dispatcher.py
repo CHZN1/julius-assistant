@@ -9,7 +9,13 @@ import threading
 import time
 import uuid
 from collections import deque
+from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import Any
+
+from julius.agents.file_agent import FileAgent
+from julius.agents.file_session import FileSession
+from julius.agents.utility_session import UtilitySession
 
 OWNERS = {
     "read_document": "documents",
@@ -44,7 +50,7 @@ PARALLEL_SAFE = {"time", "weather", "sports", "markets", "calculator", "news", "
 _JSON_TYPES = {"string": str, "integer": int, "boolean": bool, "number": (int, float)}
 
 
-def _check_value(key, value, typ):
+def _check_value(key: str, value: str | bool | float | int, typ: str) -> None:
     """Reject an argument of the wrong type or an empty or oversized string."""
     if typ in _JSON_TYPES and (
         not isinstance(value, _JSON_TYPES[typ])
@@ -57,7 +63,13 @@ def _check_value(key, value, typ):
 
 
 class Dispatcher:
-    def __init__(self, registry, schemas, file_agent=None, history_limit=64):
+    def __init__(
+        self,
+        registry: dict[str, Callable],
+        schemas: list[Any],
+        file_agent: FileAgent | None = None,
+        history_limit: int = 64,
+    ) -> None:
         self.registry = registry
         self.schemas = {s["function"]["name"]: s["function"]["parameters"] for s in schemas}
         self.file_agent = file_agent
@@ -70,13 +82,13 @@ class Dispatcher:
         self._turn_budget_active = False
         self.turn_call_limit = 8
 
-    def begin_turn(self):
+    def begin_turn(self) -> None:
         self._turn_budget_active = True
         self.turn_tasks.clear()
         self._calls = 0
         self.last_result = None
 
-    def _remember(self, task):
+    def _remember(self, task: dict[str, Any]) -> None:
         metadata = {
             k: task[k] for k in ("id", "agent", "tool", "started_at", "status", "code", "seconds")
         }
@@ -85,7 +97,7 @@ class Dispatcher:
             self.turn_tasks.append(metadata)
             self.last_result = task
 
-    def _validate(self, name, args):
+    def _validate(self, name: str, args: dict[str, int | str | float | bool]) -> None:
         if name not in OWNERS or name not in self.registry:
             raise ValueError(f"No tool called {name}. That utility is not available.")
         if not isinstance(args, dict):
@@ -101,7 +113,7 @@ class Dispatcher:
         self._check_tool_rules(name, args)
 
     @staticmethod
-    def _check_tool_rules(name, args):
+    def _check_tool_rules(name: str, args: dict[str, int | str | float]) -> None:
         """Per-tool limits that the generic schema cannot express."""
         if name == "get_forecast" and not 1 <= args.get("days", 7) <= 16:
             raise ValueError("Forecast length must be between 1 and 16 days.")
@@ -119,7 +131,11 @@ class Dispatcher:
             if not re.fullmatch(r"[A-Za-z0-9^.=&' -]{1,40}", args["symbol"].strip()):
                 raise ValueError("Please provide a valid ticker symbol or company name.")
 
-    def dispatch(self, name, args=None):
+    def dispatch(
+        self,
+        name: str,
+        args: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         task = {
             "id": uuid.uuid4().hex,
             "agent": OWNERS.get(name, "unknown"),
@@ -194,7 +210,9 @@ class Dispatcher:
         self._remember(task)
         return task
 
-    def record_external(self, tool, ok, message, agent="planner"):
+    def record_external(
+        self, tool: str, ok: bool, message: str, agent: str = "planner"
+    ) -> dict[str, str | bool | int]:
         """Record a tool that runs outside the specialist lock (the planner runs other tools inside itself)."""
         task = {
             "id": uuid.uuid4().hex,
@@ -211,7 +229,7 @@ class Dispatcher:
         self._remember(task)
         return task
 
-    def human_file(self, session, text, turn):
+    def human_file(self, session: FileSession, text: str, turn: int) -> Any:
         """Only the human controller can preview and approve mutations."""
         if not self._lock.acquire(blocking=False):
             from julius.agents.file_agent import result
@@ -246,7 +264,7 @@ class Dispatcher:
         finally:
             self._lock.release()
 
-    def human_utilities(self, session, text, turn):
+    def human_utilities(self, session: UtilitySession, text: str, turn: int) -> Any:
         if not self._lock.acquire(blocking=False):
             from julius.brain.planning import output
 
@@ -290,7 +308,7 @@ class Dispatcher:
         finally:
             self._lock.release()
 
-    def dispatch_many(self, calls):
+    def dispatch_many(self, calls: list[Any]) -> list[dict[str, str | bool | float]]:
         """Run several (name, args) calls: concurrently when every one is parallel-safe, else one after another. Tasks keep call order."""
         if len(calls) > 1 and all(OWNERS.get(n) in PARALLEL_SAFE for n, _ in calls):
             from concurrent.futures import ThreadPoolExecutor
@@ -299,7 +317,7 @@ class Dispatcher:
                 return list(pool.map(lambda c: self.dispatch(*c), calls))
         return [self.dispatch(n, a) for n, a in calls]
 
-    def render(self, task):
+    def render(self, task: dict[str, Any]) -> str:
         if task["agent"] == "files" and task["data"]:
             import julius.agents.files as jf
 

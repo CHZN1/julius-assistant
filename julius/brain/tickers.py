@@ -10,7 +10,9 @@ Order: the built-in table (names, common spellings, and the symbols themselves) 
 The lookup is injectable (`search=`) so tests never touch the network; when the network fails the answer is "not found", never a guess."""
 
 import re
+from collections.abc import Callable
 from types import SimpleNamespace
+from typing import Any
 
 STOCKS = {
     "apple": "AAPL",
@@ -157,14 +159,14 @@ _NOISE = re.compile(
 )
 
 
-def normalize(raw):
+def normalize(raw: str) -> str:
     s = str(raw).lower().replace("’", "'").replace("'", "")
     s = re.sub(r"[^a-z0-9& ]+", " ", s)
     s = _NOISE.sub(" ", s)  # hyphens and punctuation are spaces: "Coca-Cola" = "coca cola"
     return " ".join(s.split())
 
 
-def _table():
+def _table() -> dict[str, str]:
     t = {normalize(k): v for k, v in STOCKS.items()}
     t.update({normalize(k): f"{v}-USD" for k, v in CRYPTO.items()})
     t.update({normalize(v): v for v in STOCKS.values()})  # "aapl" typed in lower case
@@ -176,7 +178,7 @@ TABLE = _table()
 TICKER_LIKE = re.compile(r"[A-Z0-9^.=-]{1,10}")
 
 
-def yahoo_search(query):
+def yahoo_search(query: str) -> list[Any]:
     """[{symbol, name, type}] from Yahoo's search; [] when the network or the answer is unusable."""
     try:
         import requests
@@ -200,7 +202,7 @@ def yahoo_search(query):
         return []
 
 
-def _pick(raw, found):
+def _pick(raw: str, found: list[dict[str, str] | Any]) -> tuple[Any, ...]:
     """One symbol when the lookup is clear, otherwise the (up to three) different companies it could be."""
     ok = [c for c in found if c["type"] in ("EQUITY", "ETF", "CRYPTOCURRENCY")]
     distinct, seen = [], set()
@@ -218,7 +220,7 @@ def _pick(raw, found):
     return None, distinct[:3]
 
 
-def resolve(raw, search=None):
+def resolve(raw: str, search: Callable | None = None) -> SimpleNamespace:
     """Resolution(symbol, how, ambiguous). symbol None with ambiguous [] means not found."""
     raw = str(raw or "").strip()
     n = normalize(raw)
@@ -235,6 +237,6 @@ def resolve(raw, search=None):
     return SimpleNamespace(symbol=None, how="lookup", ambiguous=many)
 
 
-def ambiguity_message(raw, candidates):
+def ambiguity_message(raw: str, candidates: list[dict[str, str]]) -> str:
     opts = " or ".join(f"{c['name'] or c['symbol']} ({c['symbol']})" for c in candidates)
     return f"AMBIGUOUS: '{raw}' could be {opts}. Ask the user which one he means. Do not pick one for him and do not state a price yet."

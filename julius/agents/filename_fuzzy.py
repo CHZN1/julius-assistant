@@ -5,12 +5,13 @@ the normal preview then names the real file and nothing happens without his yes.
 
 import difflib
 import re
+from typing import Any
 
 _VERBS = ("trash", "delete", "remove", "bin")
 _TOKEN = re.compile(r"[A-Za-z0-9_-]+\.[A-Za-z0-9]{1,8}\b")
 
 
-def _strip_verbs(word):
+def _strip_verbs(word: str) -> str:
     w = word.lower()
     changed = True
     while changed:
@@ -22,7 +23,7 @@ def _strip_verbs(word):
     return w
 
 
-def split(name):
+def split(name: str) -> tuple[str, str]:
     """(stem key, extension) with the verb glue and a plural 's' removed from the stem: 'TrashReports' -> 'report'."""
     name = _strip_verbs(name.strip().strip("."))
     stem, dot, ext = name.rpartition(".")
@@ -34,7 +35,9 @@ def split(name):
     return stem, ext.lower()
 
 
-def closest(pattern, spoken, names, cutoff=0.85):
+def closest(
+    pattern: str, spoken: str, names: list[str | Any], cutoff: float = 0.85
+) -> list[str | Any]:
     """Names from `names` that plausibly are what was meant. `pattern` is what the router extracted; `spoken` is the whole transcript (its other file-looking words are candidates too)."""
     wants = {split(pattern)} | {split(t) for t in _TOKEN.findall(spoken or "")}
     wants = {w for w in wants if w[0]}

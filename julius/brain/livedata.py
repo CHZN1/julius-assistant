@@ -10,6 +10,7 @@ time or amount is dropped before it reaches the speaker, and a single honest lin
 """
 
 import re
+from typing import Any
 
 LIVE_QUERY = re.compile(
     r"\b(?:scores?|final score|who (?:won|wins|is winning|is playing|plays|did .{0,30} beat)|did .{0,30} (?:win|lose)|results?|standings?|"
@@ -31,20 +32,22 @@ FIGURE = re.compile(
 UNGROUNDED_LINE = "I can't look that up right now, so I won't guess."
 
 
-def is_live_query(text):
+def is_live_query(text: str) -> bool:
     return bool(LIVE_QUERY.search(text or ""))
 
 
-def states_a_figure(sentence):
+def states_a_figure(sentence: str) -> bool:
     return bool(FIGURE.search(sentence or ""))
 
 
-def blocked(sentence, live_query, tool_result_this_turn):
+def blocked(sentence: str, live_query: bool, tool_result_this_turn: bool) -> bool:
     """Should this sentence be withheld? Only for live questions with nothing from a tool behind the answer yet."""
     return bool(live_query and not tool_result_this_turn and states_a_figure(sentence))
 
 
-def tool_result_this_turn(messages):
+def tool_result_this_turn(
+    messages: list[Any],
+) -> bool:
     """True when a tool result has come back since the user's latest message."""
     last_user = max((i for i, m in enumerate(messages) if m.get("role") == "user"), default=-1)
     return any(m.get("role") == "tool" for m in messages[last_user + 1 :])

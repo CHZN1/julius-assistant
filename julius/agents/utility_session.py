@@ -19,7 +19,7 @@ _COMMAND_START = r"(?:remind me|(?:set|start) (?:a )?timer|add (?:a )?task|cance
 
 
 class UtilitySession:
-    def __init__(self, planner, timezone_name="America/Los_Angeles", provider=None):
+    def __init__(self, planner, timezone_name="America/Los_Angeles", provider=None) -> None:
         self.planner = planner
         self.timezone_name = timezone_name
         self.pending = None

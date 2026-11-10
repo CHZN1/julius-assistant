@@ -1,6 +1,7 @@
 """Conservative routing for live requests, retaining tool context across follow-ups."""
 
 import re
+from typing import Any
 
 from julius import profile
 from julius.audio.listening import normalize_request
@@ -175,7 +176,7 @@ def _brain_request(low: str) -> bool:
     return sum(bool(re.search(x, low)) for x in _TOPICS) > 1  # two different asks in one request
 
 
-def _location(t: str):
+def _location(t: str) -> str | object | None:
     """The single place named in the request, None, or _DECLINE when it is not one place."""
     loc = re.search(r"\bin\s+(.+)$", t, re.I) or re.search(r"\bfor\s+(.+)$", t, re.I)
     location = loc.group(1).strip() if loc else None
@@ -197,7 +198,7 @@ def _location(t: str):
     return location
 
 
-def _pattern_tool(t: str):
+def _pattern_tool(t: str) -> tuple[str, dict[str, str | float]] | tuple[str, dict[str, str]]:
     for pattern, tool, build in _PATTERN_TOOLS:
         m = re.fullmatch(pattern, t, re.I)
         if m:
@@ -205,7 +206,7 @@ def _pattern_tool(t: str):
     return None
 
 
-def _calculator_or_bitcoin(low: str):
+def _calculator_or_bitcoin(low: str) -> tuple[str, dict[str, str]]:
     expression = arithmetic_expression(low)
     if expression is not None:
         return "calculate", {"expression": expression}
@@ -215,7 +216,7 @@ def _calculator_or_bitcoin(low: str):
 
 
 class LiveIntentRouter:
-    def __init__(self):
+    def __init__(self) -> None:
         self.last = None
         self.relative_only = False
 
@@ -247,7 +248,14 @@ class LiveIntentRouter:
         self.last = None
         return None
 
-    def _clock(self, low: str, location: str | None):
+    def _clock(
+        self, low: str, location: str | None
+    ) -> (
+        tuple[str, dict[str, int]]
+        | tuple[str, dict[Any, Any]]
+        | tuple[str, dict[str, str]]
+        | object
+    ):
         """Time and date questions (today, tomorrow or yesterday only)."""
         if re.search(
             r"\bwhat time (?:does|do|will|did|are|is the|is that|is it (?:on|at|for))\b", low
@@ -266,7 +274,9 @@ class LiveIntentRouter:
                 return "get_datetime", {"offset_days": 1 if word == "tomorrow" else -1}
         return "get_datetime", {"location": location} if location else {}
 
-    def _weather(self, low: str, location: str | None):
+    def _weather(
+        self, low: str, location: str | None
+    ) -> tuple[str, dict[str, str | int]] | tuple[str, dict[str, str]] | object:
         if not re.search(r"\b(?:weather|forecast)\b", low) or re.match(
             r"^(?:explain|why|teach|what is (?:weather|a forecast)|i |we )", low
         ):
@@ -279,7 +289,9 @@ class LiveIntentRouter:
             args["days"] = 2 if "tomorrow" in low else 7
         return fn, args
 
-    def _follow_up(self, t: str, t_and: str, low: str, location: str | None):
+    def _follow_up(
+        self, t: str, t_and: str, low: str, location: str | None
+    ) -> tuple[str, dict[str, str | int]] | tuple[str, dict[str, str]]:
         """Short follow-ups that reuse the previous lookup ("and tomorrow?", "and in Paris?")."""
         fn, args, _out = self.last
         for step in (self._what_about, self._place_swap, self._other_symbol, self._tomorrow):
@@ -294,7 +306,9 @@ class LiveIntentRouter:
         return None
 
     @staticmethod
-    def _what_about(fn, args, t, _t_and, location):
+    def _what_about(
+        fn: str, args: dict[str, str | int], t: str, _t_and: str, location: str | None
+    ) -> tuple[str, dict[str, str | int]] | tuple[str, dict[str, str]]:
         about = re.sub(
             r"^and\s+(?=(?:what|how) about\b)", "", t, flags=re.I
         )  # "And what about tomorrow?"
@@ -314,7 +328,9 @@ class LiveIntentRouter:
         return None
 
     @staticmethod
-    def _place_swap(fn, args, t, _t_and, _location):
+    def _place_swap(
+        fn: str, args: dict[str, str | int], t: str, _t_and: str, _location: str | None
+    ) -> tuple[str, dict[str, str]] | tuple[str, dict[str, str | int]]:
         """ "and in Shelbyville?" / "and for Tokyo?" repeat the last lookup somewhere else."""
         place = re.fullmatch(r"(?:and )?(?:what about |how about )?(?:in|for) (.+)", t, re.I)
         if place and fn in ("get_datetime", "get_weather", "get_forecast"):
@@ -322,7 +338,9 @@ class LiveIntentRouter:
         return None
 
     @staticmethod
-    def _other_symbol(fn, _args, _t, t_and, _location):
+    def _other_symbol(
+        fn: str, _args: dict[str, str], _t: str, t_and: str, _location: str | None
+    ) -> tuple[str, dict[str, str]]:
         """ "and ETH?" / "what about Tesla?" repeats the last price lookup for another symbol."""
         other = re.fullmatch(
             r"(?:and |what about |how about )(?:and )?(?:for )?([A-Za-z^.=-]{1,12})", t_and, re.I
@@ -338,7 +356,9 @@ class LiveIntentRouter:
         return None
 
     @staticmethod
-    def _tomorrow(fn, args, _t, t_and, location):
+    def _tomorrow(
+        fn: str, args: dict[str, str], _t: str, t_and: str, location: str | None
+    ) -> tuple[str, dict[str, str | int]]:
         """ "and tomorrow" / "tomorrow?" after a weather answer."""
         if fn in ("get_weather", "get_forecast") and re.fullmatch(
             r"(?:and |what about |how about )?tomorrow(?: in .+)?", t_and, re.I
@@ -349,10 +369,15 @@ class LiveIntentRouter:
             }
         return None
 
-    def record(self, fn, args, out):
+    def record(self, fn: str, args: dict[str, str | int | float], out: str) -> None:
         self.last = (fn, dict(args), out)
 
-    def spoken_result(self, fn, out, args=None):
+    def spoken_result(
+        self,
+        fn: str,
+        out: str,
+        args: dict[str, Any] | None = None,
+    ) -> str:
         if fn == "get_datetime" and self.relative_only and " — " in out:
             return out.split(" — ", 1)[1].capitalize()
         ready = speakable(

@@ -154,7 +154,7 @@ def setup_talkover(s: Session) -> None:
     s.talkover = TalkOver()
     recorder_tap = getattr(s.speech_player, "tap", None)
 
-    def tap_both(audio, rate):
+    def tap_both(audio, rate) -> None:
         s.talkover.out(audio, rate)
         if recorder_tap is not None:
             recorder_tap(audio, rate)
@@ -196,7 +196,7 @@ def setup_events_feed(s: Session) -> None:
             s.ui_level_tap = events.LevelTap()
             previous = getattr(s.speech_player, "tap", None)
 
-            def tap_level(audio, rate):
+            def tap_level(audio, rate) -> None:
                 s.ui_level_tap.out(audio, rate)
                 if previous is not None:
                     previous(audio, rate)

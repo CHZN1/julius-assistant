@@ -9,8 +9,10 @@ Thinking tokens are billed as output and are already included in usage.output_to
 import json
 import threading
 import time
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 RATES = {
     "haiku": {
@@ -26,12 +28,12 @@ RATES = {
 }
 
 
-def _n(usage, name):
+def _n(usage: SimpleNamespace | dict[str, int], name: str) -> int:
     value = usage.get(name) if isinstance(usage, dict) else getattr(usage, name, 0)
     return int(value or 0)
 
 
-def cost_of(tier, usage):
+def cost_of(tier: str, usage: SimpleNamespace | dict[str, int]) -> float:
     """USD for one response's usage (input, output, cache-write and cache-read tokens)."""
     card = RATES[tier]
     fresh, out = _n(usage, "input_tokens"), _n(usage, "output_tokens")
@@ -49,7 +51,13 @@ SEPARATE_TIERS = {
 
 
 class CostTracker:
-    def __init__(self, path, cap_usd, clock=time.time, offline_multiple=2.0):
+    def __init__(
+        self,
+        path: Path,
+        cap_usd: float,
+        clock: Callable = time.time,
+        offline_multiple: float = 2.0,
+    ) -> None:
         self.path, self.cap_usd, self._clock = Path(path), float(cap_usd), clock
         self.offline_multiple = float(offline_multiple)
         self._lock = threading.Lock()
@@ -58,10 +66,10 @@ class CostTracker:
         self._turn_costs = {}
         self._load_today()
 
-    def _today(self):
+    def _today(self) -> str:
         return datetime.fromtimestamp(self._clock()).strftime("%Y-%m-%d")
 
-    def _load_today(self):
+    def _load_today(self) -> None:
         self._day, self._total, self._by_tier = self._today(), 0.0, {}
         if self.path.is_file():
             for line in self.path.read_text().splitlines():
@@ -74,17 +82,19 @@ class CostTracker:
                         self._total += row["usd"]
                     self._by_tier[row["tier"]] = self._by_tier.get(row["tier"], 0.0) + row["usd"]
 
-    def _roll(self):
+    def _roll(self) -> None:
         if self._today() != self._day:
             self._load_today()
 
-    def begin_turn(self):
+    def begin_turn(self) -> int:
         with self._lock:
             self.turn += 1
             self._turn_costs = {}
             return self.turn
 
-    def record(self, tier, usage, note=""):
+    def record(
+        self, tier: str, usage: SimpleNamespace, note: str = ""
+    ) -> dict[str, str | float | int]:
         """Log one API response. Returns the log row."""
         usd = cost_of(tier, usage)
         with self._lock:
@@ -110,7 +120,7 @@ class CostTracker:
             self._turn_costs[tier] = self._turn_costs.get(tier, 0.0) + usd
             return row
 
-    def record_usd(self, tier, usd, note=""):
+    def record_usd(self, tier: str, usd: float, note: str = "") -> dict[str, str | float | int]:
         """Log a cost already priced elsewhere (the coding agent reports its own dollars)."""
         with self._lock:
             self._roll()
@@ -135,34 +145,34 @@ class CostTracker:
             self._by_tier[tier] = self._by_tier.get(tier, 0.0) + float(usd)
             return row
 
-    def code_today(self):
+    def code_today(self) -> int | float:
         with self._lock:
             self._roll()
             return sum(v for k, v in self._by_tier.items() if k in SEPARATE_TIERS)
 
-    def today_total(self):
+    def today_total(self) -> float:
         with self._lock:
             self._roll()
             return self._total
 
-    def today_by_tier(self):
+    def today_by_tier(self) -> dict[str, float]:
         with self._lock:
             self._roll()
             return dict(self._by_tier)
 
-    def turn_costs(self):
+    def turn_costs(self) -> dict[str, float]:
         with self._lock:
             return dict(self._turn_costs)
 
-    def cap_reached(self):
+    def cap_reached(self) -> bool:
         """At the cap: Haiku only (no planner)."""
         return self.today_total() >= self.cap_usd
 
-    def offline_required(self):
+    def offline_required(self) -> bool:
         """At offline_multiple times the cap: stop calling the API altogether and use the offline model."""
         return self.today_total() >= self.cap_usd * self.offline_multiple
 
-    def status_line(self):
+    def status_line(self) -> str:
         costs = self.turn_costs()
         parts = " ".join(f"{tier} ${usd:.5f}" for tier, usd in costs.items()) or "no API calls"
         state = (

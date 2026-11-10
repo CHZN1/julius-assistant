@@ -11,6 +11,8 @@
 
 import re
 import time
+from collections.abc import Callable
+from typing import Any
 
 from julius.brain import confirm
 
@@ -23,7 +25,11 @@ RISKY = re.compile(
 )
 
 
-def is_shaky(conf, logprob=LOGPROB, no_speech=NO_SPEECH):
+def is_shaky(
+    conf: dict[str, Any] | None,
+    logprob: float = LOGPROB,
+    no_speech: float = NO_SPEECH,
+) -> bool:
     c = conf or {}
     if c.get("rejected"):
         return False
@@ -32,14 +38,19 @@ def is_shaky(conf, logprob=LOGPROB, no_speech=NO_SPEECH):
     return bool((lp and min(lp) < logprob) or (ns is not None and ns > no_speech))
 
 
-def is_risky(text):
+def is_risky(text: str) -> bool:
     return bool(RISKY.search(text or ""))
 
 
 class LowConfidenceGate:
     def __init__(
-        self, logprob=LOGPROB, no_speech=NO_SPEECH, expires=EXPIRES, clock=time.time, enabled=True
-    ):
+        self,
+        logprob: float = LOGPROB,
+        no_speech: float = NO_SPEECH,
+        expires: int | float = EXPIRES,
+        clock: Callable = time.time,
+        enabled: bool = True,
+    ) -> None:
         self.logprob, self.no_speech, self.expires, self.clock, self.enabled = (
             logprob,
             no_speech,
@@ -51,7 +62,9 @@ class LowConfidenceGate:
         self._at = 0.0
         self.asked = 0
 
-    def step(self, text, conf, voice=True):
+    def step(
+        self, text: str, conf: dict[str, list[float] | float], voice: bool = True
+    ) -> tuple[str, str, None] | tuple[str, str, str]:
         if self.pending is not None and self.clock() - self._at > self.expires:
             self.pending = None
         if self.pending is not None:

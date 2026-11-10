@@ -1,3 +1,5 @@
+"""Unit tests for apple."""
+
 import json
 import subprocess
 import tempfile

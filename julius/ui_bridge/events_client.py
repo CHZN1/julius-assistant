@@ -12,7 +12,7 @@ import struct
 import sys
 
 
-def connect(port=8765, host="127.0.0.1"):
+def connect(port: int = 8765, host: str = "127.0.0.1") -> tuple[socket.socket, bytes]:
     s = socket.create_connection((host, port), timeout=5)
     key = base64.b64encode(os.urandom(16)).decode()
     s.sendall(
@@ -63,7 +63,7 @@ def events(sock, rest=b""):
             yield json.loads(payload.decode())
 
 
-def main(argv):
+def main(argv) -> int:
     port = next((int(a) for a in argv if a.isdigit()), 8765)
     every_level = "--levels" in argv
     sock, rest = connect(port)

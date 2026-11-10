@@ -1,3 +1,5 @@
+"""Unit tests for wake."""
+
 import json
 import tempfile
 import unittest

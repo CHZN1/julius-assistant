@@ -7,7 +7,9 @@ import os
 import queue
 import subprocess
 import threading
+from collections.abc import Callable
 from pathlib import Path
+from unittest.mock import Mock
 
 from julius.paths import REPO_ROOT
 
@@ -18,7 +20,9 @@ BINARY = Path(
 )
 
 
-def build(source=SOURCE, binary=BINARY, runner=subprocess.run):
+def build(
+    source: Path = SOURCE, binary: Path = BINARY, runner: Mock | Callable = subprocess.run
+) -> Path:
     """Compile the helper when missing or older than its source. Returns the binary path; raises with the compiler output if it cannot."""
     if binary.exists() and binary.stat().st_mtime >= source.stat().st_mtime:
         return binary
@@ -34,10 +38,10 @@ def build(source=SOURCE, binary=BINARY, runner=subprocess.run):
 
 
 class Hotkey:
-    def __init__(self, proc):
+    def __init__(self, proc: subprocess.Popen) -> None:
         self.proc = proc
 
-    def stop(self):
+    def stop(self) -> None:
         with contextlib.suppress(Exception):
             self.proc.stdin.close()
         with contextlib.suppress(Exception):
@@ -45,8 +49,13 @@ class Hotkey:
 
 
 def start(
-    stop, combo="<ctrl>+<alt>+s", say=print, popen=subprocess.Popen, binary=None, timeout=5.0
-):
+    stop: Callable,
+    combo: str = "<ctrl>+<alt>+s",
+    say: Callable = print,
+    popen: Callable = subprocess.Popen,
+    binary: str | None = None,
+    timeout: float = 5.0,
+) -> Hotkey:
     """Register `combo` globally; `stop()` is called on a worker thread for each press. Returns a handle with .stop(), or None when it cannot start."""
     try:
         proc = popen(
@@ -59,7 +68,7 @@ def start(
         )
         first = queue.Queue()
 
-        def read():
+        def read() -> None:
             for line in proc.stdout:
                 line = line.strip()
                 if line.startswith("fire"):

@@ -18,17 +18,17 @@ _NUMBER = r"-?\d[\d,]*(?:\.\d+)?"
 _PERCENT_OF = re.compile(rf"({_NUMBER})\s*(?:%|per\s?cent)\s+of\s+({_NUMBER}|\([^()]*\))", re.I)
 
 
-def normalize_percent(expression):
+def normalize_percent(expression: str) -> str:
     """Rewrite "X% of Y" / "X percent of Y" as (X/100)*(Y); a bare "%" stays the modulo operator."""
 
-    def rewrite(match):
+    def rewrite(match) -> str:
         x, y = match.group(1).replace(",", ""), match.group(2).replace(",", "")
         return f"({x}/100)*({y})"
 
     return _PERCENT_OF.sub(rewrite, expression)
 
 
-def evaluate(expression):
+def evaluate(expression: str) -> int | float:
     if not isinstance(expression, str) or len(expression) > 512:
         raise ValueError("Use a math expression of at most 512 characters.")
     tree = ast.parse(normalize_percent(expression).strip(), mode="eval")

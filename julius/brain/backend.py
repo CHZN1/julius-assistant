@@ -224,7 +224,7 @@ def _offline_chat(messages, tools, stream, options):
     )
 
 
-def release_offline():
+def release_offline() -> None:
     """Unload the offline model (called when the cloud answers again and on shutdown)."""
     global _OFFLINE_LOADED
     if _OFFLINE_LOADED:
@@ -334,7 +334,7 @@ def llm_chat(
     return SimpleNamespace(message=SimpleNamespace(content=content, tool_calls=calls))
 
 
-def prepare_backend():
+def prepare_backend() -> None:
     """Warm native imports/kernels before readiness, then release all weights."""
     if LLM_BACKEND != "mlx":
         return
@@ -384,7 +384,7 @@ def release_metrics():
     return dict(_RELEASE_METRICS)
 
 
-def close_backend():
+def close_backend() -> None:
     """Release model weights and caches before another model phase starts."""
     global _BACKEND_USED, _MLX_MODEL, _MLX_TOKENIZER, _PROMPT_CACHE, _ACTIVE_OLLAMA
     if LLM_BACKEND == "cloud":

@@ -1,16 +1,18 @@
 """Selectable local speech engines, loaded only when selected."""
 
 import os
+from collections.abc import Iterator
 from pathlib import Path
 
 import numpy as np
+from numpy import ndarray
 
 from julius.audio.cancellation import check_cancel
 from julius.paths import REPO_ROOT
 
 
 class SpeechEngine:
-    def __init__(self):
+    def __init__(self) -> None:
         self.backend = os.environ.get("JULIUS_TTS", "kokoro")
         if self.backend == "kokoro":
             from kokoro import KPipeline
@@ -47,7 +49,7 @@ class SpeechEngine:
         else:
             raise ValueError(f"Unknown JULIUS_TTS: {self.backend}")
 
-    def _start_worker(self):
+    def _start_worker(self) -> None:
         import json
         import subprocess
 
@@ -75,7 +77,7 @@ class SpeechEngine:
             raise RuntimeError("Qwen speech worker failed to start")
         self.worker_metrics = {}
 
-    def suspend(self):
+    def suspend(self) -> None:
         """Release the isolated voice weights before loading the reasoning model.
 
         With JULIUS_KEEP_VOICE=1 (cloud brain: nothing else needs the RAM) the voice is never unloaded."""
@@ -117,7 +119,7 @@ class SpeechEngine:
             self.close()
             self.worker = None
 
-    def synthesize(self, text, speed=1.05):
+    def synthesize(self, text: str, speed: float = 1.05) -> Iterator[tuple[ndarray, int]]:
         """Yield (float32 mono audio, sample rate) chunks for the text from the selected engine."""
         check_cancel(getattr(self, "cancel_event", None))
         if self.backend == "kokoro":
@@ -128,7 +130,7 @@ class SpeechEngine:
         else:
             yield from self._synthesize_in_process(text)
 
-    def _synthesize_in_worker(self, text):
+    def _synthesize_in_worker(self, text: str) -> Iterator[tuple[ndarray, int]]:
         if self.worker is None or self.worker.poll() is not None:
             self._start_worker()
         import json
@@ -156,7 +158,7 @@ class SpeechEngine:
         self.worker_metrics = result
         yield np.load(result["path"], allow_pickle=False), result["sample_rate"]
 
-    def _stream_mlx_chunks(self):
+    def _stream_mlx_chunks(self) -> Iterator[tuple[ndarray, int]]:
         """Read the MLX worker's chunk lines until it says done; a partial read resets the worker."""
         import json
         import time
@@ -194,7 +196,7 @@ class SpeechEngine:
             self._stream_active = False
 
     @staticmethod
-    def _load_chunk(result):
+    def _load_chunk(result: dict[str, bool | int | str]) -> ndarray:
         if not result.get("chunk"):
             raise RuntimeError("Invalid MLX worker response")
         audio = np.load(result["path"], allow_pickle=False)
@@ -202,7 +204,7 @@ class SpeechEngine:
             raise FloatingPointError("Invalid MLX worker audio")
         return audio
 
-    def _synthesize_in_process(self, text):
+    def _synthesize_in_process(self, text: str) -> Iterator[tuple[ndarray, int]]:
         import torch
 
         from julius.audio.voice_identity import delivery_mode, numerical_failure
@@ -231,7 +233,7 @@ class SpeechEngine:
             audio, sr = self._generate_qwen(text)
         yield audio, sr
 
-    def _load_qwen(self, dtype):
+    def _load_qwen(self, dtype) -> None:
         import torch
         from qwen_tts import Qwen3TTSModel
 
@@ -272,7 +274,7 @@ class SpeechEngine:
             for mode, (path, text) in references.items()
         }
 
-    def _generate_qwen(self, text):
+    def _generate_qwen(self, text: str) -> tuple[ndarray, int]:
         import torch
 
         from julius.audio.voice_identity import speech_chunks
@@ -326,7 +328,7 @@ class SpeechEngine:
             raise ValueError("No speech text")
         return np.concatenate(parts), sr
 
-    def _abandon_stream(self):
+    def _abandon_stream(self) -> None:
         """The consumer stopped reading mid-reply (the user spoke over Julius, or the stop hotkey). The worker is still generating and will keep sending chunk lines; if they
         were left in the pipe the NEXT reply would read them as its own, and its cleanup deletes their files ('No such file ... 3.npy', every later reply silent: seen
         11-07). Ask the worker to stop (SIGUSR1), read and discard everything up to its 'done', and keep it loaded. Anything unexpected: restart it."""
@@ -365,7 +367,7 @@ class SpeechEngine:
                 pass
             self.worker = None  # synthesize() starts a fresh one
 
-    def _worker_line(self, timeout):
+    def _worker_line(self, timeout: int) -> str:
         import select
         import time
 
@@ -392,7 +394,7 @@ class SpeechEngine:
         line, self._worker_buffer = self._worker_buffer.split(b"\n", 1)
         return line.decode("utf-8")
 
-    def close(self):
+    def close(self) -> None:
         if getattr(self, "worker", None) is not None and self.worker.poll() is None:
             try:
                 self.worker.stdin.write('{"op":"close"}\n')

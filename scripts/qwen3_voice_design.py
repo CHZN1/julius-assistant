@@ -1,3 +1,5 @@
+"""Design a Qwen3 voice from a text description and render samples."""
+
 import time
 from pathlib import Path
 

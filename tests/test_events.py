@@ -1,3 +1,5 @@
+"""Unit tests for events."""
+
 import socket
 import time
 import unittest

@@ -9,7 +9,9 @@ File names and paths are untrusted text: they are cleaned (no control characters
 
 import re
 import time
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 TTL = 10 * 60
 MODEL_TURNS = 4  # the selection stays in the model's view for this many turns after the drop (or until it expires)
@@ -31,14 +33,14 @@ class DropNotice(str):
     drop_notice = True
 
 
-def clean_name(s, limit=MAX_NAME):
+def clean_name(s: str, limit: int = MAX_NAME) -> str:
     s = re.sub(r"[\x00-\x1f\x7f  ]", " ", str(s))
     s = re.sub(r"[\[\]{}<>`]", "", s)
     s = " ".join(s.split())
     return s[: limit - 1] + "…" if len(s) > limit else s
 
 
-def _human(n):
+def _human(n: int) -> str | None:
     for unit in ("B", "KB", "MB", "GB"):
         if n < 1024 or unit == "GB":
             return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
@@ -48,19 +50,25 @@ def _human(n):
 class DropStage:
     """resolve(path) -> Path or raises an exception with .code (the file agent's resolve); mode(path) -> 'write'/'read'/None; both come from the file agent, so the rules are exactly its rules."""
 
-    def __init__(self, resolve, mode=None, clock=time.time, home=None):
+    def __init__(
+        self,
+        resolve: Callable,
+        mode: Callable | None = None,
+        clock: Any | Callable = time.time,
+        home: Path | None = None,
+    ) -> None:
         self.resolve, self.mode, self.clock = resolve, mode or (lambda p: None), clock
         self.home = Path(home or Path.home())
         self._pending = None
         self._turns_left = 0
 
-    def _shown(self, p):
+    def _shown(self, p: str) -> str:
         try:
             return "~/" + str(Path(p).relative_to(self.home))
         except ValueError:
             return str(p)
 
-    def stage(self, paths):
+    def stage(self, paths: list[str]) -> dict[str, Any]:
         accepted, rejected, seen = [], [], set()
         for raw in paths:
             name = clean_name(Path(str(raw)).name or str(raw))
@@ -95,18 +103,23 @@ class DropStage:
             "expires_in": TTL if accepted else 0,
         }
 
-    def pending(self):
+    def pending(
+        self,
+    ) -> Any:
         if self._pending and self.clock() >= self._pending["expires"]:
             self._pending = None
             self._turns_left = 0
         return self._pending
 
-    def clear(self):
+    def clear(self) -> None:
         self._pending = None
         self._turns_left = 0
 
     @staticmethod
-    def notice(accepted, rejected):
+    def notice(
+        accepted: list[Any],
+        rejected: list[dict[str, str] | Any],
+    ) -> DropNotice:
         """The sentence Julius says. Names are cleaned already; he never reads file contents."""
         names = [a["name"] for a in accepted]
         if not names:
@@ -127,7 +140,7 @@ class DropStage:
             f"Got {what}.{skipped} What should I do with {'it' if len(names) == 1 else 'them'}?"
         )
 
-    def model_block(self):
+    def model_block(self) -> str:
         """Extra context for the model while a selection is pending ('' otherwise). Counts a turn each time it is handed out."""
         pend = self.pending()
         if not pend or self._turns_left <= 0:

@@ -3,17 +3,19 @@
 import math
 import re
 
+from numpy import ndarray
+
 
 class CaptureClock:
     """Detect breaks in captured audio, independent of when it is consumed."""
 
-    def __init__(self, max_gap_seconds=2.0):
+    def __init__(self, max_gap_seconds: int | float = 2.0) -> None:
         if not math.isfinite(max_gap_seconds) or max_gap_seconds <= 0:
             raise ValueError("Capture gap must be positive and finite")
         self.max_gap_seconds = max_gap_seconds
         self.previous = None
 
-    def discontinuous(self, captured_at):
+    def discontinuous(self, captured_at: int | float) -> bool:
         if not math.isfinite(captured_at):
             raise ValueError("Capture timestamp must be finite")
         previous = self.previous
@@ -26,13 +28,13 @@ class CaptureClock:
 WAKE_PREFIX = re.compile(r"^\s*(?:(?:hey|okay|ok)[\s,]+)?(?:julius|juliet)\b[\s,.:!?-]*", re.I)
 
 
-def has_wake(text):
+def has_wake(text: str) -> bool:
     return bool(
         WAKE_PREFIX.match(text) or WAKE_GLUED.match(text)
     )  # "JuliusTrashReport." is a wake plus a request (two real wakes were rejected on 11-06)
 
 
-def strip_wake(text):
+def strip_wake(text: str) -> str:
     if WAKE_GLUED.match(text) and not WAKE_PREFIX.match(text):
         return WAKE_GLUED.sub("", text, count=1).strip()
     return WAKE_PREFIX.sub("", text, count=1).strip()
@@ -49,7 +51,7 @@ FILLER_KEEP_AND = re.compile(
 TRAILING = re.compile(r"[\s,]+(?:again|please|for me|real quick|quickly|thanks|thank you)$", re.I)
 
 
-def normalize_request(text, keep_and=False):
+def normalize_request(text: str, keep_and: bool = False) -> str:
     """Drop leading courtesy/filler words and a wake word, and trailing "again/please/for me/real quick", so routing sees the request.
 
     keep_and=True leaves a leading "and" in place for follow-ups that need it ("and ETH?").
@@ -75,7 +77,7 @@ WAKE_GLUED = re.compile(
 )  # Whisper sometimes writes "Julius trash report.txt" as "JuliusTrashReport.txt"
 
 
-def strip_leading_wake(text):
+def strip_leading_wake(text: str) -> str:
     """Drop a leading wake word from a request spoken while already awake; a bare wake word is left as is."""
     if WAKE_GLUED.match(text):
         return WAKE_GLUED.sub("", text, count=1).strip()
@@ -135,7 +137,7 @@ _STUBS = {
 }
 
 
-def dangling(text):
+def dangling(text: str) -> bool:
     """True when the transcript stops mid-sentence ("what time is it in", "tell me"): the rest is probably coming after a pause."""
     t = re.sub(r"[^\w\s']", "", (text or "").lower()).strip()
     words = t.split()
@@ -148,7 +150,7 @@ def dangling(text):
     return words[-1] in _DANGLE_SHORT and len(words) <= 3
 
 
-def incomplete_fragment(text):
+def incomplete_fragment(text: str) -> bool:
     return re.sub(r"[^\w\s]", "", text.lower()).strip() in {
         "you",
         "the",
@@ -170,7 +172,7 @@ _TAIL_COURTESY = re.compile(
 )
 
 
-def control_core(text):
+def control_core(text: str) -> str:
     """The command with courtesy words removed: "Thanks, go to sleep now" -> "go to sleep"."""
     command = re.sub(r"[^\w\s]", " ", strip_wake(text).lower())
     command = re.sub(r"\s+", " ", command).strip()
@@ -203,12 +205,12 @@ _STOP_LEAD = re.compile(
 )
 
 
-def stop_only(text):
+def stop_only(text: str) -> bool:
     """ "Stop." / "Be quiet." spoken over Julius: he has already stopped, so there is nothing to answer."""
     return control_core(text) in _STOP_ONLY
 
 
-def drop_stop_lead(text):
+def drop_stop_lead(text: str) -> str:
     """ "Stop. What's the weather in Springfield?" -> "What's the weather in Springfield?" """
     return _STOP_LEAD.sub("", text.strip(), count=1) if _STOP_LEAD.match(text.strip()) else text
 
@@ -221,7 +223,7 @@ def quiet_command(text):
     return control_core(text) in QUIET_COMMANDS
 
 
-def listening_control(text):
+def listening_control(text: str) -> str | None:
     command = control_core(text)
     if command in {
         "sleep",
@@ -241,7 +243,7 @@ def listening_control(text):
     return None
 
 
-def has_voice_activity(audio, sample_rate=16000, threshold=0.0045):
+def has_voice_activity(audio: ndarray, sample_rate: int = 16000, threshold: float = 0.0045) -> bool:
     """Require sustained signal before ASR; its silence confidence is unreliable."""
     import numpy as np
 

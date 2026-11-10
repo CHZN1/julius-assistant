@@ -6,6 +6,7 @@ so the turn needs no second model call; it returns None when it cannot parse the
 """
 
 import re
+from typing import Any
 
 # Prompt text shared by the cloud front end: replies are spoken, and tools are only for live data or exact math.
 SPOKEN_STYLE_PROMPT = (
@@ -120,7 +121,7 @@ ACMECORP = (
 )  # only for installs that list AcmeCorp in [profile] vocabulary
 
 
-def fix_transcript(text):
+def fix_transcript(text: str) -> str:
     """Correct known product names and acronyms in recognised text (AcmeCorp, NHL, NFL)."""
     fixes = TRANSCRIPT_FIXES
     if "acmecorp" in text.lower().replace(" ", "").replace("-", "") or ACMECORP[0].search(text):
@@ -136,7 +137,7 @@ def fix_transcript(text):
     return text
 
 
-def number_words(n):
+def number_words(n: int) -> str:
     """0-99 in words (used for clock times)."""
     if n < 20:
         return ONES[n]
@@ -144,7 +145,7 @@ def number_words(n):
     return TENS[tens] + (f"-{ONES[ones]}" if ones else "")
 
 
-def _clock(match):
+def _clock(match: re.Match) -> str:
     hour, minute, suffix = int(match.group(1)), int(match.group(2)), (match.group(5) or "")
     if hour > 23 or minute > 59:
         return match.group(0)
@@ -157,7 +158,7 @@ def _clock(match):
     )
 
 
-def _money(match):
+def _money(match: re.Match) -> str:
     whole, cents, scale = (
         match.group(1).replace(",", ""),
         match.group(2),
@@ -212,7 +213,7 @@ ORDINALS = [
 ]
 
 
-def _date_iso(match):
+def _date_iso(match: re.Match) -> str:
     year, month, day = int(match.group(1)), int(match.group(2)), int(match.group(3))
     return (
         f"{MONTHS[month - 1]} {ORDINALS[day]}, {year}"
@@ -221,7 +222,7 @@ def _date_iso(match):
     )
 
 
-def _date_us(match):
+def _date_us(match: re.Match) -> str:
     month, day, year = int(match.group(1)), int(match.group(2)), int(match.group(3))
     return (
         f"{MONTHS[month - 1]} {ORDINALS[day]}, {year}"
@@ -237,12 +238,12 @@ MONTH_DAY = re.compile(
 )
 
 
-def _month_day(match):
+def _month_day(match: re.Match) -> str:
     day = int(match.group(2))
     return f"{match.group(1)} {ORDINALS[day]}" if 1 <= day <= 31 else match.group(0)
 
 
-def normalize_for_speech(text):
+def normalize_for_speech(text: str) -> str:
     t = text or ""
     # markdown, URLs, emoji
     t = re.sub(r"```.*?```", " ", t, flags=re.S)
@@ -286,7 +287,7 @@ def normalize_for_speech(text):
 
 
 # ---------------- ready-to-speak sentences for simple tools ----------------
-def _weather(out):
+def _weather(out: str) -> str | None:
     m = re.fullmatch(
         r"(?P<place>[^:\n]+): (?P<t>-?\d+)°F, (?P<cond>[^,\n]+), feels like (?P<fl>-?\d+)\. High (?P<hi>-?\d+), low (?P<lo>-?\d+)\.",
         out.strip(),
@@ -298,7 +299,7 @@ def _weather(out):
     return f"It's {g['t']} degrees and {g['cond']} in {g['place']}{feels}, with a high of {g['hi']} and a low of {g['lo']}."
 
 
-def _forecast(out, args):
+def _forecast(out: str, args: dict[str, str | int]) -> str:
     lines = out.strip().splitlines()
     head = re.fullmatch(r"(.+) forecast:", lines[0]) if lines else None
     days = []
@@ -311,7 +312,7 @@ def _forecast(out, args):
         return None
     place = head.group(1)
 
-    def one(d, lead):
+    def one(d, lead) -> str:
         day, hi, lo, cond, rain = d
         chance = "no rain expected" if int(rain) == 0 else f"{rain} percent chance of rain"
         return f"{lead}: high of {hi}, low of {lo}, {cond}, {chance}."
@@ -326,7 +327,7 @@ def _forecast(out, args):
     return f"{place} forecast. " + " ".join(one(d, DAYS.get(d[0], d[0])) for d in days[:3])
 
 
-def _datetime(out):
+def _datetime(out: str) -> str | None:
     m = re.fullmatch(
         r"(?:(?P<place>[^:\n]+): )?(?P<when>[^()\n]+?) \((?P<tz>[A-Za-z_/+\-0-9]+)\)(?: — (?P<rel>.+))?\.?",
         out.strip(),
@@ -338,13 +339,13 @@ def _datetime(out):
     return f"It's {when}{where}" + (f", {rel.rstrip('.')}" if rel else "") + "."
 
 
-def _calculate(out):
+def _calculate(out: str) -> str:
     if " = " not in out:
         return None
     return "That's " + out.split(" = ", 1)[1].strip() + "."
 
 
-def _quote(out, exact=False):
+def _quote(out: str, exact: bool = False) -> str | None:
     m = re.match(
         r"(?P<name>.+?) \((?P<sym>[^)]+)\): (?P<price>[\d,]+(?:\.\d+)?) (?P<cur>[A-Za-z]+)(?:, (?P<dir>up|down) (?P<chg>[\d,.]+) \((?P<pct>[\d.]+)%\) versus previous close)?",
         out.strip(),
@@ -369,7 +370,12 @@ def _quote(out, exact=False):
     return f"{name} is {price}{move}. Quotes may be delayed."
 
 
-def speakable(fn, out, args=None, exact=False):
+def speakable(
+    fn: str,
+    out: str,
+    args: dict[str, Any] | None = None,
+    exact: bool = False,
+) -> str | None:
     """A ready-to-speak sentence for weather, forecast, time, calculator and price results; None when not applicable."""
     try:
         if fn == "get_weather":

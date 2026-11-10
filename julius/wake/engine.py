@@ -29,7 +29,7 @@ class WakeEngine:
         speaker_margin=0.1,
         learner=None,
         reloader=None,
-    ):
+    ) -> None:
         self.learner = learner
         self.reloader = reloader  # learner: wake/personal.Learner (passive clips); reloader: () -> new WakeStream when a better model appeared, else None
         self.stream = stream
@@ -52,7 +52,7 @@ class WakeEngine:
                     accepted.append(event)
         return accepted
 
-    def reset(self):
+    def reset(self) -> None:
         if self.reloader is not None:
             try:
                 fresh = self.reloader()
@@ -65,7 +65,7 @@ class WakeEngine:
         self.buffer = np.zeros(0, np.float32)
         self.stream.reset()
 
-    def note_spoken_wake(self, text):
+    def note_spoken_wake(self, text) -> None:
         """The main loop heard the wake word while already awake (Julius, again): worth knowing when it follows a recent rejected fire."""
         self._write({"event": "wake_while_awake", "heard": text, **self._repeat_info(self.clock())})
 
@@ -76,7 +76,7 @@ class WakeEngine:
             "repeat": gap is not None and gap <= self.repeat_window,
         }
 
-    def _log(self, event):
+    def _log(self, event) -> None:
         if self.learner is not None:
             self.learner.observe(event)
         now = self.clock()
@@ -120,7 +120,7 @@ class WakeEngine:
         sf.write(path, np.asarray(clip, dtype=np.float32), 16000, subtype="PCM_16")
         return str(path)
 
-    def _write(self, row):
+    def _write(self, row) -> None:
         row = {"ts": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.clock())), **row}
         self.log_dir.mkdir(parents=True, exist_ok=True)
         with (self.log_dir / "wake_log.jsonl").open("a") as fh:

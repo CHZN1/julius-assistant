@@ -10,11 +10,15 @@ import os
 import re
 import shutil
 import time
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import julius.agents.code_agent as ca
+from julius.agents.code_agent import Task
 from julius.agents.file_agent import result
 from julius.brain import confirm
+from julius.costs import CostTracker
 
 YES = re.compile(
     r"^(?:yes|yeah|yep|yup|ok|okay|sure|go ahead|do it|confirm|confirmed|start it|merge it|apply it|please do)\b",
@@ -59,21 +63,21 @@ PENDING_TTL = 90.0  # a start question stays open this long through a garbled or
 FINISHED = {"done", "capped", "timeout", "failed", "cancelled"}
 
 
-def _key(s):
+def _key(s: str) -> str:
     return re.sub(r"[^a-z0-9]", "", s.casefold())
 
 
 class CodeSession:
     def __init__(
         self,
-        config=None,
-        tracker=None,
-        api_key=None,
-        claude=None,
-        sandbox=True,
-        on_done=None,
-        projects_root=None,
-    ):
+        config: dict[str, str] | None = None,
+        tracker: CostTracker | None = None,
+        api_key: Callable | None = None,
+        claude: str | None = None,
+        sandbox: bool = True,
+        on_done: Callable | None = None,
+        projects_root: str | None = None,
+    ) -> None:
         self.config = {**ca.DEFAULT_CONFIG, **(config or {})}
         self.tracker, self.sandbox, self.on_done = tracker, sandbox, on_done
         self.api_key = api_key or (lambda: os.environ.get("ANTHROPIC_API_KEY", ""))
@@ -82,11 +86,11 @@ class CodeSession:
         self.pending = None  # ("start" | "merge" | "discard", task id)
         self.task = None  # the task this conversation is about
 
-    def _find_claude(self):
+    def _find_claude(self) -> str:
         return shutil.which(self.config["binary"]) or str(Path.home() / ".local" / "bin" / "claude")
 
     # ---- helpers ----
-    def projects(self):
+    def projects(self) -> list[str]:
         return (
             sorted(
                 p.name
@@ -97,7 +101,7 @@ class CodeSession:
             else []
         )
 
-    def match_project(self, phrase):
+    def match_project(self, phrase: str) -> str:
         key = _key(
             re.sub(r"\s+(?:project|folder|repo|repository)$", "", phrase.strip(), flags=re.I)
         )
@@ -118,7 +122,7 @@ class CodeSession:
             return scored[0][1]
         return None
 
-    def latest(self, *statuses):
+    def latest(self, *statuses) -> Task | None:
         """The task a context-sensitive command ("merge it", "show the changes") means: this conversation's, or one finished in the last day."""
         wanted = statuses or FINISHED | {"merged"}
         if self.task:
@@ -135,11 +139,18 @@ class CodeSession:
         ]
         return max(recent, key=lambda t: t.finished or t.created) if recent else None
 
-    def _out(self, ok, code, message, **data):
+    def _out(self, ok: bool, code: str, message: str, **data) -> dict[str, Any]:
         return {**result(ok, code, message, **data), "agent": "code"}
 
     # ---- staging (voice command or planner tool) ----
-    def stage(self, goal, project, criteria="", cap=None, origin="human"):
+    def stage(
+        self,
+        goal: str,
+        project: str | None,
+        criteria: str = "",
+        cap: int | float | None = None,
+        origin: str = "human",
+    ) -> dict[str, str | bool | dict[str, float | str]]:
         if ca.running():
             return self._out(
                 False,
@@ -179,7 +190,7 @@ class CodeSession:
         return self._out(True, "preview", message, task=task.id, project=name, cap=task.cap_usd)
 
     # ---- the voice commands ----
-    def handle(self, text, turn=0):
+    def handle(self, text: str, turn: int = 0) -> Any:
         """Run a spoken coding-task command, or return None when the words are not one."""
         text = " ".join(text.strip().split())
         lowered = text.rstrip(".!?").strip()
@@ -207,7 +218,7 @@ class CodeSession:
                 return action()
         return None
 
-    def _answer_pending(self, text, lowered):
+    def _answer_pending(self, text: str, lowered: str) -> Any:
         """A yes or no to the question just asked: (True, result), else (False, None) to go on."""
         kind, task_id = self.pending
         if YES.match(lowered) or confirm.is_yes(lowered):
@@ -230,7 +241,7 @@ class CodeSession:
         self.pending = None  # an unrelated request cancels the question, as with files
         return False, None
 
-    def _start_command(self, goal):
+    def _start_command(self, goal: str) -> dict[str, str | bool | dict[str, float | str]]:
         cap = None
         c = CAP.search(goal)
         if c:
@@ -252,7 +263,7 @@ class CodeSession:
                     break
         return self.stage(goal, project, cap=cap)
 
-    def _confirm(self, kind, task_id):
+    def _confirm(self, kind: str, task_id: str) -> dict[str, Any]:
         self.pending = None
         try:
             task = ca.load(task_id)
@@ -308,7 +319,7 @@ class CodeSession:
             )
         return self._out(False, "unknown", "I'm not sure what to confirm.")
 
-    def _decline(self, kind, task_id):
+    def _decline(self, kind: str, task_id: str) -> dict[str, bool | str]:
         if kind == "start":
             with contextlib.suppress(ca.CodeProblem):
                 ca.discard(ca.load(task_id))
@@ -316,11 +327,11 @@ class CodeSession:
             return self._out(True, "cancelled", "Okay, I won't start it.")
         return self._out(True, "cancelled", "Okay, nothing was changed.")
 
-    def _done(self, task):
+    def _done(self, task) -> None:
         if self.on_done:
             self.on_done(task)
 
-    def _status(self):
+    def _status(self) -> dict[str, bool | str | dict[str, str]]:
         live = ca.running()
         if live:
             t = live[0].task
@@ -341,7 +352,7 @@ class CodeSession:
             task=t.id,
         )
 
-    def _cancel(self):
+    def _cancel(self) -> dict[str, bool | str]:
         if ca.cancel():
             return self._out(True, "cancelled", "Stopping the coding task.")
         if self.pending:
@@ -351,7 +362,7 @@ class CodeSession:
             return self._out(True, "cancelled", "Okay, I won't start it.")
         return self._out(True, "status", "No coding task is running.")
 
-    def _show(self):
+    def _show(self) -> dict[str, Any]:
         t = self.latest()
         if not t:
             return None
@@ -371,7 +382,7 @@ class CodeSession:
             lines=lines,
         )
 
-    def _merge_preview(self):
+    def _merge_preview(self) -> dict[str, Any]:
         t = self.latest("done", "capped", "timeout", "failed", "cancelled")
         if not t or not t.work.is_dir():
             return None
@@ -421,7 +432,7 @@ class CodeSession:
             conflicts=plan["conflicts"],
         )
 
-    def _undo_merge(self):
+    def _undo_merge(self) -> dict[str, bool | str | dict[str, str]]:
         t = self.latest("merged")
         if not t:
             return None
@@ -433,7 +444,7 @@ class CodeSession:
             task=t.id,
         )
 
-    def _discard_preview(self):
+    def _discard_preview(self) -> dict[str, bool | str | dict[str, str]]:
         t = self.latest()
         if not t:
             return None

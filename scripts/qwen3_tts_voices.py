@@ -1,3 +1,5 @@
+"""Render sample sentences with each built-in Qwen3 voice for comparison."""
+
 import time
 from pathlib import Path
 

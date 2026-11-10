@@ -8,14 +8,22 @@ update() takes the microphone level and the recent playback level for a short wi
 
 import collections
 import time
+from collections.abc import Callable
 
 import numpy as np
+from numpy import ndarray
 
 
 class TalkOver:
     def __init__(
-        self, floor=0.010, k=2.2, sustain=0.30, ratio=0.06, out_memory=2.0, clock=time.monotonic
-    ):
+        self,
+        floor: float = 0.010,
+        k: float = 2.2,
+        sustain: float = 0.30,
+        ratio: float = 0.06,
+        out_memory: float = 2.0,
+        clock: Callable = time.monotonic,
+    ) -> None:
         self.floor, self.k, self.sustain, self.ratio, self.out_memory, self.clock = (
             floor,
             k,
@@ -28,19 +36,19 @@ class TalkOver:
         self._run = 0.0
         self.triggered = False
 
-    def out(self, audio, sample_rate=16000):
+    def out(self, audio, sample_rate=16000) -> None:
         """Playback tap: called as each chunk is written to the output device."""
         a = np.asarray(audio, dtype=np.float32)
         if a.size:
             self._out.append((self.clock(), float(np.sqrt(np.mean(a * a)))))
 
-    def recent_out(self, now=None):
+    def recent_out(self, now: None = None) -> float:
         now = self.clock() if now is None else now
         while self._out and now - self._out[0][0] > self.out_memory:
             self._out.popleft()
         return max((r for _, r in self._out), default=0.0)
 
-    def update(self, mic_rms, out_rms, dt):
+    def update(self, mic_rms: float, out_rms: float, dt: float) -> bool:
         """One window. Returns True the moment talk-over is detected."""
         limit = max(self.floor, self.k * self.ratio * out_rms)
         if mic_rms > limit:
@@ -56,7 +64,7 @@ class TalkOver:
                 )  # learn this room's echo level from loud playback only
         return False
 
-    def mic(self, chunk, now=None, window=0.1):
+    def mic(self, chunk: ndarray, now: None = None, window: float = 0.1) -> bool:
         """Microphone block while Julius is speaking. Blocks are pooled into ~0.1 s windows before judging."""
         c = np.asarray(chunk, dtype=np.float32).reshape(-1)
         if not c.size:
@@ -71,7 +79,7 @@ class TalkOver:
         self._n = 0
         return self.update(rms, self.recent_out(now), dt)
 
-    def reset(self):
+    def reset(self) -> None:
         self._run = 0.0
         self.triggered = False
         self._out.clear()

@@ -1,3 +1,5 @@
+"""Unit tests for precision."""
+
 import os
 import unittest
 

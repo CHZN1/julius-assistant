@@ -4,7 +4,7 @@ import os
 
 
 class VisionMode:
-    def __init__(self, enabled=False, **options):
+    def __init__(self, enabled=False, **options) -> None:
         self.enabled = enabled
         self._perception = None
         self._describe = None
@@ -32,7 +32,7 @@ class VisionMode:
     def check_nudge(self):
         return self._perception.check_nudge() if self._perception is not None else None
 
-    def stop(self):
+    def stop(self) -> None:
         if self._perception is not None:
             self._perception.stop()
 
@@ -43,7 +43,7 @@ def create_vision(**options):
     )
 
 
-def vision_capability_prompt(enabled):
+def vision_capability_prompt(enabled: bool) -> str:
     if enabled:
         return (
             "\nVISION: Enabled. Only describe what the supplied camera observations actually show."

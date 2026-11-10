@@ -1,6 +1,8 @@
 """Selected seed-1301 speaker and signals for consistent reply delivery."""
 
 import re
+from collections.abc import Iterator
+from unittest.mock import Mock
 
 from julius.paths import REPO_ROOT
 
@@ -21,13 +23,13 @@ REPLY_LIFT_HINT = re.compile(
 )
 
 
-def delivery_mode(text):
+def delivery_mode(text: str) -> str:
     # Questions alone do not imply excitement. Keep the original hint available
     # for historical comparison, but route current delivery by expressed energy.
     return "lift" if REPLY_LIFT_HINT.search(text) else "balanced"
 
 
-def numerical_failure(exc):
+def numerical_failure(exc: RuntimeError | FloatingPointError) -> bool:
     if isinstance(exc, FloatingPointError):
         return True
     message = str(exc).lower()
@@ -42,7 +44,7 @@ def numerical_failure(exc):
     ) or bool(re.search(r"\b(nan|infinity)\b", message))
 
 
-def configure_qwen_decoder(model):
+def configure_qwen_decoder(model: Mock) -> None:
     """Keep native decoder context while bounding each activation allocation."""
     from functools import partial
 
@@ -50,7 +52,7 @@ def configure_qwen_decoder(model):
     decoder.chunked_decode = partial(decoder.chunked_decode, chunk_size=96, left_context_size=25)
 
 
-def speech_chunks(text, max_words=12):
+def speech_chunks(text: str, max_words: int = 12) -> Iterator[str]:
     """Bound generation spans, preferring clause boundaries; preserve all words."""
     words = text.split()
     while words:

@@ -8,6 +8,7 @@ import re
 import sqlite3
 import time
 from pathlib import Path
+from typing import Any
 
 from julius.paths import REPO_ROOT
 
@@ -135,7 +136,7 @@ SENSITIVE = re.compile(
 )
 
 
-def words(text):
+def words(text: str) -> list[str | Any]:
     return [
         w
         for w in re.findall(r"[a-z0-9']+", text.lower())
@@ -143,7 +144,7 @@ def words(text):
     ]
 
 
-def _stem(w):
+def _stem(w: str) -> str:
     if len(w) <= 4:
         return w
     if w.endswith("ies"):
@@ -153,38 +154,40 @@ def _stem(w):
     return w[:-1] if w.endswith("s") and not w.endswith("ss") else w
 
 
-def jaccard(a, b):
+def jaccard(a: str, b: str) -> float:
     """Word overlap after dropping filler, 'the user' and word endings, so 'the user lives in Springfield' matches 'I live in Springfield'."""
     a, b = {_stem(w) for w in words(a) if w != "user"}, {_stem(w) for w in words(b) if w != "user"}
     return len(a & b) / len(a | b) if a and b else 0.0
 
 
-def clean(text, limit=240):
+def clean(text: str, limit: int = 240) -> str:
     t = re.sub(r"\s+", " ", text or "").strip().strip('"').strip()
     t = re.sub(r"^(?:that|how)\s+", "", t, flags=re.I)  # "remember that ..." leaves the fact
     return (t[:limit].rsplit(" ", 1)[0] if len(t) > limit else t).strip()
 
 
 class MemoryStore:
-    def __init__(self, path):
+    def __init__(self, path: Path) -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._init()
 
-    def _db(self):
+    def _db(self) -> sqlite3.Connection:
         con = sqlite3.connect(self.path)
         con.row_factory = sqlite3.Row
         con.execute("PRAGMA secure_delete=ON")
         return con
 
-    def _init(self):
+    def _init(self) -> None:
         with self._db() as c:
             c.execute(
                 "CREATE TABLE IF NOT EXISTS memories(id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL, kind TEXT DEFAULT 'fact', source TEXT DEFAULT 'said', created REAL, used REAL DEFAULT 0, uses INTEGER DEFAULT 0, utterance TEXT DEFAULT '')"
             )
             c.execute("CREATE VIRTUAL TABLE IF NOT EXISTS mem_fts USING fts5(text)")
 
-    def add(self, text, kind="fact", source="said", utterance=""):
+    def add(
+        self, text: str, kind: str = "fact", source: str = "said", utterance: str = ""
+    ) -> tuple[Any, ...]:
         """-> (row dict | None, status) with status new | duplicate | updated | refused | empty."""
         text = clean(text)
         if len(words(text)) < 1:
@@ -221,7 +224,7 @@ class MemoryStore:
                 "utterance": utterance,
             }, "new"
 
-    def replace(self, row_id, text, utterance=""):
+    def replace(self, row_id: int, text: str, utterance: str = "") -> tuple[Any, ...]:
         """Correct a memory in place (same id); returns (old row, new row) or None."""
         text = clean(text)
         if not text or SECRET.search(text):
@@ -238,19 +241,19 @@ class MemoryStore:
             c.execute("INSERT INTO mem_fts(rowid,text) VALUES(?,?)", (row_id, text))
         return dict(old), {**dict(old), "text": text, "source": "said"}
 
-    def all(self):
+    def all(self) -> list[dict[str, str | float | int] | Any]:
         with self._db() as c:
             return [
                 dict(r) for r in c.execute("SELECT * FROM memories ORDER BY created DESC, id DESC")
             ]
 
-    def get(self, ids):
+    def get(self, ids: list[int]) -> list[dict[str, str | float | int]]:
         with self._db() as c:
             return [
                 dict(r) for i in ids for r in c.execute("SELECT * FROM memories WHERE id=?", (i,))
             ]
 
-    def search(self, query, k=8):
+    def search(self, query: str, k: int = 8) -> list[dict[str, str | float | int] | Any]:
         toks = []
         for w in words(query):
             stem = w[: max(4, len(w) - 2)] if len(w) > 5 else w
@@ -267,7 +270,7 @@ class MemoryStore:
                 return []
         return [dict(r) for r in rows]
 
-    def core(self, n=4):
+    def core(self, n: int = 4) -> list[dict[str, str | float | int] | Any]:
         with self._db() as c:
             return [
                 dict(r)
@@ -277,12 +280,14 @@ class MemoryStore:
                 )
             ]
 
-    def touch(self, ids):
+    def touch(self, ids: list[int]) -> None:
         with self._db() as c:
             for i in ids:
                 c.execute("UPDATE memories SET used=?, uses=uses+1 WHERE id=?", (time.time(), i))
 
-    def forget(self, ids, sessions_dir=None):
+    def forget(
+        self, ids: list[int], sessions_dir: Path | None = None
+    ) -> list[dict[str, str | float | int]]:
         """Hard delete: the rows, their index entries, and the session-log turns that mention them. Returns the deleted rows (for one undo)."""
         rows = self.get(ids)
         with self._db() as c:
@@ -297,13 +302,13 @@ class MemoryStore:
             )
         return rows
 
-    def restore(self, rows):
+    def restore(self, rows: list[dict[str, str | float | int]]) -> None:
         for r in rows:
             self.add(
                 r["text"], r.get("kind", "fact"), r.get("source", "said"), r.get("utterance", "")
             )
 
-    def export_markdown(self, path):
+    def export_markdown(self, path: Path) -> None:
         lines = [
             "# What Julius remembers",
             "",
@@ -320,7 +325,7 @@ SCHEMA = REPO_ROOT / "julius_memory.example" / "schema.sql"
 SAMPLE = REPO_ROOT / "julius_memory.example" / "sample_memories.json"
 
 
-def init(path, sample=False):
+def init(path: Path, sample: bool = False) -> MemoryStore:
     """Create an empty memory database at `path`; with sample=True fill it with the invented 'Alex' facts from julius_memory.example/ (never real data)."""
     store = MemoryStore(path)
     if sample:
@@ -329,7 +334,7 @@ def init(path, sample=False):
     return store
 
 
-def scrub_sessions(sessions_dir, needles):
+def scrub_sessions(sessions_dir: Path, needles: list[str]) -> int:
     """Replace every logged turn that contains a forgotten text with a tombstone."""
     needles = [n.lower() for n in needles if n]
     if not needles:

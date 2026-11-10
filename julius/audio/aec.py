@@ -11,6 +11,7 @@ before it is given to the canceller; `estimate_lag` finds it from a recording by
 import collections
 
 import numpy as np
+from numpy import ndarray
 
 RATE, FRAME = 16000, 160
 
@@ -45,12 +46,12 @@ def estimate_lag(mic, out, max_lag=4.0, step=0.01):
 class EchoCanceller:
     def __init__(
         self,
-        lag=0.5,
-        echo_cancellation=True,
-        noise_suppression=False,
-        high_pass_filter=True,
-        auto_gain_control=False,
-    ):
+        lag: float = 0.5,
+        echo_cancellation: bool = True,
+        noise_suppression: bool = False,
+        high_pass_filter: bool = True,
+        auto_gain_control: bool = False,
+    ) -> None:
         from livekit import rtc
 
         self._rtc = rtc
@@ -69,19 +70,19 @@ class EchoCanceller:
         self._out = np.zeros(0, dtype=np.int16)
 
     @staticmethod
-    def _pcm(x):
+    def _pcm(x: ndarray) -> ndarray:
         return (np.clip(np.asarray(x, dtype=np.float32).reshape(-1), -1, 1) * 32767).astype(
             np.int16
         )
 
-    def reference(self, chunk):
+    def reference(self, chunk: ndarray) -> None:
         """What is being played (16 kHz mono float). Queued 10 ms at a time; it is released to the canceller `lag` seconds late."""
         self._ref_buf = np.concatenate([self._ref_buf, self._pcm(chunk)])
         while len(self._ref_buf) >= FRAME:
             self._ref.append(self._ref_buf[:FRAME].copy())
             self._ref_buf = self._ref_buf[FRAME:]
 
-    def process(self, chunk):
+    def process(self, chunk: ndarray) -> ndarray:
         """Microphone audio in, echo-free audio out (same length)."""
         rtc = self._rtc
         self._mic_buf = np.concatenate([self._mic_buf, self._pcm(chunk)])

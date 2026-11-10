@@ -1,3 +1,5 @@
+"""Unit tests for selfecho."""
+
 import unittest
 
 from julius.audio.mic_gate import MicrophoneGate

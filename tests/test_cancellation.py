@@ -1,3 +1,5 @@
+"""Unit tests for cancellation."""
+
 import subprocess
 import sys
 import threading

@@ -1,3 +1,5 @@
+"""Unit tests for lowconf."""
+
 import unittest
 
 from julius.audio.lowconf import LowConfidenceGate, is_risky, is_shaky

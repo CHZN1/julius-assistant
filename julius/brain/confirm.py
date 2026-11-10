@@ -121,7 +121,7 @@ _NO_FILL = {
 }
 
 
-def _words(text):
+def _words(text: str) -> list[str]:
     t = (
         (text or "")
         .lower()
@@ -133,7 +133,7 @@ def _words(text):
     return re.sub(r"[^a-z' ]", " ", t).replace("'", "").split()
 
 
-def is_yes(text):
+def is_yes(text: str) -> bool:
     w = _words(text)
     return (
         bool(w)
@@ -143,7 +143,7 @@ def is_yes(text):
     )
 
 
-def is_no(text):
+def is_no(text: str) -> bool:
     w = _words(text)
     return (
         bool(w)

@@ -111,7 +111,7 @@ FIXES = {
 }
 
 
-def clean_for_speech(t):
+def clean_for_speech(t: str) -> str:
     t = normalize_for_speech(
         t
     )  # markdown/URLs/emoji out; degrees, percent, money, times, dates, decimals as words
@@ -129,7 +129,7 @@ META_LEAK = re.compile(
 )  # the model narrating its instructions or reasoning is never spoken
 
 
-def split_long_sentence(p, limit=110):
+def split_long_sentence(p: str, limit: int = 110) -> list[str]:
     """The voice slows down on long sentences (the s06 story stuttered on every chunk). Speak clauses of about `limit` characters instead; the stream stays open between them."""
     p = (p or "").strip()
     if len(p) <= limit:
@@ -148,7 +148,7 @@ def split_long_sentence(p, limit=110):
     return pieces
 
 
-def repair_history(h):
+def repair_history(h: list[dict[str, str]]) -> None:
     """Drop tool calls that have no matching tool result (and stray results): the API rejects the whole conversation otherwise, and every later turn fails."""
     out, i = [], 0
     while i < len(h):

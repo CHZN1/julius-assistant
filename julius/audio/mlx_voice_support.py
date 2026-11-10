@@ -6,7 +6,7 @@ import re
 from types import MethodType
 
 
-def normalize_speech(text):
+def normalize_speech(text: str) -> str:
     # MLX cloning can omit a label even with a comma. A complete spoken
     # introduction retains the reminder meaning and leaves its body intact.
     return re.sub(r"^Reminder:\s*", "Here is your reminder. ", text, flags=re.I)
@@ -40,7 +40,7 @@ def load_reference_prompts(model):
     return refs
 
 
-def load_voice_model(decoder_only=False):
+def load_voice_model(decoder_only: bool = False) -> object:
     import mlx.core as mx
     from mlx_audio.tts.models.qwen3_tts import qwen3_tts as architecture
     from mlx_audio.tts.models.qwen3_tts.speech_tokenizer import Qwen3TTSSpeechTokenizerDecoder
@@ -53,7 +53,7 @@ def load_voice_model(decoder_only=False):
         import copy
 
         class CachedReferenceTokenizer(original_tokenizer):
-            def __init__(self, config):
+            def __init__(self, config) -> None:
                 config = copy.copy(config)
                 config.encoder_config = None
                 super().__init__(config)
@@ -86,7 +86,7 @@ def load_voice_model(decoder_only=False):
     return model
 
 
-def bound_decoder(model):
+def bound_decoder(model) -> None:
     import mlx.core as mx
 
     def decode(decoder, codes, chunk_size=96, left_context_size=25):

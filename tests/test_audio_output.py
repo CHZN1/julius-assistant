@@ -1,3 +1,5 @@
+"""Unit tests for audio output."""
+
 import unittest
 from unittest.mock import Mock
 

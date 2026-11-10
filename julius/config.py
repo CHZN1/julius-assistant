@@ -4,9 +4,11 @@ The key is read from the environment or the project's .env file and is never pri
 use describe_key() for a safe status line.
 """
 
+import datetime
 import os
 import tomllib
 from pathlib import Path
+from typing import Any
 
 from julius.paths import REPO_ROOT
 
@@ -79,7 +81,7 @@ DEFAULTS = {
 }
 
 
-def load_dotenv(path=None):
+def load_dotenv(path: Path | None = None) -> bool:
     """Load KEY=VALUE lines from .env into os.environ without overriding existing variables."""
     path = Path(path or os.environ.get("JULIUS_ENV_FILE") or ROOT / ".env")
     if not path.is_file():
@@ -95,11 +97,12 @@ def load_dotenv(path=None):
     return True
 
 
-def transcripts_logging(config=None, today=None):
+def transcripts_logging(
+    config: dict[str, dict[str, str | bool] | dict[str, bool]] | None = None,
+    today: datetime.date | None = None,
+) -> bool:
     """Whether what he heard and said may go into the JSON log right now: [service] log_transcripts is true and, when log_transcripts_until (YYYY-MM-DD) is set,
     today is not past it. Diagnostics windows switch themselves off."""
-    import datetime
-
     service = (config if config is not None else load_config()).get("service") or {}
     if not service.get("log_transcripts"):
         return False
@@ -129,7 +132,7 @@ def transcripts_logging_cached(seconds=60.0, clock=None):
     return _transcripts_cache[1]
 
 
-def load_config(path=None):
+def load_config(path: Path | None = None) -> dict[str, Any]:
     """julius.toml merged over DEFAULTS section by section. JULIUS_BRAIN overrides brain.mode."""
     config = {section: dict(values) for section, values in DEFAULTS.items()}
     path = Path(path or os.environ.get("JULIUS_CONFIG") or ROOT / "julius.toml")
@@ -162,12 +165,12 @@ def load_config(path=None):
     return config
 
 
-def api_key():
+def api_key() -> str | None:
     load_dotenv()
     return os.environ.get("ANTHROPIC_API_KEY") or None
 
 
-def describe_key():
+def describe_key() -> str:
     """Safe status for logs: whether a key is present and how long it is, never the value."""
     key = api_key()
     return f"set ({len(key)} chars)" if key else "missing"
@@ -176,7 +179,10 @@ def describe_key():
 WAKE_CONTRAST = "Julius. Hey Julius. Julia. Julian. Julie. Jules."
 
 
-def asr_initial_prompt(config=None, wake=False):
+def asr_initial_prompt(
+    config: dict[str, Any] | None = None,
+    wake: bool = False,
+) -> str:
     """The Whisper initial_prompt built from [asr] in julius.toml, or None when the hint is disabled.
 
     wake=False (default): the vocabulary only, for transcribing a request while Julius is awake.

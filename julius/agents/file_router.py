@@ -3,7 +3,9 @@
 import difflib
 import os
 import re
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from julius.brain import confirm
 
@@ -52,11 +54,11 @@ EXT = {
 }
 
 
-def norm(text):
+def norm(text: str) -> str:
     # Quoted names are literal: "Dash Reports" must not become "- Reports".
     quoted = []
 
-    def protect(m):
+    def protect(m) -> str:
         quoted.append(m.group())
         return f"QUOTEDTOKEN{len(quoted) - 1}"
 
@@ -75,11 +77,11 @@ def norm(text):
     return re.sub(r"\s+", " ", text).strip()
 
 
-def _key(s):
+def _key(s: str) -> str:
     return re.sub(r"[^a-z0-9]", "", s.casefold())
 
 
-def _dirs(root, depth=2, limit=1000):
+def _dirs(root: Path, depth: int = 2, limit: int = 1000) -> list[Path]:
     root = Path(root)
     out = [Path(".")]
     stack = [(root, 0)]
@@ -105,7 +107,7 @@ def _dirs(root, depth=2, limit=1000):
     return out
 
 
-def _clean_folder(phrase):
+def _clean_folder(phrase: str) -> str:
     text = phrase.strip().rstrip(".!?").strip()
     text = re.sub(r"^(?:the|my|a|an)\s+", "", text, flags=re.I)
     text = re.sub(r"\s+(?:folder|directory)$", "", text, flags=re.I)
@@ -117,7 +119,7 @@ _GLUED_VERB = re.compile(
 )
 
 
-def clean_asr(text):
+def clean_asr(text: str) -> str:
     """Repair common transcription artefacts before a second routing attempt: commas between words ("trash, report.txt, in sandbox"), a command verb glued to the
     next word ("TrashReport.txt"), runs of spaces. The original text is always tried first."""
     from julius.audio.listening import strip_leading_wake
@@ -132,7 +134,7 @@ def clean_asr(text):
 EXTRA_FOLDERS = {}  # name -> absolute path of folders added in [files.folders] outside Documents/Desktop/Downloads; set by FileSession
 
 
-def match_dir(phrase, root, cutoff=0.80):
+def match_dir(phrase: str, root: str | Path, cutoff: float = 0.80) -> str | None:
     if not phrase:
         return None
     phrase = _clean_folder(phrase)
@@ -167,11 +169,11 @@ def match_dir(phrase, root, cutoff=0.80):
     return "Documents/" + scored[0][1]
 
 
-def _mask_literals(text):
+def _mask_literals(text: str) -> tuple[str, Callable]:
     """Hide quoted names so their words are not parsed; returns (masked, restore function)."""
     literals = []
 
-    def hide(m):
+    def hide(m) -> str:
         literals.append(m.group())
         return f"PATHLITERAL{len(literals) - 1}"
 
@@ -185,7 +187,9 @@ def _mask_literals(text):
     return masked, restore
 
 
-def _destination(phrase, raw_phrase, source, root):
+def _destination(
+    phrase: str, raw_phrase: str, source: str, root: str | Path
+) -> str | dict[str, str]:
     """The destination folder, or a clarification dict when it is not clearly one."""
     if phrase.casefold() in {"it", "them", "there", "that", "that folder"} or not phrase:
         return {"clarification": "Please name the destination folder."}
@@ -206,7 +210,7 @@ def _destination(phrase, raw_phrase, source, root):
     }
 
 
-def _file_pattern(selection):
+def _file_pattern(selection: str) -> str | list[str] | dict[str, str]:
     """The filename pattern the words select, or a clarification dict."""
     pattern = _ext_pattern(selection) or "*"
     names = re.findall(r'"([^"]+)"|\'([^\']+)\'', selection)
@@ -235,7 +239,7 @@ def _file_pattern(selection):
     return pattern
 
 
-def parse(text, root):
+def parse(text: str, root: str | Path) -> dict[str, str | list[str] | bool]:
     """Parse a move or copy request into an action dict, a clarification dict, or None."""
     text = norm(text)
     if re.match(r"^(?:how\b|why\b|what is\b|explain\b|tell me about\b)", text, re.I):
@@ -297,7 +301,7 @@ MOVE_TO_TRASH = re.compile(
 )
 
 
-def _ext_pattern(selection):
+def _ext_pattern(selection: str) -> str | list[str]:
     """The glob for a file type named in the words ("pdfs", "csv"), or None."""
     for word, patterns in EXT.items():
         if re.search(rf"\b{word}\b", selection, re.I):
@@ -305,7 +309,7 @@ def _ext_pattern(selection):
     return None
 
 
-def _trash_pattern(selection):
+def _trash_pattern(selection: str) -> str | None:
     """A quoted name, an explicit filename or a file type; None when none of them is given."""
     names = re.findall(r'"([^"]+)"|\'([^\']+)\'', selection)
     if names:
@@ -315,7 +319,7 @@ def _trash_pattern(selection):
     return explicit.group(1) if explicit else _ext_pattern(selection)
 
 
-def parse_trash(text, root):
+def parse_trash(text: str, root: str | Path) -> dict[str, str]:
     """'trash notes.txt in Downloads', 'move the pdfs in Downloads to the trash': a named file, a quoted name or a file type; never 'everything'."""
     body = re.sub(
         r"^(?:(?:please|can you|could you|would you|just|now|go ahead and|hey)[\s,]+)+",
@@ -362,7 +366,7 @@ def parse_trash(text, root):
     return {"source": source, "pattern": pattern}
 
 
-def _in_folder(phrase):
+def _in_folder(phrase: str) -> str:
     """'notes.txt in Downloads' -> 'Downloads/notes.txt' so a folder named after the file reaches the right place."""
     located = re.fullmatch(
         r"(.+?)\s+(?:in|inside|from)\s+(?:my |the )?(downloads|desktop|documents)(?:\s+(?:folder|directory))?",
@@ -372,7 +376,7 @@ def _in_folder(phrase):
     return f"{located.group(2).capitalize()}/{located.group(1).strip()}" if located else phrase
 
 
-def _rename_request(body, _root):
+def _rename_request(body: str, _root: str | Path) -> tuple[str, dict[str, str]]:
     rename = re.fullmatch(r"rename\s+(?:the file\s+|file\s+)?(.+?)\s+to\s+(.+)", body, re.I)
     if not rename:
         return None
@@ -388,7 +392,7 @@ def _rename_request(body, _root):
     return ("rename", {"path": old, "destination": new})
 
 
-def _create_request(body, _root):
+def _create_request(body: str, _root: str | Path) -> tuple[str, dict[str, str]]:
     create = re.fullmatch(
         r'(?:create|write)\s+(?:a (?:text )?file\s+|file\s+)?"([^"\n]+)"\s+(?:containing|with text|with the text)\s+"([^"\n]*)"[.!]?',
         body,
@@ -399,7 +403,7 @@ def _create_request(body, _root):
     return ("create", {"destination": create.group(1), "content": create.group(2)})
 
 
-def _read_request(body, _root):
+def _read_request(body: str, _root: str | Path) -> tuple[str, dict[str, str]]:
     read = re.fullmatch(r"read\s+(?:the file\s+|file\s+)?(.+)", body, re.I)
     if read and (
         re.search(r"\.[a-z0-9]{1,8}\b", read.group(1), re.I) or read.group(1).startswith('"')
@@ -408,7 +412,7 @@ def _read_request(body, _root):
     return None
 
 
-def _list_request(body, root):
+def _list_request(body: str, root: str | Path) -> tuple[str, dict[str, str]]:
     listing = re.fullmatch(
         r"(?:list|show)\s+(?:me\s+)?(?:the\s+)?(?:files|folders|contents)(?:\s+(?:in|inside|of)\s+(.+))?[.!]?",
         body,
@@ -422,7 +426,7 @@ def _list_request(body, root):
     return ("clarify", {"clarification": "Please give the full folder name or path to list."})
 
 
-def _find_request(body, root):
+def _find_request(body: str, root: str | Path) -> tuple[str, dict[str, str]]:
     finding = re.fullmatch(
         r"(?:find|search for)\s+(.+?)(?:\s+(?:in|inside|from)\s+(.+))?[.!]?", body, re.I
     )
@@ -448,7 +452,7 @@ def _find_request(body, root):
 _SIMPLE_REQUESTS = (_rename_request, _create_request, _read_request, _list_request, _find_request)
 
 
-def parse_simple_request(text, root):
+def parse_simple_request(text: str, root: str | Path) -> tuple[str, dict[str, str]]:
     """Rename, create, read, list and find requests: (kind, args) or None."""
     body = re.sub(r"^(?:(?:please|can you|could you|would you)\s+)+", "", text.strip(), flags=re.I)
     for parser in _SIMPLE_REQUESTS:
@@ -458,7 +462,7 @@ def parse_simple_request(text, root):
     return None
 
 
-def _state_command(text, pending, has_last):
+def _state_command(text: str, pending: bool, has_last: bool) -> tuple[str, dict[str, bool]]:
     """Undo, cancel, resume, approve and the trash/history questions."""
     if UNDO.fullmatch(text):
         return ("undo", None)
@@ -477,7 +481,7 @@ def _state_command(text, pending, has_last):
     return None
 
 
-def route(text, root, pending=False, has_last=False):
+def route(text: str, root: str | Path, pending: bool = False, has_last: bool = False) -> Any:
     """Map a spoken file request to (kind, args), or None when it is not a file command."""
     text = norm(text)
     command = _state_command(text, pending, has_last)

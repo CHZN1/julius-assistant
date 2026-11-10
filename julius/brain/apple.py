@@ -3,13 +3,16 @@
 import json
 import subprocess
 import uuid
+from unittest.mock import Mock
 
-from julius.brain.planning import output
+from julius.brain.planning import Planner, output
 from julius.paths import REPO_ROOT
 
 
 class AppleProvider:
-    def __init__(self, planner, config=None, runner=subprocess.run):
+    def __init__(
+        self, planner: Planner, config: dict[str, str] | None = None, runner: Mock = subprocess.run
+    ) -> None:
         self.planner = planner
         self.runner = runner
         self.config_path = planner.path.parent / "apple_calendar.json"
@@ -19,7 +22,7 @@ class AppleProvider:
             else (json.loads(self.config_path.read_text()) if self.config_path.exists() else {})
         )
 
-    def call(self, request):
+    def call(self, request: dict[str, str | float | int | None]) -> dict[str, bool | str]:
         try:
             process = self.runner(
                 [
@@ -51,10 +54,17 @@ class AppleProvider:
         return self.call({"action": "inventory"})
 
     @property
-    def enabled(self):
+    def enabled(self) -> bool:
         return bool(self.config.get("event") or self.config.get("reminder"))
 
-    def sync(self, identifier, kind, title, due, end=None):
+    def sync(
+        self,
+        identifier: str,
+        kind: str,
+        title: str,
+        due: int | float,
+        end: int | float | None = None,
+    ) -> dict[str, bool | str | dict[str, str]]:
         target = self.config.get(kind)
         if not target:
             return output(
@@ -106,13 +116,13 @@ class AppleProvider:
                 )
         return result
 
-    def complete(self, identifier):
+    def complete(self, identifier: str) -> dict[str, bool | str]:
         return self._finish(identifier, "complete", "done")
 
-    def cancel(self, identifier):
+    def cancel(self, identifier: str) -> dict[str, bool | str]:
         return self._finish(identifier, "delete", "cancelled")
 
-    def _finish(self, identifier, action, status):
+    def _finish(self, identifier: str, action: str, status: str) -> dict[str, bool | str]:
         with self.planner.db() as con:
             exists = con.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='apple_links'"

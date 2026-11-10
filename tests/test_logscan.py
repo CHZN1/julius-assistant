@@ -1,3 +1,5 @@
+"""Unit tests for logscan."""
+
 import json
 import tempfile
 import unittest

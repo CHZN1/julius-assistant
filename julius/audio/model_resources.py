@@ -7,7 +7,9 @@ also run under the existing resource guard until their peak usage is measured.
 import re
 import subprocess
 import threading
+from collections.abc import Iterator
 from contextlib import contextmanager
+from unittest.mock import Mock
 
 
 class ResourceUnavailable(RuntimeError):
@@ -26,14 +28,16 @@ def mac_memory_snapshot():
 
 
 class ModelResources:
-    def __init__(self, snapshot=mac_memory_snapshot, minimum_free_percent=30):
+    def __init__(
+        self, snapshot: Mock = mac_memory_snapshot, minimum_free_percent: int = 30
+    ) -> None:
         self.snapshot = snapshot
         self.minimum_free_percent = minimum_free_percent
         self._lock = threading.Lock()
         self._releases = {}
         self.active = None
 
-    def register(self, name, release):
+    def register(self, name: str, release: Mock) -> None:
         if not callable(release):
             raise TypeError("A model needs an unload callback")
         if not self._lock.acquire(blocking=False):
@@ -46,7 +50,7 @@ class ModelResources:
             self._lock.release()
 
     @contextmanager
-    def job(self, name):
+    def job(self, name: str) -> Iterator[dict[str, int]]:
         if not self._lock.acquire(blocking=False):
             raise ResourceUnavailable("Another model job is active")
         try:

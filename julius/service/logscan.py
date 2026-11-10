@@ -14,6 +14,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 from julius.paths import REPO_ROOT
 
@@ -46,7 +47,7 @@ CATEGORIES = [
 COMPILED = [(name, sev, re.compile(pat, re.I)) for name, sev, pat in CATEGORIES]
 
 
-def classify(msg, level="info"):
+def classify(msg: str, level: str = "info") -> tuple[str, str]:
     msg = (msg or "").strip()
     for name, sev, rx in COMPILED:
         if rx.search(msg):
@@ -56,7 +57,7 @@ def classify(msg, level="info"):
     return None, None
 
 
-def read_rows(log_dir=LOG_DIR, since=None):
+def read_rows(log_dir: Path = LOG_DIR, since: str | None = None) -> list[dict[str, str]]:
     """All parsed console rows from julius.jsonl and its rotated backups, oldest first."""
     rows = []
     for p in sorted(
@@ -80,7 +81,7 @@ def read_rows(log_dir=LOG_DIR, since=None):
 TIMING = re.compile(r"\[timing: (.*)\]")
 
 
-def latency(rows):
+def latency(rows: list[dict[str, str]]) -> dict[str, int | dict[str, float | int]]:
     """Per-turn timing lines -> p50/p95 of speech-end-to-first-audio (voice turns), ASR seconds and total, plus ASR worst-segment log-probability."""
     vals = collections.defaultdict(list)
     turns = errors = low_conf = 0
@@ -122,7 +123,7 @@ def latency(rows):
 MARKS = "stderr_marks.json"
 
 
-def mark_stderr(log_dir=LOG_DIR, now=None):
+def mark_stderr(log_dir: Path = LOG_DIR, now: str | None = None) -> dict[str, str | int]:
     """launchd's stderr/stdout files have no timestamps, so `--since` could not tell old tracebacks from new. Call this right before a restart or soak start:
     it records the files' current sizes with the time, and tracebacks(since=...) reads only what was written after the earliest mark at or after `since`."""
     import time as _t
@@ -147,7 +148,7 @@ def mark_stderr(log_dir=LOG_DIR, now=None):
     return marks[-1]
 
 
-def _offsets(log_dir, since):
+def _offsets(log_dir: Path, since: str | None) -> dict[str, str | int]:
     if not since:
         return {}
     try:
@@ -158,7 +159,7 @@ def _offsets(log_dir, since):
     return later[0] if later else (marks[-1] if marks else {})
 
 
-def tracebacks(log_dir=LOG_DIR, since=None):
+def tracebacks(log_dir: Path = LOG_DIR, since: str | None = None) -> collections.Counter:
     """Exceptions in the launchd stderr/stdout files, grouped by their final line (only what was written since the mark at or after `since`, when marks exist)."""
     out = collections.Counter()
     off = _offsets(log_dir, since)
@@ -178,7 +179,7 @@ def tracebacks(log_dir=LOG_DIR, since=None):
     return out
 
 
-def wake_stats(path=WAKE_LOG, since=None):
+def wake_stats(path: Path = WAKE_LOG, since: str | None = None) -> dict[str, Any]:
     """Stage-1 wake detector: fires, accepted, rejected, Whisper seconds spent on rejects, rejects whose text looks like the wake word."""
     s = {"fires": 0, "accepted": 0, "rejected": 0, "reject_whisper_s": 0.0, "wake_like_rejects": []}
     p = Path(path)
@@ -205,7 +206,9 @@ def wake_stats(path=WAKE_LOG, since=None):
     return s
 
 
-def scan(log_dir=LOG_DIR, since=None, wake_log=WAKE_LOG):
+def scan(
+    log_dir: Path = LOG_DIR, since: str | None = None, wake_log: Path = WAKE_LOG
+) -> dict[str, Any]:
     rows = read_rows(log_dir, since)
     cats = collections.defaultdict(
         lambda: {"count": 0, "severity": "", "first": "", "last": "", "example": ""}
@@ -233,7 +236,9 @@ def scan(log_dir=LOG_DIR, since=None, wake_log=WAKE_LOG):
     }
 
 
-def render(report):
+def render(
+    report: dict[str, Any],
+) -> str:
     out = [
         f"Julius log scan: {report['rows']} lines, {report['from'][:19]} to {report['to'][:19]}",
         "",
@@ -282,7 +287,7 @@ def render(report):
     return "\n".join(out)
 
 
-def main(argv=None):
+def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--since", default="")
     ap.add_argument("--dir", default=str(LOG_DIR))

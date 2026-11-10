@@ -7,8 +7,11 @@ Only the user's own utterances can write memory. Remembered text is handed to th
 import contextlib
 import json
 import re
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
 
-from julius.memory.store import SECRET, SENSITIVE
+from julius.memory.store import SECRET, SENSITIVE, MemoryStore
 
 NOT_A_FACT = r"(?:to|when|how|what|where|why|who|if|whether|me|us|him|her|them|it|that you|the time|the way)\b"
 REMEMBER = re.compile(
@@ -95,7 +98,7 @@ NOT_A_TOPIC = re.compile(
 )
 
 
-def parse(text):
+def parse(text: str) -> tuple[str, None] | tuple[str, str]:
     """-> (action, argument) or (None, None). Reminders ("remember to call mom") and idioms ("forget it") are not memory commands."""
     t = re.sub(r"\s+", " ", text.strip()).rstrip(".!")
     if not t:
@@ -140,7 +143,9 @@ USER MESSAGE: """
 
 
 class MemoryAssistant:
-    def __init__(self, store, sessions_dir=None, show=print):
+    def __init__(
+        self, store: MemoryStore, sessions_dir: Path | None = None, show: Callable = print
+    ) -> None:
         self.store, self.sessions_dir, self.show = store, sessions_dir, show
         self.pending = None
         self.last_added = None
@@ -151,7 +156,7 @@ class MemoryAssistant:
         self.unannounced = []
 
     # ---- spoken commands ----
-    def handle(self, text):
+    def handle(self, text: str) -> str | None:
         if self.pending:
             reply = self._resolve_pending(text)
             if reply is not None:
@@ -191,11 +196,11 @@ class MemoryAssistant:
             return "Okay, I've put it back." if n == 1 else f"Okay, I've put those {n} back."
         return None
 
-    def _export(self):
+    def _export(self) -> None:
         with contextlib.suppress(Exception):
             self.store.export_markdown(self.store.path.parent / "MEMORY.md")
 
-    def _remember(self, fact, utterance):
+    def _remember(self, fact: str, utterance: str) -> str:
         row, status = self.store.add(fact, "fact", "said", utterance)
         if status == "refused":
             return "I won't store passwords, keys or card numbers. Keep those somewhere safer."
@@ -208,13 +213,13 @@ class MemoryAssistant:
         self.recent.append((row["text"], "said"))
         return "Okay, I've updated that." if status == "updated" else "Okay, I'll remember that."
 
-    def _recent(self):
+    def _recent(self) -> str:
         if not self.recent:
             return "I haven't remembered anything new this session."
         items = [t.rstrip(".") for t, _ in self.recent[-4:]]
         return "Most recently: " + "; ".join(items) + "."
 
-    def _correct(self, new_text, utterance):
+    def _correct(self, new_text: str, utterance: str) -> str | None:
         """'Actually, my sister is called Anna' replaces the closest thing already remembered; with no close match it is not a memory command."""
         best = None
         for r in self.store.search(new_text, 3):
@@ -235,13 +240,13 @@ class MemoryAssistant:
         self._export()
         return f"Okay, corrected. It was: {old['text'].rstrip('.')}."
 
-    def _gone(self, rows):
+    def _gone(self, rows: list[dict[str, str | float | int]]) -> None:
         self.undo_rows = rows
         self.last_added = None
         self.last_used = []
         self._export()
 
-    def _forget_that(self):
+    def _forget_that(self) -> str:
         target = (
             [self.last_added]
             if self.last_added
@@ -262,7 +267,7 @@ class MemoryAssistant:
         self._gone(rows)
         return f"Forgotten: {rows[0]['text'].rstrip('.')}." if rows else "That's already gone."
 
-    def _forget(self, topic):
+    def _forget(self, topic: str) -> str:
         rows = self.store.search(topic, 5)
         if not rows:
             return f"I don't have anything about {topic}."
@@ -273,7 +278,7 @@ class MemoryAssistant:
         self.pending = ("choose", rows)
         return self._ask(rows)
 
-    def _ask(self, rows):
+    def _ask(self, rows: list[dict[str, str | float | int]]) -> str:
         for i, r in enumerate(rows, 1):
             self.show(f"    {i}. {r['text']}")
         spoken = "; ".join(
@@ -282,7 +287,7 @@ class MemoryAssistant:
         )
         return f"I have {len(rows)} things. {spoken}. Say a number, or all of them, or cancel."
 
-    def _resolve_pending(self, text):
+    def _resolve_pending(self, text: str) -> str:
         kind, rows = self.pending
         t = re.sub(r"[^\w\s]", "", text.lower()).strip()
         self.pending = None
@@ -348,7 +353,7 @@ class MemoryAssistant:
                 return f"Forgotten: {gone[0]['text'].rstrip('.')}."
         return None  # something else: handled as a normal request
 
-    def _list(self, topic):
+    def _list(self, topic: None) -> str:
         if topic and topic.lower().strip() in {"me", "myself", "everything", "you", "us"}:
             topic = None
         rows = self.store.search(topic, 20) if topic else self.store.all()
@@ -370,7 +375,7 @@ class MemoryAssistant:
         ) + (" The rest is on screen." if n > 4 else "")
 
     # ---- recall for the model ----
-    def block(self, user_text, budget_tokens=400):
+    def block(self, user_text: str, budget_tokens: int = 400) -> str:
         """Relevant notes plus a few core ones, capped at ~400 tokens (4 characters each); when they do not all fit the newer facts win."""
         rows, seen = [], set()
         for r in self.store.search(user_text, 8) + self.store.core(3):
@@ -403,7 +408,7 @@ class MemoryAssistant:
         )
 
     # ---- automatic capture ----
-    def worth_a_look(self, text):
+    def worth_a_look(self, text: str) -> bool:
         t = text.strip()
         return (
             len(t.split()) >= 3
@@ -413,7 +418,7 @@ class MemoryAssistant:
             and not SENSITIVE.search(t)
         )
 
-    def autocapture(self, user_text, llm):
+    def autocapture(self, user_text: str, llm: Callable) -> list[dict[str, str | int] | Any]:
         """llm(prompt) -> text. Returns the rows stored (source='auto'). Never raises."""
         if not self.worth_a_look(user_text):
             return []

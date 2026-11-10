@@ -57,7 +57,7 @@ ALIASES = {
 }
 
 
-def convert_units(value, from_unit, to_unit):
+def convert_units(value: str | float | int, from_unit: str, to_unit: str) -> str:
     def unit(raw):
         name = raw.strip().lower().replace("°", "")
         return ALIASES.get(name, name)
@@ -95,7 +95,7 @@ def convert_units(value, from_unit, to_unit):
     return f"{n} {a} = {answer.normalize():.12g} {b}"
 
 
-def local_datetime(value, zone):
+def local_datetime(value: str, zone: str) -> datetime:
     parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     tz = ZoneInfo(zone)
     if parsed.tzinfo is not None:
@@ -116,8 +116,13 @@ def local_datetime(value, zone):
 
 
 def date_calculate(
-    start, operation, timezone_name="America/Los_Angeles", amount=0, end=None, target_timezone=None
-):
+    start: str,
+    operation: str,
+    timezone_name: str = "America/Los_Angeles",
+    amount: int | float = 0,
+    end: str | None = None,
+    target_timezone: str | None = None,
+) -> str:
     dt = local_datetime(start, timezone_name)
     if operation == "convert_timezone":
         if not target_timezone:

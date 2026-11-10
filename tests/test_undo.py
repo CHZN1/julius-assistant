@@ -1,3 +1,5 @@
+"""Unit tests for undo."""
+
 import unittest
 
 from julius.brain.undo import UndoAgent, UndoCoordinator

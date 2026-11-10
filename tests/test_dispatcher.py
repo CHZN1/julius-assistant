@@ -1,3 +1,5 @@
+"""Unit tests for dispatcher."""
+
 import tempfile
 import threading
 import unittest

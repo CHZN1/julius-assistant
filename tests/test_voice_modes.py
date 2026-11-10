@@ -1,3 +1,5 @@
+"""Unit tests for voice modes."""
+
 import ast
 import unittest
 from pathlib import Path

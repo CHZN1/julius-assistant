@@ -35,7 +35,7 @@ _LAST_WEEK = (
 )
 
 
-def _weekday_date(text, today):
+def _weekday_date(text: str, today: date) -> date:
     """The date of "last Sunday", "next Friday" or a bare weekday, or None."""
     weekday = re.fullmatch(
         r"(?:(last|this past|past|this|next)\s+)?("
@@ -55,7 +55,7 @@ def _weekday_date(text, today):
     return today - timedelta(days=back)
 
 
-def _calendar_date(text, today):
+def _calendar_date(text: str, today: date) -> date:
     """An ISO date or "March 3rd" / "3 March 2026"; ValueError when it is neither."""
     iso = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", text)
     if iso:
@@ -80,7 +80,7 @@ def _calendar_date(text, today):
     return day
 
 
-def resolve_days(phrase, today=None):
+def resolve_days(phrase: str, today: date | None = None) -> tuple[date, date, str]:
     """(first_date, last_date, label) for a spoken day phrase; ValueError with a speakable reason when it can't be read."""
     today = today or datetime.now().date()
     text = re.sub(r"\s+", " ", str(phrase or "today").lower().strip().strip(".,!?"))

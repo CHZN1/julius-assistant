@@ -1,3 +1,5 @@
+"""Unit tests for dropstage."""
+
 import http.client
 import json
 import os

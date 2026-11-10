@@ -27,6 +27,9 @@ import time
 import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import Any
+
+from julius.costs import CostTracker
 
 # Not under ~/.julius: the sandbox denies reads of ~/.julius, and with the task folder inside it Claude Code's own path checks fail and every Edit is refused (live, 17:57).
 CODE_HOME = Path("~/Library/Application Support/Julius/code").expanduser()
@@ -173,7 +176,7 @@ RULES = (
 
 
 class CodeProblem(Exception):
-    def __init__(self, code, message):
+    def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
         self.code, self.message = code, message
 
@@ -198,15 +201,15 @@ class Task:
     stop_reason: str = ""
 
     @property
-    def dir(self):
+    def dir(self) -> Path:
         return CODE_HOME / self.id
 
     @property
-    def work(self):
+    def work(self) -> Path:
         return self.dir / "work"
 
 
-def _sha(path):
+def _sha(path: Path) -> str:
     h = hashlib.sha256()
     with open(path, "rb") as f:
         for block in iter(lambda: f.read(1 << 20), b""):
@@ -214,11 +217,11 @@ def _sha(path):
     return h.hexdigest()
 
 
-def is_secret(name):
+def is_secret(name: str) -> bool:
     return any(fnmatch.fnmatch(name.lower(), g.lower()) for g in SECRET_GLOBS)
 
 
-def safe_name(rel):
+def safe_name(rel: str) -> bool:
     """True when a relative path may be copied in or merged back: no secrets, no music/crypto names, no git internals."""
     parts = Path(rel).parts
     return not (
@@ -229,7 +232,7 @@ def safe_name(rel):
     )
 
 
-def check_project(path, projects_root="~/dev"):
+def check_project(path: str, projects_root: str = "~/dev") -> Path:
     """Resolve and vet a project folder. Returns the real path or raises CodeProblem."""
     root = Path(projects_root).expanduser().resolve()
     raw = Path(os.path.expanduser(str(path)))
@@ -255,7 +258,7 @@ def check_project(path, projects_root="~/dev"):
     return p
 
 
-def snapshot(folder):
+def snapshot(folder: Path) -> dict[str, str]:
     """relative path -> sha256 of every ordinary file (no git internals, no symlinks)."""
     out, folder = {}, Path(folder)
     for dirpath, dirnames, filenames in os.walk(folder):
@@ -271,7 +274,7 @@ def snapshot(folder):
     return out
 
 
-def copy_project(src, dst):
+def copy_project(src: str, dst: Path) -> tuple[int, list[str]] | tuple[int, list[Any]]:
     """Copy without secrets, caches, symlinks or music/crypto-named files; refuses oversized projects. Returns (files_copied, skipped)."""
     src, dst = Path(src), Path(dst)
     files, total, skipped = [], 0, []
@@ -304,7 +307,7 @@ def copy_project(src, dst):
     return len(files), skipped
 
 
-def _git(work, *args):
+def _git(work: Path, *args) -> subprocess.CompletedProcess:
     env = {
         "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
         "HOME": str(work.parent),
@@ -331,7 +334,14 @@ def _git(work, *args):
     )
 
 
-def create_task(goal, project, criteria="", cap_usd=None, config=None, projects_root=None):
+def create_task(
+    goal: str,
+    project: str,
+    criteria: str = "",
+    cap_usd: int | float | None = None,
+    config: dict[str, str | float | int] | None = None,
+    projects_root: str | None = None,
+) -> Task:
     """Stage a task: vet the project, clamp the cost cap. Nothing is copied or run yet."""
     cfg = {**DEFAULT_CONFIG, **(config or {})}
     goal = " ".join(str(goal).split())
@@ -352,7 +362,7 @@ def create_task(goal, project, criteria="", cap_usd=None, config=None, projects_
     return task
 
 
-def prepare(task):
+def prepare(task: Task) -> tuple[int, list[str]] | tuple[int, list[Any]]:
     """Create the sandbox: copy the project, record the baseline, start a fresh git repo with no remote."""
     if task.work.exists():
         shutil.rmtree(task.work)
@@ -368,7 +378,7 @@ def prepare(task):
     return count, skipped
 
 
-def seatbelt_profile(task, home=None, proxy_port=None):
+def seatbelt_profile(task: Task, home: Path | None = None, proxy_port: int | None = None) -> str:
     """macOS sandbox profile text: writes only inside the task folder, no reads of personal folders or other projects, and the ONLY network
     allowed is a connection to the local egress proxy port (julius_egress_proxy.py allows api.anthropic.com there). No proxy port = no network at all."""
     home = Path(home or Path.home()).resolve()
@@ -389,14 +399,16 @@ def seatbelt_profile(task, home=None, proxy_port=None):
     return "\n".join(lines) + "\n"
 
 
-def prompt_for(task):
+def prompt_for(task: Task) -> str:
     text = f"Task: {task.goal}"
     if task.criteria:
         text += f"\nDone means: {task.criteria}"
     return text + "\nWork in the current directory only. Run the project's tests if it has any."
 
 
-def build_command(task, api_key, *, claude="claude", config=None, sandbox=True, proxy=None):
+def build_command(
+    task: Task, api_key: str, *, claude="claude", config=None, sandbox=True, proxy=None
+) -> tuple[list[str], dict[str, str], Path]:
     """(argv, env, cwd) for the run. The caller starts it; tests inspect it."""
     cfg = {**DEFAULT_CONFIG, **(config or {})}
     profile = task.dir / "sandbox.sb"
@@ -448,7 +460,7 @@ def build_command(task, api_key, *, claude="claude", config=None, sandbox=True, 
 
 
 # ---- results ----
-def changes(task):
+def changes(task: Task) -> dict[str, list[str] | list[Any | str]]:
     """{'added': [...], 'modified': [...], 'deleted': [...]} comparing the work folder with the baseline."""
     now = snapshot(task.work)
     base = task.baseline
@@ -459,7 +471,7 @@ def changes(task):
     }
 
 
-def diff_stat(task):
+def diff_stat(task: Task) -> tuple[int, int]:
     """(insertions, deletions) of the work folder against the baseline commit; new files count when staged."""
     try:
         _git(task.work, "add", "-A")
@@ -474,7 +486,7 @@ def diff_stat(task):
     return ins, dele
 
 
-def summarize(task):
+def summarize(task: Task) -> str:
     c = changes(task)
     ins, dele = diff_stat(task)
     names = c["added"] + c["modified"]
@@ -491,7 +503,7 @@ def summarize(task):
     return text
 
 
-def merge_plan(task):
+def merge_plan(task: Task) -> dict[str, list[Any | str]]:
     """What a merge would do, checked against the real project right now."""
     c = changes(task)
     real = Path(task.project)
@@ -515,7 +527,7 @@ def merge_plan(task):
     }
 
 
-def merge(task, config=None):
+def merge(task: Task, config: dict[str, str] | None = None) -> dict[str, float | list[str]]:
     """Apply the plan: copy added/modified files into the real project, backing up what is overwritten. Never deletes."""
     check_project(task.project, ({**DEFAULT_CONFIG, **(config or {})})["projects_root"])
     plan = merge_plan(task)
@@ -542,7 +554,7 @@ def merge(task, config=None):
     return task.merged
 
 
-def undo_merge(task):
+def undo_merge(task: Task) -> tuple[int, int]:
     """Put the project back: restore backed-up files, remove files the merge added (only if they are still the merged versions)."""
     done = task.merged or {}
     real = Path(task.project)
@@ -562,7 +574,7 @@ def undo_merge(task):
     return restored, removed
 
 
-def discard(task):
+def discard(task: Task) -> bool:
     """Delete the task's own scratch folder (never the project). Only paths under CODE_HOME are removed."""
     d = task.dir.resolve()
     if d.parent != CODE_HOME.resolve():
@@ -583,21 +595,21 @@ DEFAULT_CONFIG = {
 }
 
 
-def save(task):
+def save(task: Task) -> None:
     task.dir.mkdir(parents=True, exist_ok=True)
     tmp = task.dir / "task.json.tmp"
     tmp.write_text(json.dumps(asdict(task), indent=1))
     os.replace(tmp, task.dir / "task.json")
 
 
-def load(task_id):
+def load(task_id: str) -> Task:
     path = CODE_HOME / task_id / "task.json"
     if not path.is_file():
         raise CodeProblem("no_task", "I don't have a coding task with that id.")
     return Task(**json.loads(path.read_text()))
 
 
-def all_tasks():
+def all_tasks() -> list[Task | Any]:
     out = []
     for p in sorted(CODE_HOME.glob("c*/task.json")) if CODE_HOME.is_dir() else []:
         try:
@@ -613,21 +625,21 @@ _LOCK = threading.Lock()
 
 
 class Run:
-    def __init__(self, task):
+    def __init__(self, task: Task) -> None:
         self.task, self.proc, self.thread = task, None, None
         self.cancelled = self.timed_out = self.over_budget = False
         self.done = threading.Event()
 
-    def wait(self, timeout=None):
+    def wait(self, timeout: int | None = None) -> bool:
         return self.done.wait(timeout)
 
 
-def running():
+def running() -> list[Any | Run]:
     with _LOCK:
         return [r for r in _RUNNING.values() if not r.done.is_set()]
 
 
-def _kill(run):
+def _kill(run: Run) -> None:
     proc = run.proc
     if proc is None or proc.poll() is not None:
         return
@@ -643,7 +655,7 @@ def _kill(run):
             continue
 
 
-def cancel(task_id=None):
+def cancel(task_id: None = None) -> bool:
     """Stop the running task (the stop hotkey and 'cancel the coding task' end up here). Returns True if one was running."""
     live = [r for r in running() if task_id in (None, r.task.id)]
     for r in live:
@@ -652,11 +664,13 @@ def cancel(task_id=None):
     return bool(live)
 
 
-def spent_today(tracker):
+def spent_today(tracker: CostTracker) -> int | float:
     return tracker.code_today() if tracker is not None else 0.0
 
 
-def start(task, *, api_key, tracker=None, config=None, claude=None, sandbox=True, on_done=None):
+def start(
+    task: Task, *, api_key, tracker=None, config=None, claude=None, sandbox=True, on_done=None
+) -> Run:
     """Begin the task in the background. Raises CodeProblem when something else is running or the daily coding budget would be exceeded."""
     cfg = {**DEFAULT_CONFIG, **(config or {})}
     if not api_key:
@@ -691,7 +705,7 @@ def start(task, *, api_key, tracker=None, config=None, claude=None, sandbox=True
     return run
 
 
-def _execute(run, api_key, tracker, cfg, claude, sandbox, on_done):
+def _execute(run, api_key, tracker, cfg, claude, sandbox, on_done) -> None:
     task, result, cost, rc, proxy = run.task, {}, 0.0, None, None
     try:
         count, _ = prepare(task) if not task.baseline else (0, [])
@@ -718,7 +732,7 @@ def _execute(run, api_key, tracker, cfg, claude, sandbox, on_done):
                 start_new_session=True,
             )
 
-            def watchdog():
+            def watchdog() -> None:
                 if not run.done.wait(task.timeout_s) and run.proc.poll() is None:
                     run.timed_out = True
                     _kill(run)
@@ -760,7 +774,7 @@ def _execute(run, api_key, tracker, cfg, claude, sandbox, on_done):
                 on_done(task)
 
 
-def _finish(run, result, cost, rc, tracker):
+def _finish(run, result, cost, rc, tracker) -> None:
     task = run.task
     task.cost_usd = round(max(cost, float(result.get("total_cost_usd") or 0)), 4)
     task.finished = time.time()
@@ -786,7 +800,7 @@ def _finish(run, result, cost, rc, tracker):
     save(task)
 
 
-def spoken_result(task):
+def spoken_result(task: Task) -> str:
     """What Julius says when a task ends."""
     cost = f"${task.cost_usd:.2f}"
     if task.status == "done":

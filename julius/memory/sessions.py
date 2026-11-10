@@ -10,7 +10,7 @@ MEM = REPO_ROOT / "julius_memory"
 SESS = MEM / "sessions"
 
 
-def _init():
+def _init() -> None:
     SESS.mkdir(parents=True, exist_ok=True)
     for f, d in [
         ("facts.json", {"facts": []}),
@@ -28,13 +28,13 @@ def _load(name):
     return json.loads((MEM / name).read_text())
 
 
-def _save(name, d):
+def _save(name, d) -> None:
     _init()
     (MEM / name).write_text(json.dumps(d, indent=2))
 
 
 # ---------- session transcript ----------
-def log_turn(user, assistant, meta=None):
+def log_turn(user, assistant, meta=None) -> None:
     _init()
     rec = {"t": datetime.now().isoformat(timespec="seconds"), "user": user, "julius": assistant}
     if meta:
@@ -90,7 +90,7 @@ def staged():
     return _load("staging.json")["items"]
 
 
-def promote(item_id):
+def promote(item_id) -> bool:
     s = _load("staging.json")
     moved = next((it for it in s["items"] if it["id"] == item_id), None)
     if not moved:
@@ -129,5 +129,5 @@ def reject(item_id):
     return len(s["items"]) < n
 
 
-def set_last_session(summary):
+def set_last_session(summary) -> None:
     _save("last_session.json", {"date": date.today().isoformat(), "summary": summary})

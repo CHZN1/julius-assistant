@@ -50,7 +50,7 @@ OPERATORS = {
 }
 
 
-def number(text):
+def number(text: str) -> str:
     text = text.strip()
     if re.fullmatch(r"-?\d+(?:\.\d+)?", text):
         return text
@@ -69,7 +69,7 @@ def number(text):
     return None
 
 
-def arithmetic_expression(text):
+def arithmetic_expression(text: str) -> str | None:
     if not isinstance(text, str) or len(text) > 512:
         return None
     text = re.sub(r"^(?:what(?:\'s| is) |calculate )", "", text.lower().strip().rstrip("?.!"))

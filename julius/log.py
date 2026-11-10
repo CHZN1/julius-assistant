@@ -54,7 +54,7 @@ def record(level, event, msg="", log_transcripts=False, **fields):
 class Tee(io.TextIOBase):
     """File-like wrapper: passes text through and logs every complete line."""
 
-    def __init__(self, inner, log, level, log_transcripts=False):
+    def __init__(self, inner, log, level, log_transcripts=False) -> None:
         self.inner, self.log, self.level, self.log_transcripts, self.buf = (
             inner,
             log,
@@ -82,7 +82,7 @@ class Tee(io.TextIOBase):
                 )
         return len(s)
 
-    def flush(self):
+    def flush(self) -> None:
         with contextlib.suppress(Exception):
             self.inner.flush()
 
@@ -103,7 +103,7 @@ def install(log_transcripts=False, path=None):
     return _logger
 
 
-def event(name, msg="", **fields):
+def event(name, msg="", **fields) -> None:
     """A structured event (start, quiet, wake, stop, crash ...); a no-op when the JSON log is not installed."""
     if _logger is not None:
         _logger.info(record("info", name, msg, True, **fields))

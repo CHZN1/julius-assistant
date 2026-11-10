@@ -1,3 +1,5 @@
+"""Unit tests for listening."""
+
 import unittest
 
 from julius.audio.listening import has_wake, incomplete_fragment, listening_control, strip_wake

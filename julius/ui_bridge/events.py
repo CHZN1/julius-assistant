@@ -20,6 +20,9 @@ import socket
 import struct
 import threading
 import time
+from collections.abc import Callable
+
+from numpy import ndarray
 
 GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 HOST = "127.0.0.1"
@@ -35,11 +38,11 @@ MAX_CLIENTS = 8
 LEVEL_GAIN = 4.0
 
 
-def accept_key(key):
+def accept_key(key: str) -> str:
     return base64.b64encode(hashlib.sha1((key + GUID).encode()).digest()).decode()
 
 
-def frame(payload, opcode=0x1):
+def frame(payload: str, opcode: int = 0x1) -> bytes:
     b = payload.encode() if isinstance(payload, str) else payload
     n = len(b)
     head = bytes([0x80 | opcode]) + (
@@ -66,7 +69,7 @@ def origin_ok(origin):
 
 
 class EventHub:
-    def __init__(self, transcript_lines=20, clock=time.time):
+    def __init__(self, transcript_lines: int = 20, clock: Callable = time.time) -> None:
         self.clock = clock
         self.state = "idle"
         self.level = 0.0
@@ -75,27 +78,27 @@ class EventHub:
         self._lock = threading.Lock()
 
     # -- publishing (called from Julius; never raises, never blocks)
-    def _send(self, msg):
+    def _send(self, msg: dict[str, str | float | int]) -> None:
         data = frame(json.dumps(msg, separators=(",", ":")))
         with self._lock:
             clients = list(self._clients)
         for c in clients:
             c.offer(data)
 
-    def set_state(self, state):
+    def set_state(self, state: str) -> None:
         if state not in STATES or state == self.state:
             return
         prev, self.state = self.state, state
         self._send({"type": "state", "state": state, "prev": prev, "t": round(self.clock(), 3)})
 
-    def set_level(self, level):
+    def set_level(self, level: float) -> None:
         level = max(0.0, min(1.0, float(level) * LEVEL_GAIN))
         was = self.level
         self.level = level
         if level > 0.0005 or was > 0.0005:
             self._send({"type": "level", "level": round(level, 3), "t": round(self.clock(), 3)})
 
-    def say(self, who, text, turn=None):
+    def say(self, who: str, text: str, turn: int | None = None) -> None:
         text = (text or "").strip()
         if not text:
             return
@@ -109,7 +112,7 @@ class EventHub:
         self.transcript.append(line)
         self._send(line)
 
-    def hello(self):
+    def hello(self) -> dict[str, str | float]:
         return {
             "type": "hello",
             "state": self.state,
@@ -119,37 +122,37 @@ class EventHub:
         }
 
     # -- clients
-    def add(self, client):
+    def add(self, client) -> bool:
         with self._lock:
             if len(self._clients) >= MAX_CLIENTS:
                 return False
             self._clients.add(client)
             return True
 
-    def remove(self, client):
+    def remove(self, client) -> None:
         with self._lock:
             self._clients.discard(client)
 
     @property
-    def clients(self):
+    def clients(self) -> int:
         with self._lock:
             return len(self._clients)
 
 
 class _Client(threading.Thread):
-    def __init__(self, sock, hub):
+    def __init__(self, sock, hub) -> None:
         super().__init__(daemon=True)
         self.sock, self.hub = sock, hub
         self.q = queue.Queue(maxsize=300)
         self.alive = True
 
-    def offer(self, data):
+    def offer(self, data: bytes) -> None:
         try:
             self.q.put_nowait(data)
         except queue.Full:
             self.close()  # too slow to keep up
 
-    def close(self):
+    def close(self) -> None:
         self.alive = False
         with contextlib.suppress(queue.Full):
             self.q.put_nowait(None)
@@ -165,7 +168,7 @@ class _Client(threading.Thread):
             buf += chunk
         return buf
 
-    def _reader(self):  # client frames are never acted on: only ping and close are answered
+    def _reader(self) -> None:  # client frames are never acted on: only ping and close are answered
         try:
             while self.alive:
                 b1, b2 = self._read_exact(2)
@@ -190,7 +193,7 @@ class _Client(threading.Thread):
         finally:
             self.close()
 
-    def run(self):
+    def run(self) -> None:
         try:
             self.sock.settimeout(5.0)
             req = b""
@@ -250,7 +253,14 @@ class _Client(threading.Thread):
 
 
 class EventServer:
-    def __init__(self, hub, port=8765, state_fn=None, level_fn=None, hz=30):
+    def __init__(
+        self,
+        hub: EventHub,
+        port: int = 8765,
+        state_fn: Callable | None = None,
+        level_fn: Callable | None = None,
+        hz: int = 30,
+    ) -> None:
         self.hub, self.port, self.state_fn, self.level_fn, self.hz = (
             hub,
             port,
@@ -261,7 +271,7 @@ class EventServer:
         self._stop = threading.Event()
         self._sock = None
 
-    def start(self):
+    def start(self) -> "EventServer":
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind((HOST, self.port))
@@ -272,7 +282,7 @@ class EventServer:
         threading.Thread(target=self._sample, daemon=True).start()
         return self
 
-    def _accept(self):
+    def _accept(self) -> None:
         while not self._stop.is_set():
             try:
                 conn, _ = self._sock.accept()
@@ -280,7 +290,7 @@ class EventServer:
                 return
             _Client(conn, self.hub).start()
 
-    def _sample(self):
+    def _sample(self) -> None:
         period = 1.0 / self.hz
         while not self._stop.is_set():
             if self.hub.clients or self.state_fn:
@@ -293,7 +303,7 @@ class EventServer:
                     pass
             time.sleep(period if self.hub.clients else 0.25)
 
-    def stop(self):
+    def stop(self) -> None:
         self._stop.set()
         with contextlib.suppress(OSError, AttributeError):
             self._sock.close()
@@ -302,12 +312,12 @@ class EventServer:
 class LevelTap:
     """SpeechPlayer.tap-compatible meter for when duplex audio is off: remembers the loudness of the audio just handed to the player, decaying with time."""
 
-    def __init__(self, clock=time.monotonic):
+    def __init__(self, clock: Callable = time.monotonic) -> None:
         self.clock = clock
         self._rms = 0.0
         self._at = 0.0
 
-    def out(self, audio, rate):
+    def out(self, audio: ndarray, rate: int) -> None:
         import numpy as np
 
         a = np.asarray(audio, dtype=np.float32)
@@ -315,11 +325,11 @@ class LevelTap:
             self._rms = float(np.sqrt(np.mean(a * a)))
             self._at = self.clock()
 
-    def level(self):
+    def level(self) -> float:
         return self._rms if self.clock() - self._at < 0.15 else 0.0
 
 
-def start_from_config(cfg, state_fn=None, level_fn=None):
+def start_from_config(cfg: dict[str, bool | int], state_fn: None = None, level_fn: None = None):
     """cfg is the [events] table. Returns (hub, server) or (None, None) when disabled or the port is taken (Julius never fails to start over a UI feed)."""
     if not (cfg or {}).get("enabled", True):
         return None, None

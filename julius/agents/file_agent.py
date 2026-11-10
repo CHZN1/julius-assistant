@@ -5,6 +5,7 @@ No model calls. Mutations require a confirmed, current-session preview.
 
 from __future__ import annotations
 
+import builtins
 import contextlib
 import fcntl
 import fnmatch
@@ -18,14 +19,17 @@ import tempfile
 import threading
 import time
 import uuid
+from collections.abc import Callable, Iterator
 from functools import wraps
 from pathlib import Path
+from posix import DirEntry
+from typing import Any
 
 from julius.paths import REPO_ROOT
 
 
 class FileProblem(Exception):
-    def __init__(self, code, message, **data):
+    def __init__(self, code: str, message: str, **data) -> None:
         super().__init__(message)
         self.code, self.data = code, data
 
@@ -161,14 +165,14 @@ RECENT_SECONDS = 7 * 86400
 INSTALLER_SECONDS = 30 * 86400
 
 
-def human_size(n):
+def human_size(n: int) -> str:
     for unit in ("bytes", "KB", "MB", "GB"):
         if n < 1024 or unit == "GB":
             return f"{n} bytes" if unit == "bytes" else f"{n:.1f} {unit}".replace(".0 ", " ")
         n /= 1024
 
 
-def summarize_ops(ops, limit=3):
+def summarize_ops(ops: list[Any], limit: int = 3) -> str:
     """'a.pdf, b.txt and c.csv (12 MB in total) and 9 more' for speech; the full list is printed from the plan."""
     names = [Path(o["to"]).name for o in ops]
     total = sum(o["fingerprint"]["size"] for o in ops)
@@ -178,11 +182,11 @@ def summarize_ops(ops, limit=3):
     return f"{text}{f' and {more} more' if more > 0 else ''} ({human_size(total)} in total)"
 
 
-def result(ok, code, message, **data):
+def result(ok: bool, code: str, message: str, **data) -> dict[str, Any]:
     return {"agent": "files", "ok": ok, "code": code, "message": message, "data": data}
 
 
-def response(method):
+def response(method: Callable) -> Callable:
     @wraps(method)
     def wrapped(self, *args, **kwargs):
         try:
@@ -229,7 +233,14 @@ class FileAgent:
     MAX_PLAN_BYTES = 512 * 1024 * 1024
     PLAN_TTL = 15 * 60
 
-    def __init__(self, root=None, state_dir=None, allowed_roots=None, trash_dir=None, folders=None):
+    def __init__(
+        self,
+        root: Path | None = None,
+        state_dir: Path | None = None,
+        allowed_roots: None = None,
+        trash_dir: None = None,
+        folders: dict[str, str] | None = None,
+    ) -> None:
         self.root = Path(root or Path.home()).resolve()
         self.modes = self._modes(folders, allowed_roots)
         self.allowed = tuple(p for p, mode in self.modes.items() if mode != "none")
@@ -241,7 +252,7 @@ class FileAgent:
         self._mutex = threading.RLock()
         self.last_scan = {}
 
-    def _modes(self, folders, allowed_roots):
+    def _modes(self, folders: dict[str, str] | None, allowed_roots: None) -> dict[Path, str]:
         """{folder: 'write'|'read'|'none'} from the config table; names are relative to the home folder, other entries are paths."""
         if allowed_roots is not None:
             return {Path(p).resolve(): "write" for p in allowed_roots}
@@ -262,7 +273,7 @@ class FileAgent:
             modes[path] = mode
         return modes
 
-    def mode_of(self, path):
+    def mode_of(self, path: str | Path) -> tuple[Path, str]:
         """The permission of the most specific configured folder containing `path`."""
         p = Path(path)
         best = None
@@ -271,7 +282,7 @@ class FileAgent:
                 best = (root, mode)
         return best
 
-    def require_write(self, path):
+    def require_write(self, path: str | Path) -> None:
         found = self.mode_of(path)
         if found is None or found[1] != "write":
             name = found[0].name if found else Path(path).parent.name
@@ -280,7 +291,7 @@ class FileAgent:
                 f"{name} is read-only for Julius, so I will not change anything there. You can change this in the [files.folders] section of julius.toml.",
             )
 
-    def _extra_folder(self, p):
+    def _extra_folder(self, p: Path) -> Path:
         """A configured folder outside Documents/Desktop/Downloads named anywhere in a relative path ("sandbox", "sand box/a.txt", "Documents/dev/Sandbox") -> that folder plus the rest."""
         standard = {self.root / n for n in ("Documents", "Desktop", "Downloads")}
 
@@ -299,7 +310,7 @@ class FileAgent:
                     return extras[key("".join(words[i:j]))].joinpath(*words[j:])
         return None
 
-    def resolve(self, value=".", *, new=False, internal=False):
+    def resolve(self, value: str | Path = ".", *, new=False, internal=False) -> Path:
         """Turn a spoken or typed path into a checked absolute path inside the allowed folders."""
         raw = str(value).strip().strip('"').strip("'")
         if not raw:
@@ -375,7 +386,7 @@ class FileAgent:
                 break
 
     @contextlib.contextmanager
-    def _locked(self):
+    def _locked(self) -> Iterator[None]:
         with self._mutex:
             self.state_dir.mkdir(parents=True, exist_ok=True)
             with (self.state_dir / "file_agent.lock").open("a") as lock:
@@ -385,7 +396,7 @@ class FileAgent:
                 finally:
                     fcntl.flock(lock, fcntl.LOCK_UN)
 
-    def _load(self):
+    def _load(self) -> dict[str, Any]:
         if not self.state_path.exists():
             return {"version": 2, "plans": {}, "batches": []}
         if self.state_path.stat().st_size > 16 * 1024 * 1024:
@@ -453,7 +464,7 @@ class FileAgent:
         ):
             raise self._corrupt("The new-file preview is missing its content.")
 
-    def _save(self, data):
+    def _save(self, data: dict[str, Any]) -> None:
         fd, name = tempfile.mkstemp(prefix=".file-state-", dir=self.state_dir)
         try:
             with os.fdopen(fd, "w") as f:
@@ -470,7 +481,7 @@ class FileAgent:
             if os.path.exists(name):
                 os.unlink(name)
 
-    def _fingerprint(self, path):
+    def _fingerprint(self, path: str | Path) -> dict[str, str | int]:
         p = self.resolve(path, internal=True)
         before = p.stat()
         if not stat.S_ISREG(before.st_mode):
@@ -498,7 +509,7 @@ class FileAgent:
             "sha256": h.hexdigest(),
         }
 
-    def _matches(self, path, expected, *, identity=False):
+    def _matches(self, path: str | Path, expected: dict[str, str | int], *, identity=False) -> bool:
         try:
             p = self.resolve(path, internal=True)
             info = p.stat()
@@ -516,7 +527,14 @@ class FileAgent:
         except (OSError, FileProblem):
             return False
 
-    def _scan(self, source, pattern="*", recursive=False, include_hidden=False, limit=None):
+    def _scan(
+        self,
+        source: str | Path,
+        pattern: str | builtins.list[str] = "*",
+        recursive: bool = False,
+        include_hidden: bool = False,
+        limit: int | None = None,
+    ) -> Any:
         p = self.resolve(source)
         if not p.is_dir():
             raise FileProblem("not_folder", f"{p.name} is not a folder.")
@@ -559,7 +577,17 @@ class FileAgent:
         }
         return hits[:cap], self.last_scan
 
-    def _scan_entry(self, entry, base, patterns, recursive, include_hidden, stack, hits, issues):
+    def _scan_entry(
+        self,
+        entry: DirEntry,
+        base: Path,
+        patterns: builtins.list[str],
+        recursive: bool,
+        include_hidden: bool,
+        stack: builtins.list[Any | Path],
+        hits: builtins.list[Any | dict[str, str | int]],
+        issues: builtins.list[Any],
+    ) -> None:
         """Queue a folder for descent or record a matching file; skip hidden, protected, symlinks."""
         if entry.path == str(self.state_dir):
             return
@@ -587,7 +615,9 @@ class FileAgent:
             issues.append({"path": entry.path, "error": str(exc)})
 
     @response
-    def find(self, pattern="*", source=".", recursive=False):
+    def find(
+        self, pattern: str | builtins.list[str] = "*", source: str = ".", recursive: bool = False
+    ) -> dict[str, Any]:
         hits, scan = self._scan(source, pattern, recursive)
         suffix = (
             " The search limit was reached; narrow the folder or filename."
@@ -601,7 +631,7 @@ class FileAgent:
         )
 
     @response
-    def list(self, directory=".", limit=40):
+    def list(self, directory: str = ".", limit: int = 40) -> dict[str, Any]:
         p = self.resolve(directory)
         if not p.is_dir():
             raise FileProblem("not_folder", f"{p.name} is not a folder.")
@@ -644,7 +674,9 @@ class FileAgent:
         )
 
     @response
-    def read(self, path, max_chars=2000):
+    def read(
+        self, path: str, max_chars: int = 2000
+    ) -> dict[str, str | bool | dict[str, str | bool]]:
         p = self.resolve(path)
         cap = max(1, min(int(max_chars), 20000))
         if not p.is_file():
@@ -702,7 +734,7 @@ class FileAgent:
     @response
     def propose(
         self,
-        action,
+        action: str,
         *,
         source=".",
         destination=None,
@@ -713,7 +745,7 @@ class FileAgent:
         turn=0,
         paths=None,
         origin="human",
-    ):
+    ) -> dict[str, Any]:
         if action == "trash":
             return self._propose_trash(source, pattern, paths, origin, turn)
         if action not in {"move", "copy", "rename", "create"}:
@@ -759,7 +791,14 @@ class FileAgent:
             plan=plan,
         )
 
-    def _plan_transfer(self, action, src, dst, pattern, recursive):
+    def _plan_transfer(
+        self,
+        action: str,
+        src: Path,
+        dst: Path,
+        pattern: builtins.list[str] | str,
+        recursive: bool,
+    ) -> builtins.list[dict[str, str]]:
         if action == "move":
             self.require_write(src)
         hits, scan = self._scan(src, pattern, recursive, limit=self.MAX_PLAN_FILES)
@@ -783,7 +822,7 @@ class FileAgent:
             ops.append({"from": str(old), "to": str(target)})
         return ops
 
-    def _plan_rename(self, src, dst):
+    def _plan_rename(self, src: Path, dst: Path) -> builtins.list[dict[str, str]]:
         self.require_write(src)
         if dst.parent != src.parent:
             raise FileProblem(
@@ -795,7 +834,7 @@ class FileAgent:
         return [{"from": str(src), "to": str(dst)}]
 
     @staticmethod
-    def _plan_create(dst, content):
+    def _plan_create(dst: Path, content: str) -> builtins.list[dict[str, str | None]]:
         if not isinstance(content, str):
             raise FileProblem(
                 "missing_content", "Please provide the exact text to put in the new file."
@@ -804,7 +843,9 @@ class FileAgent:
             raise FileProblem("too_large", "New text files are limited to 1 MB per request.")
         return [{"from": None, "to": str(dst), "content": content}]
 
-    def _fingerprint_ops(self, ops, content) -> int:
+    def _fingerprint_ops(
+        self, ops: builtins.list[dict[str, str | None]], content: str | None
+    ) -> int:
         """Check each target is free, fingerprint each source, and return the total size."""
         too_large = FileProblem(
             "too_large",
@@ -836,7 +877,12 @@ class FileAgent:
         return total
 
     @staticmethod
-    def _preview_message(action, ops, src, dst) -> str:
+    def _preview_message(
+        action: str,
+        ops: Any,
+        src: Path | None,
+        dst: Path,
+    ) -> str:
         if action in {"move", "copy"}:
             detail = " It covers " + summarize_ops(ops) + "."
             return (
@@ -848,7 +894,7 @@ class FileAgent:
         return f"I can create {dst.name} with the supplied text."
 
     # ---- trash: recoverable deletion ------------------------------------------------------------------------------
-    def protection(self, path, origin="human"):
+    def protection(self, path: str | Path, origin: str = "human") -> str | None:
         """Why this file must not be moved to the trash, or None. Music, app bundles and project folders are protected for everyone; the planner
         (origin='planner') also never proposes anything touched in the last 7 days, installers used in the last 30 days, or source-code files."""
         p = Path(path)
@@ -861,7 +907,9 @@ class FileAgent:
         return self._planner_protection(p, ext)
 
     @staticmethod
-    def _kind_protection(p, ext, parts):
+    def _kind_protection(
+        p: Path, ext: str, parts: tuple[str, str] | tuple[str, str, str] | tuple[str]
+    ) -> str | None:
         if p.is_symlink():
             return "it is a link"
         if not p.is_file():
@@ -873,7 +921,7 @@ class FileAgent:
         return None
 
     @staticmethod
-    def _folder_protection(p):
+    def _folder_protection(p: Path) -> str | None:
         try:
             siblings = {e.name for e in os.scandir(p.parent)}
         except OSError:
@@ -884,7 +932,7 @@ class FileAgent:
             return "its folder contains a code or project file"
         return None
 
-    def _planner_protection(self, p, ext):
+    def _planner_protection(self, p: Path, ext: str) -> str | None:
         """Extra caution for files the planner (not the human) proposes to trash."""
         info = p.stat()
         stamps = [info.st_mtime] + (
@@ -898,7 +946,9 @@ class FileAgent:
             return "it is an installer that was used in the last 30 days"
         return None
 
-    def _propose_trash(self, source, pattern, paths, origin, turn):
+    def _propose_trash(
+        self, source: str, pattern: str, paths: builtins.list[str] | None, origin: str, turn: int
+    ) -> dict[str, Any]:
         pid = uuid.uuid4().hex[:12]
         hits = []
         skipped = []
@@ -985,7 +1035,7 @@ class FileAgent:
             skipped=skipped,
         )
 
-    def trash_size(self):
+    def trash_size(self) -> int:
         total = 0
         if self.trash_dir.exists():
             for root, _dirs, files in os.walk(self.trash_dir):
@@ -994,7 +1044,7 @@ class FileAgent:
                         total += os.lstat(os.path.join(root, f)).st_size
         return total
 
-    def trash_notice(self):
+    def trash_notice(self) -> str:
         """Spoken reminder once the trash is over 1 GB, else ''."""
         size = self.trash_size()
         return (
@@ -1004,7 +1054,7 @@ class FileAgent:
         )
 
     @response
-    def trash_info(self):
+    def trash_info(self) -> dict[str, str | bool | dict[str, int]]:
         size = self.trash_size()
         n = sum(len(fs) for _r, _d, fs in os.walk(self.trash_dir)) if self.trash_dir.exists() else 0
         return result(
@@ -1017,7 +1067,7 @@ class FileAgent:
         )
 
     @response
-    def propose_empty_trash(self, turn=0):
+    def propose_empty_trash(self, turn: int = 0) -> dict[str, Any]:
         """Permanent deletion of everything in the trash: preview first, confirm in a separate turn. The only operation that cannot be undone."""
         files = []
         if self.trash_dir.exists():
@@ -1071,7 +1121,11 @@ class FileAgent:
             plan=plan,
         )
 
-    def _execute_purge(self, state, plan):
+    def _execute_purge(
+        self,
+        state: dict[str, Any],
+        plan: dict[str, Any],
+    ) -> dict[str, Any]:
         gone = 0
         kept = 0
         for op in plan["ops"]:
@@ -1120,7 +1174,7 @@ class FileAgent:
         )
 
     @response
-    def history(self, limit=8, today=False):
+    def history(self, limit: int = 8, today: bool = False) -> dict[str, Any]:
         with self._locked():
             state = self._load()
         rows, midnight, older = [], time.mktime(time.localtime()[:3] + (0, 0, 0, 0, 0, -1)), None
@@ -1173,7 +1227,7 @@ class FileAgent:
         )
 
     @response
-    def show(self, plan_id):
+    def show(self, plan_id: str) -> dict[str, Any]:
         with self._locked():
             plan = self._load()["plans"].get(plan_id)
         if not plan:
@@ -1185,7 +1239,10 @@ class FileAgent:
             plan=plan,
         )
 
-    def _preflight(self, plan):
+    def _preflight(
+        self,
+        plan: dict[str, Any],
+    ) -> None:
         if plan["session"] != self.session:
             raise FileProblem(
                 "stale_session",
@@ -1211,14 +1268,19 @@ class FileAgent:
                 raise FileProblem("collision", f"{d.name} now exists. Nothing will be overwritten.")
 
     @staticmethod
-    def _sync_directory(path):
+    def _sync_directory(path: Path) -> None:
         fd = os.open(path, os.O_RDONLY)
         try:
             os.fsync(fd)
         finally:
             os.close(fd)
 
-    def _publish(self, op, action, journal=None):
+    def _publish(
+        self,
+        op: dict[str, str | dict[str, str | int] | None],
+        action: str,
+        journal: Callable | None = None,
+    ) -> dict[str, str | int]:
         dst = self.resolve(op["to"], new=True, internal=True)
         dst.parent.mkdir(parents=True, exist_ok=True)
         self.resolve(dst.parent, internal=True)
@@ -1232,7 +1294,13 @@ class FileAgent:
             self._sync_directory(src.parent)
         return self._fingerprint(dst)
 
-    def _publish_by_link(self, op, src, dst, journal):
+    def _publish_by_link(
+        self,
+        op: dict[str, str | dict[str, str | int]],
+        src: Path,
+        dst: Path,
+        journal: Callable | None,
+    ) -> None:
         """Same-device move: exclusive publication, so a new target cannot be overwritten."""
         op["publication_fingerprint"] = op["fingerprint"]
         if journal:
@@ -1253,7 +1321,14 @@ class FileAgent:
             )
         src.unlink()
 
-    def _publish_staged(self, op, action, src, dst, journal):
+    def _publish_staged(
+        self,
+        op: dict[str, str | dict[str, str | int] | None],
+        action: str,
+        src: Path | None,
+        dst: Path,
+        journal: Callable,
+    ) -> None:
         """Copy to a hidden temp file in the destination folder, verify it, then link it in."""
         fd, temp = tempfile.mkstemp(prefix=".julius-stage-", dir=dst.parent)
         os.close(fd)
@@ -1284,7 +1359,9 @@ class FileAgent:
         finally:
             Path(temp).unlink(missing_ok=True)
 
-    def _verify_staged(self, op, src, temp) -> str:
+    def _verify_staged(
+        self, op: dict[str, str | dict[str, str | int] | None], src: Path | None, temp: str
+    ) -> str:
         """Flush the staged copy and confirm it still matches what was planned; returns its sha256."""
         with open(temp, "rb") as f:
             os.fsync(f.fileno())
@@ -1301,7 +1378,7 @@ class FileAgent:
         return h.hexdigest()
 
     @response
-    def execute(self, plan_id, *, confirmed=False, turn=0):
+    def execute(self, plan_id: str, *, confirmed=False, turn=0) -> dict[str, Any]:
         if confirmed is not True:
             raise FileProblem(
                 "confirmation_required", "Please confirm the displayed file plan before running it."
@@ -1367,7 +1444,7 @@ class FileAgent:
         )
 
     @response
-    def cancel(self, plan_id):
+    def cancel(self, plan_id: str) -> dict[str, str | bool]:
         with self._locked():
             state = self._load()
             plan = state["plans"].get(plan_id)
@@ -1380,7 +1457,9 @@ class FileAgent:
         return result(True, "cancelled", "Cancelled. No files were changed.")
 
     @response
-    def undo(self):
+    def undo(
+        self,
+    ) -> dict[str, Any]:
         with self._locked():
             state = self._load()
             candidates = [
@@ -1407,7 +1486,13 @@ class FileAgent:
             issues=issues,
         )
 
-    def _undo_op(self, plan, op, state, issues) -> bool:
+    def _undo_op(
+        self,
+        plan: dict[str, Any],
+        op: dict[str, str | dict[str, str | int] | None],
+        state: dict[str, Any],
+        issues: builtins.list[Any],
+    ) -> bool:
         """Reverse one operation. True when a file change was reversed; problems go into issues."""
         if op["status"] == "undone":
             return False
@@ -1455,7 +1540,13 @@ class FileAgent:
         self._save(state)
         return True
 
-    def _finish_undoing(self, plan, op, dst, state) -> bool:
+    def _finish_undoing(
+        self,
+        plan: dict[str, Any],
+        op: dict[str, str | dict[str, str | int]],
+        dst: Path,
+        state: dict[str, Any],
+    ) -> bool:
         """An undo that was interrupted after its work finished: mark it done."""
         if (
             plan["action"] in MOVELIKE
@@ -1467,7 +1558,14 @@ class FileAgent:
             return True
         return False
 
-    def _recover_interrupted(self, plan, op, dst, state, issues):
+    def _recover_interrupted(
+        self,
+        plan: dict[str, Any],
+        op: dict[str, str | dict[str, str | int]],
+        dst: Path,
+        state: dict[str, Any],
+        issues: builtins.list[Any],
+    ) -> bool | None:
         """None to continue the normal undo, else True (reversed) or False (handled, not reversed)."""
         src_exists = bool(op["from"] and Path(op["from"]).exists())
         if not dst.exists():
@@ -1498,7 +1596,13 @@ class FileAgent:
         )
         return False
 
-    def _move_back(self, op, dst, state, issues) -> bool:
+    def _move_back(
+        self,
+        op: dict[str, str | dict[str, str | int]],
+        dst: Path,
+        state: dict[str, Any],
+        issues: builtins.list[Any],
+    ) -> bool:
         """Put a moved file back where it came from; False (with an issue) when it cannot be."""
         original = self.resolve(op["from"], new=True, internal=True)
         try:

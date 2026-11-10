@@ -18,7 +18,7 @@ CLOUD_DEFAULTS = {
 }
 
 
-def apply_cloud_defaults(environ=None):
+def apply_cloud_defaults(environ: dict[str, str] | None = None) -> dict[str, str]:
     """Fill in any cloud-profile setting the caller has not already set; explicit values always win."""
     environ = os.environ if environ is None else environ
     for key, value in CLOUD_DEFAULTS.items():
@@ -27,7 +27,7 @@ def apply_cloud_defaults(environ=None):
 
 
 # ---- who the assistant is talking to ([profile] in julius.toml / julius.local.toml; neutral defaults) ----
-def _profile():
+def _profile() -> dict[str, str | list[str]]:
     import julius.config as cfg
 
     return cfg.load_config().get("profile", {})
@@ -38,12 +38,12 @@ def user_name():
     return (_profile().get("name") or "").strip() or "the user"
 
 
-def home_city():
+def home_city() -> str:
     """The default city for weather and forecasts, or "" when none is set."""
     return (_profile().get("home_city") or "").strip()
 
 
-def apply(text, profile=None):
+def apply(text: str, profile: None = None) -> str:
     """Swap the author's placeholder name and city in a prompt for this install's profile. Applied to the system prompt and tool descriptions on their way to the model."""
     p = profile if profile is not None else _profile()
     name = (p.get("name") or "").strip() or "the user"

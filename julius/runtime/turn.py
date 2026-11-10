@@ -5,6 +5,7 @@ import resource
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from unittest.mock import Mock
 
 import julius.agents.files as jf
 import julius.brain.tools as jt
@@ -296,7 +297,7 @@ def trim_history(history: list[dict]) -> None:
         history.pop(1)
 
 
-def speech_worker_metrics(tts) -> dict:
+def speech_worker_metrics(tts: Mock) -> dict:
     keep = {"delivery_mode", "voice_strategy", "dtype", "generation_chunks", "allocation_retries"}
     metrics = getattr(tts, "worker_metrics", {})
     return {k: v for k, v in metrics.items() if k.endswith("_bytes") or k in keep}

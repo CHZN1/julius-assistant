@@ -3,11 +3,13 @@
 import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 from zoneinfo import ZoneInfo
 
 import requests
 
 import julius.agents.files as jf
+from julius.brain.dispatcher import Dispatcher
 
 SAFE_ROOT = Path.home()
 
@@ -18,14 +20,14 @@ def _safe(p):
     return jf.agent().resolve(p)
 
 
-def calculate(expression, **_):
+def calculate(expression: str, **_) -> str:
     """Bounded arithmetic parsed as AST; no Python evaluation or symbolic execution."""
     from julius.brain.calculator import evaluate
 
     return f"{expression} = {evaluate(expression):,.10g}"
 
 
-def get_datetime(location=None, offset_days=0, **_):
+def get_datetime(location: None = None, offset_days: int = 0, **_) -> str:
     """Local time, or time in another place if location is given. offset_days=1/-1 gives tomorrow's/yesterday's date (local only)."""
     n = datetime.now().astimezone()
     if offset_days and not location:
@@ -61,13 +63,13 @@ def get_datetime(location=None, offset_days=0, **_):
 NO_HOME = "No city was given and no home city is set. Ask which city, or set home_city under [profile] in julius.local.toml."
 
 
-def _home_or_ask():
+def _home_or_ask() -> str:
     from julius import profile
 
     return profile.home_city()
 
 
-def get_weather(location=None, **_):
+def get_weather(location: None = None, **_) -> str:
     location = location or _home_or_ask()
     if not location:
         return NO_HOME
@@ -115,7 +117,7 @@ def get_weather(location=None, **_):
     )
 
 
-def get_forecast(location=None, days=5, **_):
+def get_forecast(location: None = None, days: int = 5, **_) -> str:
     location = location or _home_or_ask()
     if not location:
         return NO_HOME
@@ -166,7 +168,7 @@ def get_forecast(location=None, days=5, **_):
     return f"{r['name']} forecast:\n" + "\n".join(lines)
 
 
-def get_scores(league="mlb", day="today", **_):
+def get_scores(league: str = "mlb", day: str = "today", **_) -> str:
     """Scores for a day or a short span. day: today, yesterday, last night, a weekday (Sunday), a date (2026-10-25, Oct 25) or last week."""
     from julius.brain.score_days import resolve_days
 
@@ -225,7 +227,7 @@ def find_files(pattern, source=".", recursive=True, **_):
     return jf.render(jf.agent().find(pattern=pattern, source=source, recursive=recursive))
 
 
-def get_quote(symbol, **_):
+def get_quote(symbol: str, **_) -> str:
     """Live price for a stock or crypto. Accepts a ticker or a company/crypto name (julius_tickers); crypto uses BTC-USD style tickers."""
     import julius.brain.tickers as tk
 
@@ -282,7 +284,7 @@ def get_quote(symbol, **_):
     return line + " Source: Yahoo Finance; quotes may be delayed."
 
 
-def get_news(query, **_):
+def get_news(query: str, **_) -> dict[str, Any]:
     from ddgs import DDGS
 
     with DDGS(timeout=10) as d:
@@ -539,7 +541,7 @@ def list_planner_items(kind=None):
     return planner().list(kind)
 
 
-def convert_units(value, from_unit, to_unit):
+def convert_units(value: float, from_unit: str, to_unit: str) -> str:
     from julius.brain.conversions import convert_units as convert
 
     return convert(value, from_unit, to_unit)
@@ -553,7 +555,9 @@ def date_calculate(
     return compute(start, operation, timezone_name, amount, end, target_timezone)
 
 
-def _utility_schema(name, description, properties, required):
+def _utility_schema(
+    name: str, description: str, properties: dict[str, str], required: list[Any | str]
+) -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
@@ -602,7 +606,7 @@ SCHEMAS += [
 ]
 
 
-def read_document(path, query=None):
+def read_document(path: str, query: None = None) -> dict[str, Any]:
     from julius.brain.documents import read_document as extract
 
     return extract(path, query)
@@ -675,13 +679,13 @@ SCHEMAS += [
 memory_assistant = None
 
 
-def _said_this_turn():
+def _said_this_turn() -> str:
     from julius.brain import orchestrator
 
     return orchestrator._STATE.get("user_text") or ""
 
 
-def _grounded(text, utterance, need):
+def _grounded(text: str, utterance: str, need: float) -> bool:
     from julius.memory.store import words
 
     w = set(words(text))
@@ -689,7 +693,7 @@ def _grounded(text, utterance, need):
     return bool(w) and len(w & u) / len(w) >= need
 
 
-def remember_fact(text):
+def remember_fact(text: str) -> str:
     if memory_assistant is None:
         return "Memory is not available."
     if not _grounded(text, _said_this_turn(), 0.6):
@@ -697,7 +701,7 @@ def remember_fact(text):
     return memory_assistant._remember(text, _said_this_turn())
 
 
-def forget_fact(topic=""):
+def forget_fact(topic: str = "") -> str:
     if memory_assistant is None:
         return "Memory is not available."
     topic = (topic or "").strip()
@@ -710,7 +714,7 @@ def forget_fact(topic=""):
     return memory_assistant._forget(topic)
 
 
-def list_memories(topic=""):
+def list_memories(topic: str = "") -> str:
     if memory_assistant is None:
         return "Memory is not available."
     return memory_assistant._list((topic or "").strip() or None)
@@ -722,13 +726,13 @@ file_session = None
 code_session = None
 
 
-def _norm_name(s):
+def _norm_name(s: str) -> str:
     import re
 
     return re.sub(r"[^a-z0-9.]", "", str(s).casefold().replace(" dot ", "."))
 
 
-def file_request(request):
+def file_request(request: str) -> str:
     import re
 
     if file_session is None:
@@ -750,7 +754,7 @@ def file_request(request):
     )
 
 
-def code_request(request="", goal="", project=""):
+def code_request(request: str = "", goal: str = "", project: str = "") -> str:
     if code_session is None:
         return "The coding agent is not available."
     said, turn = _said_this_turn().strip(), jf._TURN["n"]
@@ -812,7 +816,7 @@ SCHEMAS += [
 _dispatcher = None
 
 
-def dispatcher():
+def dispatcher() -> Dispatcher:
     global _dispatcher
     if _dispatcher is None:
         from julius.brain.dispatcher import Dispatcher
@@ -821,7 +825,7 @@ def dispatcher():
     return _dispatcher
 
 
-def call(name, args):
+def call(name: str, args: dict[str, str | float]) -> str:
     service = dispatcher()
     if (
         name == "escalate_to_planner"
@@ -832,7 +836,7 @@ def call(name, args):
     return service.render(service.dispatch(name, args))
 
 
-def call_many(calls):
+def call_many(calls: list[Any]) -> list[tuple[str, bool]]:
     """Run [(name, args), ...]; returns [(rendered_text, ok), ...] in order. Parallel-safe lookups run concurrently."""
     service = dispatcher()
     if any(n == "escalate_to_planner" for n, _ in calls):
@@ -897,7 +901,7 @@ _ASKING = re.compile(
 )
 
 
-def live_tool_required(user_text):
+def live_tool_required(user_text: str) -> bool:
     """True when this turn asks for something that changes (a score, price, weather, schedule, news) and one of those live tools can answer it: the first model call
     must then call a tool, even if the same topic came up earlier in the conversation (an earlier answer is stale, and a remembered one is a guess)."""
     from julius.brain import livedata
@@ -923,7 +927,7 @@ _SECURITY_WORDS = re.compile(
 )
 
 
-def _about_a_security(text):
+def _about_a_security(text: str) -> bool:
     import julius.brain.tickers as tk
 
     if _SECURITY_WORDS.search(text):
@@ -932,7 +936,9 @@ def _about_a_security(text):
     return any(f" {k} " in words for k in tk.TABLE if len(k) >= 3)
 
 
-def select_schemas(user_text):
+def select_schemas(
+    user_text: str,
+) -> list[Any]:
     """Schemas relevant to this request, in catalogue order; all of them when nothing matches."""
     import re
 

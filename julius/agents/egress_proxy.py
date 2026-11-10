@@ -15,6 +15,8 @@ import socket
 import socketserver
 import threading
 import time
+from collections.abc import Callable
+from pathlib import Path
 
 ALLOWED = (("api.anthropic.com", 443),)
 HEADER_LIMIT = 8192
@@ -29,7 +31,13 @@ def _public(ip):
 
 
 class EgressProxy:
-    def __init__(self, allowed=ALLOWED, log_path=None, resolve=socket.getaddrinfo, dial=None):
+    def __init__(
+        self,
+        allowed: tuple[tuple[str, int]] = ALLOWED,
+        log_path: Path | None = None,
+        resolve: Callable = socket.getaddrinfo,
+        dial: Callable | None = None,
+    ) -> None:
         self.allowed = {(h.lower(), int(p)) for h, p in allowed}
         self.log_path, self.resolve = log_path, resolve
         self.dial = dial or (lambda ip, port: socket.create_connection((ip, port), 10))
@@ -37,10 +45,10 @@ class EgressProxy:
         self._lock = threading.Lock()
 
     @property
-    def port(self):
+    def port(self) -> int:
         return self.server.server_address[1] if self.server else None
 
-    def _log(self, line):
+    def _log(self, line) -> None:
         with self._lock:
             self.blocked.append(line)
         if self.log_path:
@@ -50,7 +58,7 @@ class EgressProxy:
             except OSError:
                 pass
 
-    def start(self):
+    def start(self) -> "EgressProxy":
         proxy = self
 
         class H(socketserver.BaseRequestHandler):
@@ -98,13 +106,13 @@ class EgressProxy:
                 except OSError:
                     pass
 
-            def _say(self, code, why):
+            def _say(self, code, why) -> None:
                 with contextlib.suppress(OSError):
                     self.request.sendall(
                         f"HTTP/1.1 {code} {why}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".encode()
                     )
 
-            def _splice(self, a, b):
+            def _splice(self, a, b) -> None:
                 socks = [a, b]
                 try:
                     while True:
@@ -127,13 +135,13 @@ class EgressProxy:
         threading.Thread(target=self.server.serve_forever, daemon=True, name="egress-proxy").start()
         return self
 
-    def stop(self):
+    def stop(self) -> None:
         if self.server:
             self.server.shutdown()
             self.server.server_close()
             self.server = None
 
-    def env(self):
+    def env(self) -> dict[str, str]:
         url = f"http://127.0.0.1:{self.port}"
         return {
             "HTTPS_PROXY": url,

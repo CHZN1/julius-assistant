@@ -1,3 +1,5 @@
+"""Unit tests for parallel."""
+
 import threading
 import time
 import unittest

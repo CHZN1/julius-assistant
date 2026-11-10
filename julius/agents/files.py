@@ -6,6 +6,7 @@ available to model tool calls; the human command session owns confirmation.
 
 import os
 from pathlib import Path
+from typing import Any
 
 from julius.agents.file_agent import FileAgent
 from julius.paths import REPO_ROOT
@@ -27,11 +28,11 @@ _TURN = {"n": 0}
 _INSTANCE = None
 
 
-def set_turn(n):
+def set_turn(n: int) -> None:
     _TURN["n"] = n
 
 
-def agent():
+def agent() -> FileAgent:
     global _INSTANCE
     key = (str(SAFE_ROOT), str(STATE))
     if _INSTANCE is None or _INSTANCE[0] != key:
@@ -50,7 +51,7 @@ def _safe(p):
     return agent().resolve(p, new=True)
 
 
-def render(res):
+def render(res: dict[str, Any]) -> str:
     text = res["message"]
     data = res.get("data", {})
     if "plan" in data:

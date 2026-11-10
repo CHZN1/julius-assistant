@@ -1,3 +1,5 @@
+"""Unit tests for capture clock."""
+
 import unittest
 
 from julius.audio.listening import CaptureClock

@@ -13,7 +13,9 @@ import plistlib
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from julius.paths import REPO_ROOT
 
@@ -30,7 +32,12 @@ FEED_PORT = 8765
 ORB_REPO = Path("a private UI repo").expanduser()  # the UI lives in its own private repo
 
 
-def feed_check(port=FEED_PORT, timeout=30.0, sleep=time.sleep, clock=time.monotonic):
+def feed_check(
+    port: int = FEED_PORT,
+    timeout: int = 30.0,
+    sleep: Callable = time.sleep,
+    clock: Callable = time.monotonic,
+) -> tuple[bool, str]:
     """Connect to the event feed and wait for its hello. Returns (ok, detail)."""
     import julius.ui_bridge.events as ev
     import julius.ui_bridge.events_client as cl
@@ -67,7 +74,7 @@ def sh(args, timeout=900):
         return False, f"timed out after {timeout} s"
 
 
-def steps():
+def steps() -> list[tuple[str, Callable]]:
     return [
         (
             "Soak report (since the soak start)",
@@ -86,7 +93,7 @@ def steps():
     ]
 
 
-def render(results, when):
+def render(results: list[tuple[str, bool, str]], when: str) -> str:
     ok_all = all(ok for _, ok, _ in results)
     out = [
         f"\n## Post-soak results (automatic run, {when})\n",
@@ -101,7 +108,12 @@ def render(results, when):
     return "\n".join(out)
 
 
-def run(force=False, now=None, step_list=None, results_path=RESULTS):
+def run(
+    force: bool = False,
+    now: datetime.datetime | None = None,
+    step_list: list[tuple[str, Callable]] | None = None,
+    results_path: Path = RESULTS,
+):
     now = now or datetime.datetime.now()
     if not force and now.strftime("%Y-%m-%dT%H:%M:%S") < SOAK_END:
         return False, "the soak has not ended yet"
@@ -124,7 +136,7 @@ def run(force=False, now=None, step_list=None, results_path=RESULTS):
     return True, "done"
 
 
-def plist_dict():
+def plist_dict() -> dict[str, Any]:
     return {
         "Label": LABEL,
         "ProgramArguments": [PY, "-m", "julius.service.postsoak", "run"],

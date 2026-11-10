@@ -6,14 +6,15 @@ import stat
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
-from julius.agents.file_agent import FileProblem
+from julius.agents.file_agent import FileAgent, FileProblem
 from julius.paths import REPO_ROOT
 
 MAX_BYTES = 20 * 1024 * 1024
 
 
-def document_python():
+def document_python() -> str:
     configured = os.environ.get("JULIUS_DOCUMENT_PYTHON")
     if configured:
         return configured
@@ -23,7 +24,7 @@ def document_python():
     return str(bundled) if bundled.exists() else sys.executable
 
 
-def _read_bounded(resolved) -> bytes:
+def _read_bounded(resolved: Path) -> bytes:
     """Read a regular file of at most MAX_BYTES, failing if it changes while it is read."""
     fd = os.open(resolved, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
     with os.fdopen(fd, "rb") as source:
@@ -41,7 +42,7 @@ def _read_bounded(resolved) -> bytes:
     return raw
 
 
-def _search_chunks(chunks, query):
+def _search_chunks(chunks: list[dict[str, str]], query: str) -> list[dict[str, str]]:
     """Up to 20 passages containing the phrase, each with some surrounding text."""
     if not isinstance(query, str) or not 1 <= len(query.strip()) <= 200:
         raise ValueError("Use a search phrase of 1–200 characters.")
@@ -61,7 +62,9 @@ def _search_chunks(chunks, query):
     return matches
 
 
-def read_document(path, query=None, file_agent=None):
+def read_document(
+    path: str, query: str | None = None, file_agent: FileAgent | None = None
+) -> dict[str, Any]:
     """Extract (or search) a PDF/DOCX in a resource-limited worker; always returns a result dict."""
     if file_agent is None:
         import julius.agents.files as jf

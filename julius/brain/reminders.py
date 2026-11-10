@@ -4,8 +4,11 @@ The model passes a title and a spoken time phrase; parsing, validation and the A
 reminder is only created when the person's own words asked for one."""
 
 import re
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+
+from julius.agents.utility_session import UtilitySession
 
 DAYPARTS = {
     "morning": 9,
@@ -41,7 +44,7 @@ INTENT = re.compile(r"\b(?:remind(?:er|ers)?|timer|alarm|nudge)\b", re.I)
 CANCEL_INTENT = re.compile(r"\b(?:cancel|delete|remove|clear|never ?mind|forget)\b", re.I)
 
 
-def _clock(text):
+def _clock(text: str) -> tuple[int, int]:
     """(hour, minute) from '3:45 pm', '3 pm', '15:30', 'noon'; None when absent."""
     m = re.search(r"\b(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)\b", text) or re.search(
         r"\b(\d{1,2}):(\d{2})\b()", text
@@ -60,7 +63,7 @@ def _clock(text):
     return None
 
 
-def _relative_time(text, now):
+def _relative_time(text: str, now: float) -> float:
     """ "in 20 minutes", "in half an hour": epoch seconds, or None when it is not relative."""
     rel = re.fullmatch(
         r"in (?:about |around )?(\d+(?:\.\d+)?|half an?|an?|one|two|three|four|five|six|seven|eight|nine|ten|fifteen|twenty|thirty|forty[- ]five|sixty) ?(seconds?|secs?|minutes?|mins?|hours?|hrs?|days?|weeks?)(?: and a half)?",
@@ -84,7 +87,7 @@ def _relative_time(text, now):
     return None
 
 
-def _day_of(text, local):
+def _day_of(text: str, local: datetime) -> tuple[int, str]:
     """(days from today, the day word) for "tomorrow", "today"/"tonight" or a weekday."""
     if re.search(r"\btomorrow\b", text):
         return 1, "tomorrow"
@@ -97,7 +100,7 @@ def _day_of(text, local):
     return None, None
 
 
-def _clock_for(text, day_offset):
+def _clock_for(text: str, day_offset: int | None) -> tuple[int, int]:
     """(hour, minute) for the phrase; ValueError when the time is missing or lacks AM/PM."""
     clock = _clock(text)
     if clock is None:
@@ -120,7 +123,7 @@ def _clock_for(text, day_offset):
     return clock
 
 
-def parse_when(phrase, now, tz="America/Los_Angeles"):
+def parse_when(phrase: str, now: float, tz: str = "America/Los_Angeles") -> float:
     """Epoch seconds for a spoken time phrase, always in the future. Raises ValueError with a speakable reason."""
     text = re.sub(r"\s+", " ", phrase.lower().strip().strip(".,!?"))
     text = (
@@ -153,10 +156,10 @@ def parse_when(phrase, now, tz="America/Los_Angeles"):
 class ReminderService:
     """Create/list/cancel reminders through the same UtilitySession path as spoken commands (local plus Apple)."""
 
-    def __init__(self, session, user_text=lambda: ""):
+    def __init__(self, session: UtilitySession, user_text: Callable = lambda: "") -> None:
         self.session, self.user_text = session, user_text
 
-    def set(self, title, when):
+    def set(self, title: str, when: str) -> str:
         if not INTENT.search(self.user_text() or ""):
             return 'I only set reminders when you ask for one. Say "remind me …" and I will.'
         try:
@@ -166,7 +169,7 @@ class ReminderService:
         out = self.session._add("reminder", title.strip(), due)
         return out["data"].get("speech_message") or out["message"]
 
-    def list(self):
+    def list(self) -> str:
         out = self.session.planner.list("reminder")
         items = out["data"].get("items") or []
         if not items:
@@ -179,7 +182,7 @@ class ReminderService:
             if i["due"]
         )
 
-    def cancel(self, title):
+    def cancel(self, title: str) -> str:
         if not CANCEL_INTENT.search(self.user_text() or ""):
             return "I only cancel reminders when you ask me to."
         out = self.session.planner.finish_named("reminder", title, "cancelled")

@@ -1,3 +1,5 @@
+"""Unit tests for microphone gate."""
+
 import unittest
 from unittest.mock import Mock, patch
 

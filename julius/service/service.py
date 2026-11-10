@@ -17,7 +17,9 @@ import plistlib
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from julius import state
 from julius.paths import REPO_ROOT
@@ -28,7 +30,7 @@ PLIST = Path("~/Library/LaunchAgents").expanduser() / f"{LABEL}.plist"
 PY = "/opt/miniconda3/envs/torch/bin/python"
 
 
-def plist_dict(root=ROOT, log_dir=None):
+def plist_dict(root: Path = ROOT, log_dir: str | None = None) -> dict[str, Any]:
     log_dir = Path(log_dir or "~/Library/Logs/Julius").expanduser()
     return {
         "Label": LABEL,
@@ -52,15 +54,15 @@ def plist_dict(root=ROOT, log_dir=None):
     }
 
 
-def domain():
+def domain() -> str:
     return f"gui/{os.getuid()}"
 
 
-def run(args, runner=subprocess.run):
+def run(args: list[str], runner: Callable = subprocess.run) -> Any:
     return runner(args, capture_output=True, text=True)
 
 
-def on(runner=subprocess.run, plist_path=PLIST):
+def on(runner: Callable = subprocess.run, plist_path: Path = PLIST) -> tuple[bool, str]:
     d = plist_dict()
     Path(d["StandardOutPath"]).parent.mkdir(parents=True, exist_ok=True)
     plist_path.parent.mkdir(parents=True, exist_ok=True)
@@ -71,7 +73,7 @@ def on(runner=subprocess.run, plist_path=PLIST):
     return r.returncode == 0, (r.stderr or r.stdout).strip()
 
 
-def off(runner=subprocess.run, plist_path=PLIST):
+def off(runner: Callable = subprocess.run, plist_path: Path = PLIST):
     run(["launchctl", "bootout", f"{domain()}/{LABEL}"], runner)
     run(["launchctl", "disable", f"{domain()}/{LABEL}"], runner)
     if plist_path.exists():
@@ -79,7 +81,7 @@ def off(runner=subprocess.run, plist_path=PLIST):
     return True, "stopped and removed from login"
 
 
-def status(runner=subprocess.run):
+def status(runner: Callable = subprocess.run) -> dict[str, str | bool]:
     r = run(["launchctl", "print", f"{domain()}/{LABEL}"], runner)
     if r.returncode != 0:
         return {"installed": PLIST.exists(), "loaded": False}
@@ -103,7 +105,7 @@ def wake(runner=subprocess.run):
 LOG = Path("~/Library/Logs/Julius/julius.jsonl").expanduser()
 
 
-def format_line(raw):
+def format_line(raw: str) -> str:
     """One JSON log line -> 'HH:MM:SS level message' (events show their fields)."""
     try:
         r = json.loads(raw)
@@ -119,7 +121,7 @@ def format_line(raw):
     return f"{t} {str(r.get('level', '')):5} {body}"
 
 
-def read_tail(path, n):
+def read_tail(path: Path, n: int) -> list[str]:
     try:
         lines = Path(path).read_text(errors="replace").splitlines()
     except OSError:
@@ -128,8 +130,14 @@ def read_tail(path, n):
 
 
 def show_logs(
-    n=60, raw=False, follow=True, path=LOG, out=print, sleep=time.sleep, stop=lambda: False
-):
+    n: int = 60,
+    raw: bool = False,
+    follow: bool = True,
+    path: Path = LOG,
+    out: Callable = print,
+    sleep: Callable = time.sleep,
+    stop: Callable = lambda: False,
+) -> None:
     lines = read_tail(path, n)
     if lines is None:
         out(f"no log yet at {path}. Is the service on? (python -m julius.service.service status)")
@@ -161,12 +169,12 @@ def show_logs(
 
 
 def doctor(
-    runner=subprocess.run,
-    sleep=time.sleep,
-    workdir=None,
-    binary=None,
-    combos=("stop=ctrl+alt+s", "wake=ctrl+alt+j"),
-):
+    runner: Callable = subprocess.run,
+    sleep: Callable = time.sleep,
+    workdir: str | None = None,
+    binary: str | None = None,
+    combos: tuple[str, str] = ("stop=ctrl+alt+s", "wake=ctrl+alt+j"),
+) -> tuple[str, str]:
     """Start the hotkey helper the way launchd would and report whether both hotkeys registered (Carbon hotkeys need no Accessibility or Input Monitoring permission)."""
     from julius.service import hotkey
 
@@ -207,18 +215,18 @@ def doctor(
     return verdict, str(binary)
 
 
-def _cmd_on(_argv):
+def _cmd_on(_argv) -> int:
     ok, msg = on()
     print("Julius service on" if ok else f"could not start: {msg}")
     return 0 if ok else 1
 
 
-def _cmd_off(_argv):
+def _cmd_off(_argv) -> int:
     print(off()[1])
     return 0
 
 
-def _cmd_restart(_argv):
+def _cmd_restart(_argv) -> int:
     from julius.service import logscan
 
     logscan.mark_stderr()
@@ -227,12 +235,12 @@ def _cmd_restart(_argv):
     return 0
 
 
-def _cmd_wake(_argv):
+def _cmd_wake(_argv) -> int:
     print("woke" if wake() else "service not running")
     return 0
 
 
-def _cmd_logs(argv):
+def _cmd_logs(argv) -> int:
     n = int(argv[argv.index("-n") + 1]) if "-n" in argv else 60
     with contextlib.suppress(KeyboardInterrupt):
         show_logs(n, "--raw" in argv, "--no-follow" not in argv)
@@ -265,7 +273,7 @@ def _smoke_window(argv, err_path):
     return start, err_path.stat().st_size if err_path.exists() else 0
 
 
-def _cmd_smoke(argv):
+def _cmd_smoke(argv) -> int:
     from julius import config
     from julius.service import smoke
 
@@ -292,7 +300,7 @@ def _cmd_smoke(argv):
     return 0 if ok else 1
 
 
-def _cmd_doctor(_argv):
+def _cmd_doctor(_argv) -> int:
     verdict, _binary = doctor()
     print(f"hotkey helper under launchd -> {verdict}")
     if verdict.endswith("ready stop wake") and "failed" not in verdict:

@@ -101,7 +101,7 @@ def convert_messages(messages):
     """Julius messages -> (system text, API messages). Tool calls get sequential ids that tool results consume in order."""
     system, out, ids, notes, counter = [], [], [], [], 0
 
-    def add(role, blocks):
+    def add(role, blocks) -> None:
         if out and out[-1]["role"] == role:
             out[-1]["content"].extend(blocks)
         else:
@@ -185,7 +185,7 @@ def _personalize_tools(tools):
 class CloudBrain:
     """Front-end brain: one instance per process. `offline(messages, tools, stream, options)` is the local fallback."""
 
-    def __init__(self, config, tracker, client=None, offline=None, clock=time.monotonic):
+    def __init__(self, config, tracker, client=None, offline=None, clock=time.monotonic) -> None:
         self.config, self.tracker, self._client, self.offline, self._clock = (
             config,
             tracker,
@@ -216,7 +216,7 @@ class CloudBrain:
             self._slow = make_client(timeout=120.0, max_retries=2)
         return self._slow
 
-    def reset_auth(self):
+    def reset_auth(self) -> None:
         self.auth_bad, self._client, self._slow = False, None, None
 
     def cap_notice(self):
@@ -390,7 +390,7 @@ class CloudBrain:
         return parts()
 
     # ---------- failure paths ----------
-    def mark_auth_bad(self):
+    def mark_auth_bad(self) -> None:
         self.auth_bad, self.auth_pending = True, True
         print(
             "  [Anthropic API key missing or invalid; cloud brain disabled until restart]",

@@ -1,3 +1,5 @@
+"""Unit tests for smoke."""
+
 import json
 import unittest
 

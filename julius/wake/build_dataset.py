@@ -90,7 +90,7 @@ def augment(x, rng):
     return np.clip(y, -1, 1)
 
 
-def save(path, y):
+def save(path, y) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     sf.write(path, (np.clip(y, -1, 1) * 32767).astype(np.int16), SR, subtype="PCM_16")
 
@@ -158,7 +158,7 @@ def user_positives(rng, per_clip=24):
     return out
 
 
-def main():
+def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--per-class", type=int, default=1500)
     ap.add_argument("--julius-voice", action="store_true")

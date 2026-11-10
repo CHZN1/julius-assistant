@@ -18,9 +18,12 @@ import os
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import numpy as np
+from numpy import ndarray
 
 from julius.paths import REPO_ROOT
 
@@ -32,19 +35,19 @@ MAX_POS, MAX_NEG, MAX_SECONDS = 400, 200, 3.0
 MIN_VALIDATION = 5
 
 
-def home():
+def home() -> Path:
     return Path(os.environ.get("JULIUS_WAKE_PERSONAL") or Path.home() / ".julius" / "wake_personal")
 
 
 class Store:
     """Clips on disk plus a small state file. pos/ and neg/ hold 16 kHz mono wavs named <epoch-ms>_<kind>.wav; the oldest are dropped past the caps."""
 
-    def __init__(self, folder=None):
+    def __init__(self, folder: Path | None = None) -> None:
         self.dir = Path(folder or home())
         self.pos, self.neg = self.dir / "pos", self.dir / "neg"
         self.state_path = self.dir / "state.json"
 
-    def _write(self, folder, kind, clip, when):
+    def _write(self, folder: Path, kind: str, clip: ndarray, when: int | float) -> Path:
         import soundfile as sf
 
         folder.mkdir(parents=True, exist_ok=True)
@@ -61,25 +64,25 @@ class Store:
             old.unlink()
         return path
 
-    def add_positive(self, clip, kind, when=None):
+    def add_positive(self, clip: ndarray, kind: str, when: int | float | None = None) -> Path:
         return self._write(self.pos, kind, clip, when or time.time())
 
-    def add_negative(self, clip, when=None):
+    def add_negative(self, clip: ndarray, when: int | float | None = None) -> Path:
         return self._write(self.neg, "rejected", clip, when or time.time())
 
-    def positives(self):
+    def positives(self) -> list[Path | Any]:
         return sorted(self.pos.glob("*.wav")) if self.pos.exists() else []
 
-    def negatives(self):
+    def negatives(self) -> list[Path | Any]:
         return sorted(self.neg.glob("*.wav")) if self.neg.exists() else []
 
-    def state(self):
+    def state(self) -> dict[str, int]:
         try:
             return json.loads(self.state_path.read_text())
         except (OSError, ValueError):
             return {}
 
-    def save_state(self, **fields):
+    def save_state(self, **fields) -> None:
         self.dir.mkdir(parents=True, exist_ok=True)
         s = {**self.state(), **fields}
         tmp = self.state_path.with_suffix(".tmp")
@@ -87,13 +90,13 @@ class Store:
         os.replace(tmp, self.state_path)
 
     @property
-    def model(self):
+    def model(self) -> Path:
         return self.dir / "model.onnx"
 
-    def new_positives(self):
+    def new_positives(self) -> int:
         return max(0, len(self.positives()) - int(self.state().get("positives_at_last_train", 0)))
 
-    def status(self):
+    def status(self) -> dict[str, int | bool | None]:
         """A plain dict for the terminal and for a UI that wants to show progress."""
         s = self.state()
         need = int(s.get("learn_after", 20))
@@ -107,7 +110,7 @@ class Store:
             "training_now": (self.dir / "training.lock").exists(),
         }
 
-    def forget(self):
+    def forget(self) -> None:
         import shutil
 
         if self.dir.exists():
@@ -117,7 +120,14 @@ class Store:
 class Learner:
     """Turns wake events into training clips. `spawn()` starts the background retrain (injected in tests)."""
 
-    def __init__(self, store=None, learn_after=20, spawn=None, clock=time.time, repeat_window=5.0):
+    def __init__(
+        self,
+        store: Store | None = None,
+        learn_after: int = 20,
+        spawn: Callable | None = None,
+        clock: Any | Callable = time.time,
+        repeat_window: float = 5.0,
+    ) -> None:
         self.store, self.learn_after, self.clock, self.repeat_window = (
             store or Store(),
             int(learn_after),
@@ -127,12 +137,12 @@ class Learner:
         self.spawn = spawn or spawn_retrain
         self.pending = None  # a rejected fire waiting out the repeat window: {"time", "clip"}
 
-    def observe(self, event):
+    def observe(self, event: dict[str, bool | str | ndarray | None]) -> None:
         """event: the dict WakeStream decided ({"accepted", "clip", "reason"...}). Never raises: learning must not break waking."""
         with contextlib.suppress(Exception):
             self._observe(event)
 
-    def _observe(self, event):
+    def _observe(self, event: dict[str, bool | str | ndarray | None]) -> None:
         now = self.clock()
         self.flush(now)
         clip = event.get("clip")
@@ -153,14 +163,14 @@ class Learner:
                 self.store.add_negative(self.pending["clip"], self.pending["time"])
             self.pending = {"time": now, "clip": clip}
 
-    def flush(self, now=None):
+    def flush(self, now: float | None = None) -> None:
         """Call from time to time: a rejected fire nobody repeated within the window becomes a negative."""
         now = now or self.clock()
         if self.pending is not None and now - self.pending["time"] > self.repeat_window:
             self.store.add_negative(self.pending["clip"], self.pending["time"])
             self.pending = None
 
-    def maybe_retrain(self):
+    def maybe_retrain(self) -> None:
         if (
             self.store.new_positives() >= self.learn_after
             and not (self.store.dir / "training.lock").exists()
@@ -169,7 +179,7 @@ class Learner:
             self.spawn(self.store)
 
 
-def spawn_retrain(store):
+def spawn_retrain(store) -> None:
     """Start `retrain` as a detached, low-priority process. Failure to start is silent: the next positive tries again."""
     with contextlib.suppress(OSError):
         subprocess.Popen(
@@ -193,7 +203,13 @@ def spawn_retrain(store):
 # ---------------- retraining (torch + onnx) ----------------
 
 
-def decide(current, candidate, recall_gain=0.05, extra_false=0.15, false_ceiling=0.30):
+def decide(
+    current: dict[str, float],
+    candidate: dict[str, float],
+    recall_gain: float = 0.05,
+    extra_false: float = 0.15,
+    false_ceiling: float = 0.30,
+):
     """Keep the candidate only if it finds clearly more of the user's recent wakes (a miss costs a repeated "Julius"; an extra false fire only costs one Whisper check),
     without a big rise in false fires on their recent rejected clips; or the same wakes with fewer false fires.
     current/candidate: {"recall": 0..1, "false_rate": 0..1} measured at the stage-1 threshold."""
@@ -295,7 +311,7 @@ def _training_data(train_pos, train_neg, rng, emb):
     )
 
 
-def _fit(model, data, epochs, seed):
+def _fit(model, data, epochs, seed) -> None:
     """Fine-tune the head with a clip-level (max over windows) weighted BCE loss."""
     import torch
     import torch.nn as nn
@@ -349,7 +365,7 @@ def _current_head(store, starter_head, Head):
     return head
 
 
-def _export(model, store):
+def _export(model, store) -> None:
     """Write the kept head as ONNX (model.onnx) plus its weights (head.pt)."""
     import torch
 
@@ -414,15 +430,15 @@ def _train_and_judge(store, pos, neg, epochs, seed, starter, starter_head, thres
 
 
 def retrain(
-    store=None,
-    force=False,
-    epochs=15,
-    seed=0,
-    log=print,
-    starter=None,
-    starter_head=None,
-    threshold=0.0005,
-):
+    store: Store | None = None,
+    force: bool = False,
+    epochs: int = 15,
+    seed: int = 0,
+    log: Callable = print,
+    starter: None = None,
+    starter_head: None = None,
+    threshold: float = 0.0005,
+) -> dict[str, str | bool]:
     """Fine-tune the starter head on this user's clips and keep it only if it wins on their most recent held-out clips. Returns a result dict (also stored in state.json)."""
     store = store or Store()
     starter = Path(starter or STARTER)
@@ -471,7 +487,13 @@ def record_clip(seconds=2.5, device=None):
     return x[:, 0]
 
 
-def setup(store=None, count=5, record=record_clip, ask=input, say=print):
+def setup(
+    store: Store | None = None,
+    count: int = 5,
+    record: Callable = record_clip,
+    ask: Callable = input,
+    say: Callable = print,
+) -> int:
     """Optional: record up to `count` clips of you saying "Julius". Press Enter to record each; type s to skip the rest. A UI can call the same function with its own prompts."""
     store = store or Store()
     done = 0
@@ -493,7 +515,7 @@ def setup(store=None, count=5, record=record_clip, ask=input, say=print):
     return done
 
 
-def main(argv=None):
+def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("cmd", choices=["setup", "status", "retrain", "forget"])
     ap.add_argument("--dir")

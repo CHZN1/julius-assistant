@@ -1,11 +1,15 @@
 """Retry device startup only; never replay audio that has already started."""
 
 import time
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from unittest.mock import Mock
 
 
 @contextmanager
-def ready_output(factory, error_type, sleep=time.sleep):
+def ready_output(
+    factory: Mock | Callable, error_type: type[RuntimeError], sleep: Mock | Callable = time.sleep
+) -> Iterator[Mock]:
     for attempt in range(4):
         stream = None
         try:

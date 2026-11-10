@@ -2,6 +2,8 @@
 
 import re
 import time
+from collections.abc import Iterator
+from typing import Any
 
 import sounddevice as sd
 
@@ -41,7 +43,7 @@ def _note_audio(s: Session) -> None:
         s.first_audio_at = time.perf_counter()
 
 
-def _play_with_player(s: Session, audio) -> None:
+def _play_with_player(s: Session, audio: Iterator[Any]) -> None:
     """The persistent output stream used by the streamed MLX voice."""
     try:
         s.speech_player.play(
@@ -53,7 +55,7 @@ def _play_with_player(s: Session, audio) -> None:
         audio.close()
 
 
-def _play_on_one_stream(s: Session, audio) -> None:
+def _play_on_one_stream(s: Session, audio: Iterator[Any]) -> None:
     """A single output stream carries all chunks without repeated device starts."""
     try:
         first, rate = next(audio)
@@ -82,7 +84,7 @@ def _play_chunks(s: Session, audio) -> None:
             sd.wait()
 
 
-def _play(s: Session, audio) -> None:
+def _play(s: Session, audio: Iterator[Any]) -> None:
     if s.tts.backend == "qwen-mlx" and not s.no_devices and s.speech_player is not None:
         _play_with_player(s, audio)
     elif s.tts.backend == "qwen-mlx" and not s.no_devices:

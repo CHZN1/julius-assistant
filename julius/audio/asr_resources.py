@@ -1,10 +1,11 @@
 """Scoped MLX transcription allocation guidance and reliable model release."""
 
+from collections.abc import Iterator
 from contextlib import contextmanager
 
 
 @contextmanager
-def recognition_resources(release_model=True):
+def recognition_resources(release_model: bool = True) -> Iterator[None]:
     import gc
     import importlib
 

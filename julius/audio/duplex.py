@@ -15,8 +15,13 @@ import contextlib
 import math
 import threading
 import time
+from collections.abc import Callable
+from typing import Any
 
 import numpy as np
+from numpy import ndarray
+
+from julius.audio.aec import EchoCanceller
 
 FRAME16 = 160  # 10 ms at 16 kHz: the canceller's frame
 BLOCK16 = 1024  # what the rest of Julius consumes
@@ -26,7 +31,7 @@ BLOCK16 = 1024  # what the rest of Julius consumes
 class Decimator:
     """rate -> rate/factor with a low-pass in front; chunk boundaries do not matter. The mic and the reference both pass through the same filter, so they stay aligned."""
 
-    def __init__(self, factor):
+    def __init__(self, factor: int) -> None:
         from scipy.signal import firwin
 
         self.f = int(factor)
@@ -34,7 +39,7 @@ class Decimator:
         self.zi = np.zeros(len(self.b) - 1)
         self.n = 0
 
-    def __call__(self, x):
+    def __call__(self, x: ndarray) -> ndarray:
         from scipy.signal import lfilter
 
         x = np.asarray(x, dtype=np.float64).reshape(-1)
@@ -49,7 +54,7 @@ class Decimator:
 class Upsampler:
     """src rate -> dst rate for integer ratios (24 kHz voice -> 48 kHz stream); other ratios fall back to linear interpolation."""
 
-    def __init__(self, src, dst):
+    def __init__(self, src: int, dst: int) -> None:
         self.src, self.dst = int(src), int(dst)
         self.f = self.dst // self.src if self.dst % self.src == 0 else 0
         if self.f > 1:
@@ -58,7 +63,7 @@ class Upsampler:
             self.b = firwin(16 * self.f + 1, 0.9 / self.f)
             self.zi = np.zeros(len(self.b) - 1)
 
-    def __call__(self, x):
+    def __call__(self, x: ndarray) -> ndarray:
         x = np.asarray(x, dtype=np.float32).reshape(-1)
         if self.src == self.dst or not x.size:
             return x
@@ -75,28 +80,28 @@ class Upsampler:
 
 # ---------------------------------------------------------------- playback buffer
 class PlayBuffer:
-    def __init__(self):
+    def __init__(self) -> None:
         self._lock = threading.Lock()
         self._q = collections.deque()
         self._n = 0
         self._head = 0
 
-    def push(self, a):
+    def push(self, a: ndarray) -> None:
         with self._lock:
             self._q.append(a)
             self._n += len(a)
 
-    def seconds(self, rate):
+    def seconds(self, rate: int) -> float:
         with self._lock:
             return self._n / rate
 
-    def clear(self):
+    def clear(self) -> None:
         with self._lock:
             self._q.clear()
             self._n = 0
             self._head = 0
 
-    def pull(self, n):
+    def pull(self, n: int) -> tuple[ndarray, bool]:
         """n samples (zero padded). Returns (samples, starved): starved means the buffer ran out before n."""
         out = np.zeros(n, dtype=np.float32)
         got = 0
@@ -115,7 +120,7 @@ class PlayBuffer:
 
 
 # ---------------------------------------------------------------- monitor and detector
-def _corr(a, b, max_lag):
+def _corr(a: ndarray, b: ndarray, max_lag: int) -> float:
     """Largest Pearson correlation of two envelopes with `b` shifted by 0..max_lag steps (echo trails the reference)."""
     best = 0.0
     for lag in range(0, max_lag + 1):
@@ -142,15 +147,15 @@ class AecMonitor:
 
     def __init__(
         self,
-        on_fallback=None,
-        fail_seconds=3.0,
-        memory_seconds=8.0,
-        corr_limit=0.6,
-        min_residual=0.002,
-        noise_k=2.5,
-        log=print,
-        clock=time.monotonic,
-    ):
+        on_fallback: Callable | None = None,
+        fail_seconds: float = 3.0,
+        memory_seconds: float = 8.0,
+        corr_limit: float = 0.6,
+        min_residual: float = 0.002,
+        noise_k: float = 2.5,
+        log: Callable = print,
+        clock: Callable = time.monotonic,
+    ) -> None:
         (
             self.on_fallback,
             self.fail_seconds,
@@ -177,14 +182,14 @@ class AecMonitor:
         self.total_play = 0.0  # total_play: seconds of playback so far (the canceller needs a couple of seconds to converge on the first reply)
 
     @property
-    def playing_now(self):
+    def playing_now(self) -> bool:
         return self._silent_for < 0.3
 
     @property
-    def noise(self):
+    def noise(self) -> float:
         return float(np.percentile(self._quiet, 20)) if len(self._quiet) >= 20 else 0.001
 
-    def feed(self, cleaned, raw, ref):
+    def feed(self, cleaned: ndarray, raw: ndarray, ref: ndarray) -> None:
         """16 kHz samples from one stretch of the callback (any length)."""
         c = np.asarray(cleaned, dtype=np.float32)
         r = np.asarray(raw, dtype=np.float32)
@@ -203,7 +208,7 @@ class AecMonitor:
                 self._acc = [0.0, 0.0, 0.0]
                 self._n = 0
 
-    def _window(self, clean, raw, ref):
+    def _window(self, clean: float, raw: float, ref: float) -> None:
         self.windows += 1
         playing = ref > 0.002
         if playing:
@@ -230,7 +235,7 @@ class AecMonitor:
             if not self.fell_back and sum(self._bad) * self.WINDOW >= self.fail_seconds:
                 self._fail(clean, raw, ref)
 
-    def _fail(self, clean, raw, ref):
+    def _fail(self, clean: float, raw: float, ref: float) -> None:
         self.fell_back = True
         self.reason = f"echo leaking through: residual {clean:.4f} vs room noise {self.noise:.4f} for {sum(self._bad) * self.WINDOW:.1f} s of playback (mic {raw:.4f}, playing {ref:.3f})"
         self.log(
@@ -250,7 +255,16 @@ class CleanTalkOver:
 
     WINDOW = 0.05
 
-    def __init__(self, monitor, min_rms=0.0030, k=3.5, bursts=3, span=1.0, holdoff=0.4, warmup=3.0):
+    def __init__(
+        self,
+        monitor: AecMonitor,
+        min_rms: float = 0.0030,
+        k: float = 3.5,
+        bursts: int = 3,
+        span: float = 1.0,
+        holdoff: float = 0.4,
+        warmup: float = 3.0,
+    ) -> None:
         self.mon, self.min_rms, self.k, self.bursts, self.span, self.holdoff, self.warmup = (
             monitor,
             min_rms,
@@ -268,10 +282,10 @@ class CleanTalkOver:
         self.triggered = False
         self.onset_ago = 0.0  # onset_ago: seconds between the first burst of the speech that caused the trigger and the trigger
 
-    def threshold(self):
+    def threshold(self) -> float:
         return max(self.min_rms, self.k * self.mon.noise)
 
-    def block(self, cleaned):
+    def block(self, cleaned: ndarray) -> bool:
         """Feed cleaned microphone samples. True once, when the user's speech has been heard over Julius."""
         c = np.asarray(cleaned, dtype=np.float32).reshape(-1)
         step = int(self.WINDOW * 16000)
@@ -310,7 +324,7 @@ class CleanTalkOver:
                     return True
         return False
 
-    def reset(self):
+    def reset(self) -> None:
         self._acc = 0.0
         self._n = 0
         self._hits.clear()
@@ -318,7 +332,9 @@ class CleanTalkOver:
         self.triggered = False
 
 
-def replace_with_raw(q, ring, lead_seconds, block=BLOCK16):
+def replace_with_raw(
+    q: collections.deque, ring: collections.deque, lead_seconds: float, block: int = BLOCK16
+) -> int:
     """Barge-in: the canceller's suppressor eats the first words of the user's speech while Julius is loud ("Stop. What's the weather in Springfield?" reached the recognizer as "In Springfield.").
     The queue `q` holds (block, time) entries that were cleaned; `ring` holds the raw blocks, its last entry being the block being handled right now (not yet queued).
     Swap the last `lead_seconds` of queued blocks for their raw versions (the raw ones contain a little of Julius's voice, quieter than the user's; recognition copes with that, and with
@@ -336,15 +352,15 @@ def replace_with_raw(q, ring, lead_seconds, block=BLOCK16):
 class DuplexAudio:
     def __init__(
         self,
-        sd,
-        on_block,
-        rate=48000,
-        canceller=None,
-        monitor=None,
-        blocksize=None,
-        block16=BLOCK16,
-        log=print,
-    ):
+        sd: Any,
+        on_block: Callable,
+        rate: int = 48000,
+        canceller: Any | EchoCanceller | None = None,
+        monitor: AecMonitor | None = None,
+        blocksize: None = None,
+        block16: int = BLOCK16,
+        log: Callable = print,
+    ) -> None:
         if rate % 16000:
             raise ValueError("duplex rate must be a multiple of 16000")
         self.sd, self.on_block, self.rate, self.canceller, self.monitor, self.log = (
@@ -382,7 +398,7 @@ class DuplexAudio:
         self.raw_blocks_left = 0  # while > 0, blocks go to the listener raw: the suppressor mangles the user's first words while Julius is still loud
 
     # ---- lifetime
-    def start(self):
+    def start(self) -> None:
         with self._lock:
             if self.stream is not None:
                 return
@@ -402,7 +418,7 @@ class DuplexAudio:
                 flush=True,
             )
 
-    def stop(self):
+    def stop(self) -> None:
         with self._lock:
             s, self.stream = self.stream, None
         if s is not None:
@@ -434,7 +450,9 @@ class DuplexAudio:
         return _Shim
 
     # ---- audio thread
-    def _callback(self, indata, outdata, frames, time_info, status):
+    def _callback(
+        self, indata: ndarray, outdata: ndarray, frames: int, time_info: None, status: None
+    ) -> None:
         self.callbacks += 1
         if status:
             if getattr(status, "input_overflow", False):
@@ -450,7 +468,7 @@ class DuplexAudio:
             outdata[:, 1:] = data[:, None]
         self.process(indata[:, 0], data)
 
-    def process(self, mic, played):
+    def process(self, mic: ndarray, played: ndarray) -> None:
         """Both arguments are what this callback saw: `mic` captured, `played` handed to the device. Decimated together, cancelled together."""
         m = self.dec_in(mic)
         r = self.dec_out(played)
@@ -490,17 +508,17 @@ class DuplexAudio:
 class _OutputAdapter:
     """What SpeechPlayer sees as an OutputStream: write() resamples to the stream rate and queues, blocking while more than `max_ahead` seconds are queued."""
 
-    def __init__(self, duplex, rate, max_ahead=0.8):
+    def __init__(self, duplex: DuplexAudio, rate: int, max_ahead: float = 0.8) -> None:
         self.d, self.rate, self.max_ahead = duplex, int(rate), max_ahead
         self.up = Upsampler(self.rate, duplex.rate)
         self.aborted = threading.Event()
 
-    def start(self):
+    def start(self) -> None:
         self.d.start()
         self.d.streaming = True
         self.d.starved = False
 
-    def write(self, data):
+    def write(self, data: ndarray) -> bool:
         if self.aborted.is_set():
             raise RuntimeError("playback aborted")
         self.d.streaming = True
@@ -515,14 +533,14 @@ class _OutputAdapter:
         flagged, self.d.starved = self.d.starved, False
         return flagged
 
-    def abort(self):
+    def abort(self) -> None:
         self.aborted.set()
         self.d.play.clear()
 
-    def stop(self):
+    def stop(self) -> None:
         self.d.streaming = False
 
-    def close(self):
+    def close(self) -> None:
         self.d.streaming = False
         if self.aborted.is_set():
             self.d.play.clear()

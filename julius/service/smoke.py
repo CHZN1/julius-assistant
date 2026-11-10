@@ -9,12 +9,14 @@ and launchd's stderr gained no Traceback. Everything it reads is injectable, so 
 
 import json
 import time
+from collections.abc import Callable
+from typing import Any
 
 READY = "julius ready"
 HOTKEYS = ("+s active]", "+j active]")
 
 
-def lines_since(read_lines, start_ts):
+def lines_since(read_lines: Callable, start_ts: str) -> list[Any | str]:
     out = []
     for raw in read_lines():
         try:
@@ -27,16 +29,16 @@ def lines_since(read_lines, start_ts):
 
 
 def check(
-    state,
-    read_log,
-    read_err_tail,
-    start_ts,
-    duplex=True,
-    timeout=120.0,
-    stable=20.0,
-    clock=time.monotonic,
-    sleep=time.sleep,
-):
+    state: Callable,
+    read_log: Callable,
+    read_err_tail: Callable,
+    start_ts: str,
+    duplex: bool = True,
+    timeout: int = 120.0,
+    stable: int = 20.0,
+    clock: Any = time.monotonic,
+    sleep: Callable = time.sleep,
+) -> tuple[Any, ...]:
     """state() -> dict(state, pid, runs); read_log() -> raw jsonl lines; read_err_tail() -> text written to launchd stderr since the restart; start_ts -> ISO timestamp string.
     Returns (ok, [(name, ok, detail)])."""
     results = []
@@ -87,7 +89,7 @@ def check(
     return all(ok for _, ok, _ in results), results
 
 
-def render(ok, results):
+def render(ok: bool, results: list[tuple[str, bool, str]]) -> str:
     lines = [
         f"{'ok  ' if r else 'FAIL'} {name}{(' - ' + d) if d else ''}" for name, r, d in results
     ]

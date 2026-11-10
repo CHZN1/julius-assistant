@@ -19,6 +19,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 from julius.paths import REPO_ROOT
 
@@ -31,7 +32,7 @@ SERVICE = "com.julius.assistant"
 PY = "/opt/miniconda3/envs/torch/bin/python"
 
 
-def _domain():
+def _domain() -> str:
     return f"gui/{os.getuid()}"
 
 
@@ -47,13 +48,13 @@ def service_state(runner=subprocess.run):
 
 
 class Sampler:
-    def __init__(self, psutil_module=None):
+    def __init__(self, psutil_module=None) -> None:
         import psutil
 
         self.ps = psutil_module or psutil
         self.last = None  # (pid, cpu_seconds, wall)
 
-    def sample(self, state=None):
+    def sample(self, state: dict[str, str] | None = None) -> dict[str, str | float | int]:
         state = state if state is not None else service_state()
         now = time.time()
         row = {
@@ -94,7 +95,7 @@ class Sampler:
         return row
 
 
-def run(interval=60, path=SAMPLES, limit_hours=None):
+def run(interval=60, path=SAMPLES, limit_hours=None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     s = Sampler()
     started = time.time()
@@ -121,7 +122,7 @@ def load(path=SAMPLES, since=None):
     return rows
 
 
-def _restarts_and_down(rows):
+def _restarts_and_down(rows: list[dict[str, str | float | int | None]]) -> tuple[int, int]:
     """(pid changes seen, samples taken while the service was down)."""
     restarts, down, prev_pid = 0, 0, None
     for r in rows:
@@ -134,7 +135,9 @@ def _restarts_and_down(rows):
     return restarts, down
 
 
-def _memory_slope(rows, rss):
+def _memory_slope(
+    rows: list[dict[str, str | float | int | None]], rss: list[tuple[float, int]]
+) -> float:
     """MB per hour within the longest run of one pid, so a restart does not look like a leak."""
     if len(rss) <= 5:
         return None
@@ -156,7 +159,7 @@ def _memory_slope(rows, rss):
     )
 
 
-def _cpu_stats(cpu):
+def _cpu_stats(cpu: list[float]) -> dict[str, float]:
     if not cpu:
         return None
     return {
@@ -166,7 +169,9 @@ def _cpu_stats(cpu):
     }
 
 
-def _rss_stats(rows, rss):
+def _rss_stats(
+    rows: list[dict[str, str | float | int | None]], rss: list[tuple[float, int]]
+) -> dict[str, float | int | None]:
     if not rss:
         return None
     return {
@@ -177,7 +182,9 @@ def _rss_stats(rows, rss):
     }
 
 
-def summarize(rows, interval=60):
+def summarize(
+    rows: list[dict[str, str | float | int | None]], interval: int = 60
+) -> dict[str, Any]:
     """Restarts, gaps, CPU and memory statistics, and the memory trend (MB per hour, least squares over samples with a stable pid)."""
     if not rows:
         return {"samples": 0}
@@ -266,7 +273,7 @@ def status(runner=subprocess.run):
     }
 
 
-def main(argv=None):
+def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("cmd", choices=["install", "uninstall", "status", "report", "run"])
     ap.add_argument("--since", default="")

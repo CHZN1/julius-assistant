@@ -1,3 +1,5 @@
+"""Unit tests for filename fuzzy."""
+
 import tempfile
 import unittest
 from pathlib import Path

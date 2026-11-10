@@ -2,8 +2,11 @@
 
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from types import SimpleNamespace
+from typing import Any
+from unittest.mock import Mock
 
 import julius.brain.tools as jt
 from julius.audio import ack
@@ -42,7 +45,7 @@ STALL_NOTE = (
 SENTENCE_END = re.compile(r"[.!?…\n](\s|$)")
 
 
-def _say(text: str, speak_fn) -> str:
+def _say(text: str, speak_fn: Callable) -> str:
     """Print and speak a ready-made answer."""
     print(f"  JULIUS: {text}", flush=True)
     if speak_fn:
@@ -50,7 +53,7 @@ def _say(text: str, speak_fn) -> str:
     return text
 
 
-def _unique_calls(calls) -> list:
+def _unique_calls(calls: list[SimpleNamespace | Any]) -> list:
     """The model sometimes repeats an identical call in one turn; keep each distinct call once."""
     unique = {}
     for call in calls:
@@ -59,7 +62,7 @@ def _unique_calls(calls) -> list:
     return list(unique.values())
 
 
-def _assistant_message(content: str, calls) -> dict:
+def _assistant_message(content: str, calls: list[SimpleNamespace]) -> dict:
     return {
         "role": "assistant",
         "content": content or "",
@@ -104,7 +107,15 @@ class StreamState:
 class BrainTurn:
     """The state of one `ask_streaming` call (the closures of the old function, made explicit)."""
 
-    def __init__(self, s: Session, user_text, speak_fn, before_inference, tool_carry, nudge):
+    def __init__(
+        self,
+        s: Session,
+        user_text: str,
+        speak_fn: Callable | None,
+        before_inference: Mock | Callable | None,
+        tool_carry: bool,
+        nudge: None,
+    ) -> None:
         self.s = s
         self.user_text = user_text
         self.speak_fn = speak_fn
@@ -167,10 +178,14 @@ class BrainTurn:
         return _say(s.intent_router.spoken_result(name, out, args), self.speak_fn)
 
     # --- streaming ---------------------------------------------------------------------------
-    def grounded(self, messages) -> bool:
+    def grounded(self, messages: list[Any]) -> bool:
         return livedata.tool_result_this_turn(messages) or bool(self.stream_calls)
 
-    def speak_sentences(self, st: StreamState, messages) -> None:
+    def speak_sentences(
+        self,
+        st: StreamState,
+        messages: list[Any],
+    ) -> None:
         """Print and speak every complete sentence waiting in `st.pending`."""
         while True:
             match = SENTENCE_END.search(st.pending)
@@ -189,7 +204,11 @@ class BrainTurn:
                 if self.speak_fn and (not self.long_tool_result or st.spoken <= 2):
                     self.speak_fn(sent)
 
-    def finish_stream(self, st: StreamState, messages) -> str:
+    def finish_stream(
+        self,
+        st: StreamState,
+        messages: list[Any],
+    ) -> str:
         """Speak what is left, and say so once if figures were withheld and no tool was called."""
         rest = st.pending.strip()
         if rest and livedata.blocked(rest, self.live_query, self.grounded(messages)):
@@ -208,7 +227,13 @@ class BrainTurn:
         print("\n", flush=True)
         return st.full
 
-    def stream(self, messages, allow_retry=True, tools=None, force_tool=False) -> str | None:
+    def stream(
+        self,
+        messages: list[Any],
+        allow_retry: bool = True,
+        tools: list[Any] | None = None,
+        force_tool: bool = False,
+    ) -> str | None:
         """Stream one reply; sentences are spoken as they complete. None means it stalled."""
         s = self.s
         self.prepare_inference()
@@ -245,7 +270,7 @@ class BrainTurn:
         return self.finish_stream(st, messages)
 
     # --- tool round --------------------------------------------------------------------------
-    def model_tool_message(self):
+    def model_tool_message(self) -> SimpleNamespace:
         """The model's reply to the request with tools attached (streamed for the cloud brain)."""
         s = self.s
         schemas = jt.select_schemas(self.user_text)
@@ -265,7 +290,7 @@ class BrainTurn:
         )
         return reply.message
 
-    def run_calls(self, calls) -> list[tuple[str, bool]]:
+    def run_calls(self, calls: list[SimpleNamespace]) -> list[tuple[str, bool]]:
         """Run the tool calls (several at once when parallel-safe); a (result, ok) pair for each."""
         with self.ack.watch():
             batch = None
@@ -277,7 +302,9 @@ class BrainTurn:
                 batch = [(out, jt.dispatcher().last_result["ok"])]
         return batch
 
-    def failed_round(self, calls, batch) -> str | None:
+    def failed_round(
+        self, calls: list[SimpleNamespace], batch: list[tuple[str, bool]]
+    ) -> str | None:
         """Every call failed: give each a result, and either let the model retry or say so."""
         s = self.s
         out = batch[0][0]
@@ -304,7 +331,9 @@ class BrainTurn:
             self.speak_fn(out)
         return out
 
-    def record_results(self, calls, batch):
+    def record_results(
+        self, calls: list[SimpleNamespace], batch: list[tuple[str, bool]]
+    ) -> tuple[str, str, dict[str, str]]:
         """Add each tool result to the messages; returns the last (name, result, args)."""
         s = self.s
         name = out = args = None
@@ -320,7 +349,9 @@ class BrainTurn:
             self.messages.append({"role": "tool", "name": call.function.name, "content": out})
         return name, out, args
 
-    def ready_sentence(self, calls, name, out, args) -> str | None:
+    def ready_sentence(
+        self, calls: list[SimpleNamespace], name: str, out: str, args: dict[str, str]
+    ) -> str | None:
         """One simple lookup (weather, time, calculator, price): a sentence ready to speak."""
         if len(calls) != 1 or _is_schedule_question(name, self.user_text):
             return None
@@ -417,8 +448,8 @@ def ask_streaming(
     user_text: str,
     vision_line: str,
     nudge: str | None = None,
-    speak_fn=None,
-    before_inference=None,
+    speak_fn: Callable | None = None,
+    before_inference: Mock | Callable | None = None,
 ) -> str:
     """Answer one request: a shortcut reply, a deterministic tool answer, or the brain (tools, then speech)."""
     # A turn that used a tool carries tools into the next one, so follow-ups always have them.

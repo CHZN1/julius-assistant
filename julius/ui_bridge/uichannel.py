@@ -23,7 +23,9 @@ import secrets
 import socketserver
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8775
@@ -41,7 +43,7 @@ class TypedText(str):
     from_ui = True
 
 
-def ensure_token(path=None):
+def ensure_token(path: Path | None = None) -> str:
     """Read the per-install token, creating it (mode 0600) on first use. A token file that others could read is tightened first."""
     path = Path(path or HOME / "ui_token")
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -58,12 +60,14 @@ def ensure_token(path=None):
 
 
 class _Limiter:
-    def __init__(self, n=RATE_N, seconds=RATE_S, clock=time.monotonic):
+    def __init__(
+        self, n: int = RATE_N, seconds: int | float = RATE_S, clock: Callable = time.monotonic
+    ) -> None:
         self.n, self.seconds, self.clock = n, seconds, clock
         self.hits = collections.deque()
         self.lock = threading.Lock()
 
-    def allow(self):
+    def allow(self) -> bool:
         with self.lock:
             now = self.clock()
             while self.hits and now - self.hits[0] > self.seconds:
@@ -75,7 +79,7 @@ class _Limiter:
 
 
 class Refused(Exception):
-    def __init__(self, status, why):
+    def __init__(self, status, why) -> None:
         super().__init__(why)
         self.status, self.why = status, why
 
@@ -117,14 +121,21 @@ def validate_paths(body):
 class Channel:
     """handlers: {"typed": fn(text) -> dict, "drop": fn(paths) -> dict}. Handlers get validated input only."""
 
-    def __init__(self, token, handlers, audit_path=None, port=DEFAULT_PORT, limiter=None):
+    def __init__(
+        self,
+        token: str,
+        handlers: dict[str, Callable],
+        audit_path: Path | None = None,
+        port: int = DEFAULT_PORT,
+        limiter: _Limiter | None = None,
+    ) -> None:
         self.token, self.handlers, self.port = token, handlers, port
         self.audit_path = Path(audit_path) if audit_path else HOME / "ui_audit.log"
         self.limiter = limiter or _Limiter()
         self.httpd = None
         self._audit_lock = threading.Lock()
 
-    def audit(self, endpoint, status, **fields):
+    def audit(self, endpoint, status, **fields) -> None:
         row = {"t": round(time.time(), 3), "endpoint": endpoint, "status": status, **fields}
         try:
             with self._audit_lock:
@@ -155,7 +166,7 @@ class Channel:
             self.audit("drop", 200, paths=len(paths))
         return 200, {"ok": True, **(res or {})}
 
-    def _authenticate(self, headers):
+    def _authenticate(self, headers) -> None:
         """Local host, no browser Origin, under the rate limit, and the right bearer token."""
         host = (headers.get("Host") or "").lower()
         if host not in (f"127.0.0.1:{self.port}", f"localhost:{self.port}"):
@@ -195,7 +206,7 @@ class Channel:
             raise Refused(503, unavailable)
         return handler
 
-    def start(self):
+    def start(self) -> "Channel":
         chan = self
 
         class H(http.server.BaseHTTPRequestHandler):
@@ -203,10 +214,10 @@ class Channel:
             server_version = "Julius"
             timeout = 5  # a client that stalls mid-request is dropped
 
-            def log_message(self, *a):
+            def log_message(self, *a) -> None:
                 pass
 
-            def _go(self, method):
+            def _go(self, method) -> None:
                 try:
                     status, out = chan.handle(method, self.path, self.headers, self.rfile.read)
                 except Refused as r:
@@ -224,22 +235,22 @@ class Channel:
                 self.end_headers()
                 self.wfile.write(data)
 
-            def do_GET(self):
+            def do_GET(self) -> None:
                 self._go("GET")
 
-            def do_POST(self):
+            def do_POST(self) -> None:
                 self._go("POST")
 
-            def do_PUT(self):
+            def do_PUT(self) -> None:
                 self._go("PUT")
 
-            def do_DELETE(self):
+            def do_DELETE(self) -> None:
                 self._go("DELETE")
 
-            def do_PATCH(self):
+            def do_PATCH(self) -> None:
                 self._go("PATCH")
 
-            def do_OPTIONS(self):
+            def do_OPTIONS(self) -> None:
                 self._go("OPTIONS")  # no CORS: a browser preflight gets a refusal
 
         class S(socketserver.ThreadingMixIn, http.server.HTTPServer):
@@ -252,14 +263,19 @@ class Channel:
         threading.Thread(target=self.httpd.serve_forever, daemon=True, name="ui-channel").start()
         return self
 
-    def stop(self):
+    def stop(self) -> None:
         if self.httpd:
             self.httpd.shutdown()
             self.httpd.server_close()
             self.httpd = None
 
 
-def start_from_config(cfg, handlers, token_path=None, audit_path=None):
+def start_from_config(
+    cfg: dict[str, bool | int],
+    handlers: dict[Any, Any],
+    token_path: Path | None = None,
+    audit_path: Path | None = None,
+):
     """cfg is the [ui] table. Returns the running Channel, or None when disabled or the port is taken (Julius never fails to start over the UI channel)."""
     if not (cfg or {}).get("enabled", True):
         return None

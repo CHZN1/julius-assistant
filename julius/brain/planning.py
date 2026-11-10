@@ -4,17 +4,20 @@ Reminder delivery is leased and acknowledged after playback: at least once,
 not exactly once, when Julius is running. SQLite serializes concurrent clients.
 """
 
+import builtins
 import contextlib
 import os
 import sqlite3
 import time
 import uuid
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 from urllib.parse import quote
 
 
-def output(ok, code, message, **data):
+def output(ok: bool, code: str, message: str, **data) -> dict[str, Any]:
     return dict(ok=ok, code=code, message=message, data=data)
 
 
@@ -28,13 +31,13 @@ def utc_timestamp(value):
 class Planner:
     LIMIT = 1000
 
-    def __init__(self, state_dir, clock=time.time):
+    def __init__(self, state_dir: str | Path, clock: Callable = time.time) -> None:
         self.path = Path(state_dir) / "planner.sqlite3"
         self.clock = clock
         self._ready = False
 
     @contextlib.contextmanager
-    def db(self):
+    def db(self) -> Iterator[sqlite3.Connection]:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         if self.path.is_symlink():
             raise ValueError("Planner database must not be a symbolic link.")
@@ -72,7 +75,9 @@ class Planner:
         finally:
             con.close()
 
-    def add(self, kind, title, due=None, end=None):
+    def add(
+        self, kind: str, title: str, due: int | float | None = None, end: float | None = None
+    ) -> dict[str, Any]:
         if kind not in {"reminder", "task", "event"}:
             raise ValueError("Unsupported planner item.")
         if not isinstance(title, str) or not 1 <= len(title.strip()) <= 240:
@@ -137,7 +142,7 @@ class Planner:
             overlaps=overlaps,
         )
 
-    def list(self, kind=None):
+    def list(self, kind: str | None = None) -> dict[str, Any]:
         if kind is not None and kind not in {"reminder", "task", "event"}:
             raise ValueError("Unsupported planner category.")
         with self.db() as con:
@@ -159,7 +164,9 @@ class Planner:
             message += "\nShowing the first 100; more items exist."
         return output(True, "listed", message, items=items, truncated=len(rows) > 100)
 
-    def finish(self, identifier, status="cancelled", expected_kind=None):
+    def finish(
+        self, identifier: str, status: str = "cancelled", expected_kind: str | None = None
+    ) -> dict[str, bool | str]:
         if status not in {"cancelled", "done"}:
             raise ValueError("Unsupported item status.")
         with self.db() as con:
@@ -190,7 +197,9 @@ class Planner:
             con.execute("UPDATE items SET status=? WHERE id=?", (status, identifier))
         return output(True, status, f"Item {identifier} {status}.")
 
-    def finish_named(self, kind, name, status="cancelled"):
+    def finish_named(
+        self, kind: str, name: str, status: str = "cancelled"
+    ) -> dict[str, bool | str]:
         name = name.strip().strip('"')
         with self.db() as con:
             rows = con.execute(
@@ -212,7 +221,7 @@ class Planner:
             )
         return self.finish(matches[0]["id"], status, kind)
 
-    def claim_due(self, limit=3):
+    def claim_due(self, limit: int = 3) -> builtins.list[dict[str, str | float] | Any]:
         now = self.clock()
         token = uuid.uuid4().hex
         with self.db() as con:
@@ -228,7 +237,7 @@ class Planner:
                 )
         return [dict(row, lease=token) for row in rows]
 
-    def acknowledge(self, identifier, lease):
+    def acknowledge(self, identifier: str, lease: str) -> bool:
         with self.db() as con:
             count = con.execute(
                 "UPDATE items SET status='delivered',lease=NULL,lease_until=NULL WHERE id=? AND status='delivering' AND lease=?",
@@ -236,7 +245,7 @@ class Planner:
             ).rowcount
         return count == 1
 
-    def retry(self, identifier, lease):
+    def retry(self, identifier: str, lease: str) -> None:
         with self.db() as con:
             con.execute(
                 "UPDATE items SET status='pending',lease=NULL,lease_until=NULL WHERE id=? AND status='delivering' AND lease=?",

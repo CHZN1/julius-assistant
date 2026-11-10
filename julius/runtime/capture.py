@@ -6,6 +6,7 @@ from contextlib import nullcontext
 
 import numpy as np
 import sounddevice as sd
+from numpy import ndarray
 
 from julius import log
 from julius.audio.duplex import replace_with_raw
@@ -94,7 +95,7 @@ def _duplex_talkover(s: Session, samples) -> None:
         pass
 
 
-def _gated_talkover(s: Session, samples) -> None:
+def _gated_talkover(s: Session, samples: ndarray) -> None:
     """Gate shut while Julius speaks: keep the audio, and listen for a voice over his."""
     gate = s.microphone_gate
     if s.talkover is None or gate.quiet:
@@ -110,7 +111,7 @@ def _gated_talkover(s: Session, samples) -> None:
         pass
 
 
-def callback(s: Session, indata, frames, when, status) -> None:
+def callback(s: Session, indata: ndarray, frames: int, when: None, status: None) -> None:
     """The audio callback: queue accepted blocks, and watch for the user talking over Julius."""
     samples = indata[:, 0]
     if s.rec is not None and s.duplex is None:

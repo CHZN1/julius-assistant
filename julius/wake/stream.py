@@ -9,8 +9,12 @@ With verify=None the stage-1 fire is the decision (detector alone). An optional 
 audio features do not match the owner's voice before any Whisper run is spent. The ring buffer keeps the last 12 s."""
 
 from collections import deque
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
 
 import numpy as np
+from numpy import ndarray
 
 SR, FRAME = 16000, 1280
 
@@ -18,17 +22,17 @@ SR, FRAME = 16000, 1280
 class WakeStream:
     def __init__(
         self,
-        model_path,
-        threshold,
-        verify=None,
-        speaker=None,
-        speaker_threshold=0.5,
-        end_silence=0.6,
-        max_after=12.0,
-        refractory=2.0,
-        gate=True,
-        level_floor=0.0015,
-    ):
+        model_path: Path,
+        threshold: float,
+        verify: Callable | None = None,
+        speaker: None = None,
+        speaker_threshold: float = 0.5,
+        end_silence: float = 0.6,
+        max_after: float = 12.0,
+        refractory: float = 2.0,
+        gate: bool = True,
+        level_floor: float = 0.0015,
+    ) -> None:
         from openwakeword.model import Model
 
         self.model = Model(wakeword_models=[str(model_path)], inference_framework="onnx")
@@ -48,7 +52,7 @@ class WakeStream:
         self.frames = 0
         self.reset()
 
-    def reset(self):
+    def reset(self) -> None:
         self.model.reset()
         self.n = 0
         self.ring = deque(maxlen=int(12 * SR / FRAME) + 1)
@@ -88,7 +92,7 @@ class WakeStream:
             i -= 1
         return max(0, start - 2), trailing
 
-    def push(self, frame):
+    def push(self, frame: ndarray) -> list[Any]:
         x = frame.astype(np.float32) / 32768
         self.ring.append(frame)
         self.level.append(float(np.abs(x).mean()))

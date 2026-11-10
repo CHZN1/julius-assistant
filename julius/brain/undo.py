@@ -10,6 +10,7 @@ and says which one it undid, instead of whichever handler happens to be first in
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 BARE = re.compile(
     r"^(?:please\s+)?undo(?:\s+(?:that|it|the last (?:one|thing|change|action)|my last (?:one|change|action)))?[.!]?$",
@@ -35,26 +36,26 @@ class UndoAgent:
 
 
 class UndoCoordinator:
-    def __init__(self, agents):
+    def __init__(self, agents: dict[str, UndoAgent]) -> None:
         self.agents = agents
         self.last_turn = {n: 0 for n in agents}
         self._marks = {n: self._mark(a) for n, a in agents.items()}
 
     @staticmethod
-    def _mark(a):
+    def _mark(a: UndoAgent) -> int:
         try:
             return a.marker()
         except Exception:
             return None
 
-    def observe(self, turn):
+    def observe(self, turn: int) -> None:
         for n, a in self.agents.items():
             m = self._mark(a)
             if m != self._marks[n]:
                 self._marks[n] = m
                 self.last_turn[n] = turn
 
-    def order(self):
+    def order(self) -> list[str | Any]:
         names = sorted(
             self.agents, key=lambda n: (-self.last_turn[n], ORDER.index(n) if n in ORDER else 99)
         )
@@ -67,7 +68,7 @@ class UndoCoordinator:
                 pass
         return out
 
-    def handle(self, text):
+    def handle(self, text: str) -> str:
         if not BARE.match((text or "").strip()):
             return None
         for n in self.order():

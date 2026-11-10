@@ -3,13 +3,14 @@
 import difflib
 import re
 import time
+from collections.abc import Callable
 
 
-def _words(t):
+def _words(t: str) -> list[str]:
     return re.sub(r"[^a-z0-9' ]+", " ", t.lower()).split()
 
 
-def overlap(heard, spoken):
+def overlap(heard: str, spoken: str) -> float:
     """Share of the heard words that occur as in-order runs inside what Julius said (1.0 = a pure echo)."""
     h, s = _words(heard), _words(spoken)
     if not h or not s:
@@ -25,16 +26,16 @@ class SelfEcho:
 
     def __init__(
         self,
-        window=5.0,
-        threshold=0.6,
-        clock=time.monotonic,
-        keep=12,
-        late_window=9.0,
-        late_threshold=0.75,
-        late_min_words=4,
-        memory=40.0,
-        short_window=2.0,
-    ):
+        window: float = 5.0,
+        threshold: float = 0.6,
+        clock: Callable = time.monotonic,
+        keep: int = 12,
+        late_window: float = 9.0,
+        late_threshold: float = 0.75,
+        late_min_words: int = 4,
+        memory: float = 40.0,
+        short_window: float = 2.0,
+    ) -> None:
         self.window, self.threshold, self.clock, self.keep = window, threshold, clock, keep
         (
             self.late_window,
@@ -47,22 +48,22 @@ class SelfEcho:
         self.ended = 0.0
         self.speaking = 0
 
-    def note(self, spoken):
+    def note(self, spoken: str) -> None:
         """A sentence is about to be played."""
         now = self.clock()
         self.said = (self.said + [(spoken, now)])[-self.keep :]
         self.ended = now
 
-    def begin(self):
+    def begin(self) -> None:
         self.speaking += 1
 
-    def finish(self):
+    def finish(self) -> None:
         """Playback of the current output ended."""
         self.speaking = max(0, self.speaking - 1)
         if not self.speaking:
             self.ended = self.clock()
 
-    def is_echo(self, heard):
+    def is_echo(self, heard: str) -> bool:
         now = self.clock()
         if not self.said:
             return False
