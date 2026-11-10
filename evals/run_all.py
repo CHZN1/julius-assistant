@@ -88,99 +88,43 @@ def suite(name, script, args, prefix, key, label, tolerance, paid):
     }
 
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--free", action="store_true")
-    ap.add_argument("--skip", default="")
-    ap.add_argument("--runs", default="3")
-    a = ap.parse_args()
-    skip = set(filter(None, a.skip.split(",")))
-    rows = []
+def planned_suites(a, skip):
+    """The suites to run for these options as (suite() arguments) tuples; None stands for the unit tests."""
+    free = a.free
+    wake_real = ROOT / "diagnostics" / "wake_real"
+    plan = []
     if "unit" not in skip:
-        rows.append(unit())
-    routing_args = ["--no-brain"] if a.free else ["--runs", a.runs]
+        plan.append(None)
     if "routing" not in skip:
-        rows.append(
-            suite(
-                "routing" + (" (shortcuts only)" if a.free else ""),
+        plan.append(
+            (
+                "routing" + (" (shortcuts only)" if free else ""),
                 "routing_eval.py",
-                routing_args,
-                "routing" if not a.free else "partial_routing",
+                ["--no-brain"] if free else ["--runs", a.runs],
+                "partial_routing" if free else "routing",
                 "ok_pct",
                 "correct",
                 2.0,
-                not a.free,
+                not free,
             )
         )
-    if "wake" not in skip and (ROOT / "diagnostics" / "wake_real").is_dir():
-        rows.append(
-            suite("wake words", "wake_regression.py", [], "wake", "ok_pct", "ok", 0.0, False)
-        )
-    if (
-        "wake" not in skip
-        and not a.free
-        and (ROOT / "diagnostics" / "wake_real" / "wake3").is_dir()
-    ):
-        rows.append(
-            suite(
-                "wake cascade", "wake_eval.py", ["suite"], "wakecascade", "ok_pct", "ok", 3.4, False
-            )
+    if "wake" not in skip and wake_real.is_dir():
+        plan.append(("wake words", "wake_regression.py", [], "wake", "ok_pct", "ok", 0.0, False))
+    if "wake" not in skip and not free and (wake_real / "wake3").is_dir():
+        plan.append(
+            ("wake cascade", "wake_eval.py", ["suite"], "wakecascade", "ok_pct", "ok", 3.4, False)
         )
     if "file" not in skip:
-        rows.append(suite("file agent", "file_eval.py", [], "file", "ok_pct", "pass", 0.0, False))
-    if "planner" not in skip and not a.free:
-        rows.append(
-            suite(
-                "planner (paid)",
-                "planner_eval.py",
-                [],
-                "planner",
-                "ok_pct",
-                "clean runs",
-                0.0,
-                True,
-            )
+        plan.append(("file agent", "file_eval.py", [], "file", "ok_pct", "pass", 0.0, False))
+    if not free:
+        plan += paid_suites(skip)
+    if "voice" not in skip and (ROOT / "voice_data").is_dir():
+        # recorded multi-turn conversations (evals/voice_record.py); free
+        plan.append(
+            ("voice conversations", "voice_eval.py", [], "voice", "ok_pct", "handled", 1.0, False)
         )
-    if "research" not in skip and not a.free:
-        rows.append(
-            suite(
-                "research (paid)",
-                "research_eval.py",
-                ["--runs", "1"],
-                "research",
-                "ok_pct",
-                "cases",
-                0.0,
-                True,
-            )
-        )
-    if "code" not in skip and not a.free:
-        rows.append(
-            suite("coding agent (paid)", "code_eval.py", [], "code", "ok_pct", "cases", 0.0, True)
-        )
-    if "audio" not in skip and not a.free:
-        rows.append(
-            suite(
-                "recorded audio",
-                "audio_regression.py",
-                [],
-                "audio",
-                "turn_ok_pct",
-                "turns ok",
-                3.0,
-                True,
-            )
-        )
-    if (
-        "voice" not in skip and (ROOT / "voice_data").is_dir()
-    ):  # recorded multi-turn conversations (evals/voice_record.py); free
-        rows.append(
-            suite(
-                "voice conversations", "voice_eval.py", [], "voice", "ok_pct", "handled", 1.0, False
-            )
-        )
-        rows.append(
-            suite(
+        plan.append(
+            (
                 "voice front-end replay",
                 "voice_eval.py",
                 ["replay", "--mode", "gate"],
@@ -192,18 +136,62 @@ def main():
             )
         )
     if "memory" not in skip:
-        rows.append(
-            suite(
-                "memory" + (" (free parts)" if a.free else ""),
+        plan.append(
+            (
+                "memory" + (" (free parts)" if free else ""),
                 "memory_eval.py",
-                ["--free"] if a.free else [],
+                ["--free"] if free else [],
                 "memory",
                 "ok_pct",
                 "sections ok",
                 0.0,
-                not a.free,
+                not free,
             )
         )
+    return plan
+
+
+def paid_suites(skip):
+    """The suites that call the paid API (planner, research, coding agent, recorded audio)."""
+    plan = []
+    if "planner" not in skip:
+        plan.append(
+            ("planner (paid)", "planner_eval.py", [], "planner", "ok_pct", "clean runs", 0.0, True)
+        )
+    if "research" not in skip:
+        plan.append(
+            (
+                "research (paid)",
+                "research_eval.py",
+                ["--runs", "1"],
+                "research",
+                "ok_pct",
+                "cases",
+                0.0,
+                True,
+            )
+        )
+    if "code" not in skip:
+        plan.append(
+            ("coding agent (paid)", "code_eval.py", [], "code", "ok_pct", "cases", 0.0, True)
+        )
+    if "audio" not in skip:
+        plan.append(
+            (
+                "recorded audio",
+                "audio_regression.py",
+                [],
+                "audio",
+                "turn_ok_pct",
+                "turns ok",
+                3.0,
+                True,
+            )
+        )
+    return plan
+
+
+def print_table(rows):
     w = max(len(r["suite"]) for r in rows)
     print(f"\n{'suite'.ljust(w)}  {'score':22} {'time':>7} {'cost':>8}  status")
     for r in rows:
@@ -213,6 +201,17 @@ def main():
         )
         if r["detail"]:
             print(f"{' ' * w}  {r['detail']}")
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("--free", action="store_true")
+    ap.add_argument("--skip", default="")
+    ap.add_argument("--runs", default="3")
+    a = ap.parse_args()
+    skip = set(filter(None, a.skip.split(",")))
+    rows = [unit() if spec is None else suite(*spec) for spec in planned_suites(a, skip)]
+    print_table(rows)
     bad = [r["suite"] for r in rows if r["regressed"]]
     print("\nALL CLEAR" if not bad else f"\nREGRESSIONS in: {', '.join(bad)}")
     return 1 if bad else 0
