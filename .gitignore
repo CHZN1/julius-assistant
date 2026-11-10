@@ -91,3 +91,4 @@ wake/data
 diagnostics/asr_samples
 diagnostics/voice_compare
 diagnostics/__pycache__
+_to_delete/
