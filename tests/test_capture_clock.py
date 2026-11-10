@@ -44,40 +44,30 @@ if __name__ == "__main__":
 
 
 class RuntimeCaptureResetTests(unittest.TestCase):
-    def test_actual_resume_branch_discards_partial_audio(self):
-        import ast
+    def test_resume_branch_discards_partial_audio(self):
         from collections import deque
-        from unittest.mock import Mock
+        from unittest.mock import Mock, patch
 
-        tree = ast.parse((REPO_ROOT / "julius/runtime.py").read_text())
-        branch = next(
-            n
-            for n in ast.walk(tree)
-            if isinstance(n, ast.If)
-            and isinstance(n.test, ast.Call)
-            and isinstance(n.test.func, ast.Attribute)
-            and n.test.func.attr == "discontinuous"
-        )
+        import numpy as np
+
+        from julius.runtime.listen import Listener
+        from tests.harness import make_session
+
         clock = CaptureClock()
         clock.discontinuous(1)
-        scope = {
-            "capture_clock": clock,
-            "now": 91,
-            "buf": ["old audio"],
-            "recording": True,
-            "sil_t": 1,
-            "spk_t": 0.5,
-            "voiced_run": 2,
-            "longest_voiced_run": 3,
-            "pre_roll": deque(["old preroll"]),
-            "print": Mock(),
-            "wake_engine": Mock(),
-        }
-        exec(compile(ast.Module(body=[branch], type_ignores=[]), "resume", "exec"), scope)
-        scope["wake_engine"].reset.assert_called_once()  # a gap also restarts the wake stream
-        self.assertFalse(scope["recording"])
-        self.assertEqual(scope["buf"], [])
-        self.assertFalse(scope["pre_roll"])
-        self.assertIsNone(scope["sil_t"])
-        self.assertIsNone(scope["spk_t"])
-        self.assertEqual(scope["longest_voiced_run"], 0)
+        s = make_session(capture_clock=clock, wake_engine=Mock(), recording=True)
+        s.pre_roll = deque(["old preroll"])
+        listener = Listener(s)
+        listener.buffer = ["old audio"]
+        listener.silence_started, listener.speech_started = 1, 0.5
+        listener.voiced_run, listener.longest_voiced_run = 2, 3
+        s.chunks.append((np.zeros(1024, dtype=np.float32), 91))
+        with patch("builtins.print"):
+            listener.process_chunk(awake=True)
+        s.wake_engine.reset.assert_called_once()  # a gap also restarts the wake stream
+        self.assertFalse(s.recording)
+        self.assertEqual(listener.buffer, [])
+        self.assertEqual(len(s.pre_roll), 1)  # the old pre-roll is gone; only the new block is kept
+        self.assertIsNone(listener.silence_started)
+        self.assertIsNone(listener.speech_started)
+        self.assertEqual(listener.longest_voiced_run, 0)

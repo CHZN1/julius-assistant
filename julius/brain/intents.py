@@ -268,9 +268,7 @@ class LiveIntentRouter:
                     r"tomorrow(?: in .+)?", target, re.I
                 ):
                     return "get_forecast", {
-                        "location": location
-                        or args.get("location")
-                        or __import__("julius.profile").home_city(),
+                        "location": location or args.get("location") or profile.home_city(),
                         "days": 2,
                     }
                 if fn in ("get_datetime", "get_weather", "get_forecast"):
@@ -298,9 +296,7 @@ class LiveIntentRouter:
                 r"(?:and |what about |how about )?tomorrow(?: in .+)?", t_and, re.I
             ):
                 return "get_forecast", {
-                    "location": location
-                    or args.get("location")
-                    or __import__("julius.profile").home_city(),
+                    "location": location or args.get("location") or profile.home_city(),
                     "days": 2,
                 }
             if fn in ("get_weather", "get_forecast") and re.fullmatch(r"is that for .+", t, re.I):

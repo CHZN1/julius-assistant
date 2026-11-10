@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import julius.brain.tools as jt
 from julius.audio.speech_text import EXACT_REQUEST, speakable
-from tests.test_candidate import load_candidate_turn
+from tests.harness import TurnHarness
 
 
 def tool_call(*calls):
@@ -40,11 +40,9 @@ def text(t):
 
 def turn(prompt, responses, cloud=True, out="tool output", carry=False):
     """Run ask_streaming with scripted non-streaming responses; returns (model calls, spoken, result)."""
-    ns = load_candidate_turn()
-    ns["speakable"] = speakable
-    ns["EXACT_REQUEST"] = EXACT_REQUEST
-    ns["cloud_brain"] = object() if cloud else None
-    ns["_tool_carry_next"] = carry
+    h = TurnHarness()
+    h.session.cloud_brain = object() if cloud else None
+    h.session.tool_carry_next = carry
     calls = []
     spoken = []
     queue = list(responses)
@@ -56,10 +54,10 @@ def turn(prompt, responses, cloud=True, out="tool output", carry=False):
         r = queue.pop(0) if queue else text("")
         return as_parts(r) if kw.get("stream") else r
 
-    ns["llm_chat"] = llm
+    h.llm_chat = llm
     with patch.object(jt, "call", return_value=out):
         jt.dispatcher().last_result = {"ok": True}
-        result = ns["ask_streaming"](prompt, "", speak_fn=spoken.append)
+        result = h.ask(prompt, "", speak_fn=spoken.append)
     return calls, spoken, result
 
 
@@ -87,13 +85,13 @@ class CallCountTests(unittest.TestCase):
             "how's it looking over there",
             "and what about that one",
         ):
-            ns = load_candidate_turn()
-            ns["cloud_brain"] = object()
+            h = TurnHarness()
+            h.session.cloud_brain = object()
             seen = []
-            ns["llm_chat"] = lambda **kw: (
+            h.llm_chat = lambda **kw: (
                 seen.append(kw.get("tools")) or as_parts(text("Ethereum is around 2,300 dollars."))
             )
-            ns["ask_streaming"](phrase, "", speak_fn=lambda t: None)
+            h.ask(phrase, "", speak_fn=lambda t: None)
             names = {t["function"]["name"] for t in seen[0]}
             self.assertIn("get_quote", names, phrase)
 
@@ -115,13 +113,11 @@ class CallCountTests(unittest.TestCase):
 
     def test_an_identical_tool_call_repeated_in_one_turn_runs_once_and_stays_one_model_call(self):
         eth = "Ethereum USD (ETH-USD): 2,308.57 USD, down 18.35 (0.79%) versus previous close."
-        ns = load_candidate_turn()
-        ns["speakable"] = speakable
-        ns["EXACT_REQUEST"] = EXACT_REQUEST
-        ns["cloud_brain"] = object()
+        h = TurnHarness()
+        h.session.cloud_brain = object()
         calls = []
         spoken = []
-        ns["llm_chat"] = lambda **kw: (
+        h.llm_chat = lambda **kw: (
             calls.append(bool(kw.get("stream")))
             or as_parts(
                 tool_call(("get_quote", {"symbol": "ETH"}), ("get_quote", {"symbol": "ETH"}))
@@ -129,7 +125,7 @@ class CallCountTests(unittest.TestCase):
         )
         with patch.object(jt, "call", return_value=eth) as call:
             jt.dispatcher().last_result = {"ok": True}
-            result = ns["ask_streaming"](
+            result = h.ask(
                 "And what's the current price of ETH?", "", speak_fn=spoken.append
             )
         self.assertEqual(call.call_count, 1)
@@ -178,8 +174,8 @@ class CallCountTests(unittest.TestCase):
         self.assertLessEqual(len(calls), 2)
 
     def test_a_cloud_plain_chat_turn_starts_speaking_before_the_reply_has_finished(self):
-        ns = load_candidate_turn()
-        ns["cloud_brain"] = object()
+        h = TurnHarness()
+        h.session.cloud_brain = object()
         events = []
 
         def llm(**kw):
@@ -197,8 +193,8 @@ class CallCountTests(unittest.TestCase):
 
             return gen()
 
-        ns["llm_chat"] = llm
-        ns["ask_streaming"](
+        h.llm_chat = llm
+        h.ask(
             "explain overfitting simply", "", speak_fn=lambda t: events.append("spoke: " + t)
         )
         self.assertLess(
@@ -206,12 +202,10 @@ class CallCountTests(unittest.TestCase):
         )
 
     def test_a_tool_call_arriving_after_streamed_text_is_run_and_answered(self):
-        ns = load_candidate_turn()
-        ns["speakable"] = speakable
-        ns["EXACT_REQUEST"] = EXACT_REQUEST
-        ns["cloud_brain"] = object()
+        h = TurnHarness()
+        h.session.cloud_brain = object()
         spoken = []
-        ns["llm_chat"] = lambda **kw: iter(
+        h.llm_chat = lambda **kw: iter(
             [
                 SimpleNamespace(message=SimpleNamespace(content="Sure thing. ", tool_calls=None)),
                 SimpleNamespace(
@@ -230,7 +224,7 @@ class CallCountTests(unittest.TestCase):
         )
         with patch.object(jt, "call", return_value=WEATHER):
             jt.dispatcher().last_result = {"ok": True}
-            ns["ask_streaming"]("Is it cold outside in Springfield?", "", speak_fn=spoken.append)
+            h.ask("Is it cold outside in Springfield?", "", speak_fn=spoken.append)
         self.assertEqual(
             spoken,
             [

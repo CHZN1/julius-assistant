@@ -5,23 +5,30 @@ for a local brain use `JULIUS_PROFILE=balanced ./run_julius.sh` or set JULIUS_BA
 """
 
 import argparse
-import runpy
+import os
 import sys
 
 from julius.profile import apply_cloud_defaults
 
 
-def main(argv=None):
-    """Parse arguments, apply the default profile and run the runtime module."""
+def main(argv=None) -> int:
+    """Parse arguments, install service logging, apply the default profile and run the assistant."""
     argparse.ArgumentParser(
         prog="julius",
         description="Launch Julius with the default cloud profile (same as ./run_julius.sh).",
         epilog="Profiles: ./run_julius.sh (JULIUS_PROFILE=cloud|balanced|fast|...). "
         "Environment variables override the defaults.",
     ).parse_args(argv)
-    apply_cloud_defaults()
-    runpy.run_module("julius.runtime", run_name="__main__")
+    if os.environ.get("JULIUS_SERVICE") == "1":
+        from julius import config, log
+
+        # What he heard and said is logged only while [service] log_transcripts is on.
+        log.install(config.transcripts_logging_cached)
+    apply_cloud_defaults()  # before the backend module reads its environment at import
+    from julius.runtime.app import main as run
+
+    return run()
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    sys.exit(main(sys.argv[1:]))

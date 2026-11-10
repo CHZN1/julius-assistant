@@ -468,81 +468,30 @@ class RoutingTests(Fixture):
 
 
 class CandidateIntegrationTests(Fixture):
-    def test_actual_candidate_file_turns_never_require_model_or_devices(self):
-        from unittest.mock import Mock
-
-        import julius.agents.files as jf
+    def test_file_turns_never_require_model_or_devices(self):
+        from julius.agents.utility_session import UtilitySession
+        from julius.brain.planning import Planner
+        from tests.harness import ProcessHarness
 
         self.out.mkdir()
         p = self.file()
-        turns = []
-        source = ast.parse((REPO_ROOT / "julius/runtime.py").read_text())
-        import julius.brain.tools as jt
-        from julius.agents.utility_session import UtilitySession
-        from julius.brain.intents import LiveIntentRouter
-        from julius.brain.planning import Planner
-
-        ns = {
-            "_utility_session": UtilitySession(Planner(Path(self.temp.name) / "planner")),
-            "jt": jt,
-            "intent_router": LiveIntentRouter(),
-            "time": time,
-            "jf": jf,
-            "_file_session": FileSession(self.agent),
-            "TURN": {"n": 0},
-            "_print_tool": Mock(),
-            "eyes": Mock(),
-            "jm": Mock(),
-            "history": [],
-            "_validation_output": str(Path(self.temp.name) / "validation.json"),
-            "_validation_turns": turns,
-            "_json": json,
-            "Path": Path,
-            "tts": Mock(backend="qwen-clone", worker_metrics={}),
-            "close_backend": Mock(),
-            "LLM_BACKEND": "ollama",
-            "LLM": "llama3.2:3b",
-            "speak": Mock(),
-            "ask_streaming": Mock(side_effect=AssertionError("file request reached LLM")),
-        }
-        from julius.audio.cancellation import Cancellation, TurnCancelled
-        from julius.audio.listening import incomplete_fragment
-        from julius.brain.conversation import authority_discussion_reply
-
-        ns.update(
-            handle_memory=Mock(return_value=None),
-            handle_code=Mock(return_value=None),
-            memory_autocapture=Mock(),
-            cancellation=Cancellation(),
-            TurnCancelled=TurnCancelled,
-            incomplete_fragment=incomplete_fragment,
-            authority_discussion_reply=authority_discussion_reply,
+        h = ProcessHarness(
+            validation_output=str(Path(self.temp.name) / "validation.json"),
+            utility_session=UtilitySession(Planner(Path(self.temp.name) / "planner")),
+            file_session=FileSession(self.agent),
         )
-        ns["eyes"].snapshot.return_value = {}
-        ns["eyes"].describe.return_value = ""
-        names = {"handle_files", "process", "_process"}
-        exec(
-            compile(
-                ast.Module(
-                    body=[
-                        n for n in source.body if isinstance(n, ast.FunctionDef) and n.name in names
-                    ],
-                    type_ignores=[],
-                ),
-                "<actual-candidate>",
-                "exec",
-            ),
-            ns,
-        )
-        with contextlib.redirect_stdout(io.StringIO()):
-            for command in ['move "note.txt" to Archive', "yes", "undo"]:
-                ns["process"](command, "typed")
+        for name in ("turn.handle_files", "turn.jt", "turn.jf"):
+            del h.mocks[name]  # the real controllers run
+        h.mocks["turn.ask_streaming"].side_effect = AssertionError("file request reached LLM")
+        for command in ['move "note.txt" to Archive', "yes", "undo"]:
+            h.process(command)
         self.assertEqual(
-            [r["file_result"]["code"] for r in turns], ["preview", "completed", "undone"]
+            [r["file_result"]["code"] for r in h.session.validation_turns],
+            ["preview", "completed", "undone"],
         )
         self.assertTrue(p.exists())
-        ns["ask_streaming"].assert_not_called()
-        self.assertEqual(ns["speak"].call_count, 3)
+        h["turn.ask_streaming"].assert_not_called()
+        self.assertEqual(h["turn.speak"].call_count, 3)
 
     def test_model_read_tools_use_same_scoped_service(self):
         import julius.agents.files as jf

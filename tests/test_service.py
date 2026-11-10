@@ -1,3 +1,4 @@
+import inspect
 import json
 import os
 import plistlib
@@ -134,7 +135,7 @@ class TempDirTests(unittest.TestCase):
 
     def test_speech_workers_keep_their_scratch_folder_out_of_the_system_temp_dir(self):
         for f in ("julius/audio/mlx_tts_worker.py", "julius/audio/tts_worker.py"):
-            self.assertIn("julius.state').tmp_dir()", Path(f).read_text())
+            self.assertIn("state.tmp_dir()", Path(f).read_text())
 
 
 class QuietTests(unittest.TestCase):
@@ -201,17 +202,17 @@ class LogTests(unittest.TestCase):
 class LiveIssueTests(unittest.TestCase):
     def test_the_thinking_remnant_is_erased_not_overprinted(self):
         """Regression: '\\r  JULIUS: ' left the tail of '...thinking' on screen, which looked like a spoken 'ing' before tool calls."""
-        src = (REPO_ROOT / "julius/runtime.py").read_text()
-        self.assertIn('print("\\r\\033[K  JULIUS: "', src)
+        from julius.runtime import brain_turn
+
+        self.assertIn('print("\\r\\033[K  JULIUS: "', inspect.getsource(brain_turn))
 
     def test_cloud_profile_keeps_whisper_resident(self):
         self.assertIn(
-            'JULIUS_ASR_RESIDENT="${JULIUS_ASR_RESIDENT:-1}"', Path("run_julius.sh").read_text()
+            'JULIUS_ASR_RESIDENT="${JULIUS_ASR_RESIDENT:-1}"', (REPO_ROOT / "run_julius.sh").read_text()
         )
-        self.assertIn(
-            "recognition_resources(_os.environ.get('JULIUS_ASR_RESIDENT')!='1')",
-            (REPO_ROOT / "julius/runtime.py").read_text(),
-        )
+        from julius.runtime import handlers
+
+        self.assertIn("recognition_resources(not resident)", inspect.getsource(handlers))
 
     def test_log_strips_terminal_escapes(self):
         d = Path(tempfile.mkdtemp())

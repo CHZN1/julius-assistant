@@ -2,7 +2,7 @@
 
 Paths: shortcut (a deterministic handler answers: utility/file session or the live intent router), direct (Haiku answers
 with no tool), tool (Haiku calls one tool), escalate (Haiku calls escalate_to_planner).
-Stage 1 replays julius_candidate's order (utility session, file session, intent router) in sandboxes; free and deterministic.
+Stage 1 replays the runtime's order (utility session, file session, intent router) in sandboxes; free and deterministic.
 Stage 2 sends the remaining prompts to the cloud Haiku brain with the production system prompt and tool list; it spends a few cents.
 
 Haiku 5.5 does not accept a temperature setting (the API rejects it), so decisions are sampled; each brain case is therefore run
@@ -37,18 +37,13 @@ def load_cases(only=None):
 
 
 def system_prompt():
-    """The production SYSTEM prompt (cloud profile), read from julius_candidate without importing its runtime."""
+    """The production system prompt for the cloud profile (without the speech-style sections)."""
     import julius.brain.cloud as jc
     from julius.brain.vision_mode import vision_capability_prompt
+    from julius.runtime.prompt import BASE_PROMPT
 
-    ns = {}
-    for n in ast.parse((ROOT / "julius/runtime.py").read_text()).body:
-        if isinstance(n, ast.Assign) and any(
-            isinstance(t, ast.Name) and t.id == "SYSTEM" for t in n.targets
-        ):
-            exec(compile(ast.Module(body=[n], type_ignores=[]), "<candidate>", "exec"), ns)
     return (
-        ns["SYSTEM"] + vision_capability_prompt(False) + jc.CAPABILITIES_PROMPT + jc.PLANNING_PROMPT
+        BASE_PROMPT + vision_capability_prompt(False) + jc.CAPABILITIES_PROMPT + jc.PLANNING_PROMPT
     )
 
 
@@ -94,7 +89,7 @@ class Sandbox:
 
 
 def shortcut(text, sb, ctx, turn, case_history=None):
-    """What julius_candidate does before the brain: utility session, file session, then the live intent router."""
+    """What the runtime does before the brain: utility session, file session, then the live intent router."""
     out = sb.utility.handle(text, turn)
     if out is not None:
         return {

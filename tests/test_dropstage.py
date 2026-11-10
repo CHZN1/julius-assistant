@@ -230,16 +230,19 @@ class EndToEnd(unittest.TestCase):
 
 class Wiring(unittest.TestCase):
     def test_candidate_stages_only_and_hands_the_model_a_data_block(self):
-        src = (REPO_ROOT / "julius/runtime.py").read_text()
-        for needle in (
-            "dropstage.DropStage(",
-            "'drop': _ui_drop",
-            "_drop_stage.stage(paths)",
-            "_drop_stage.model_block()",
-            "getattr(entry, 'drop_notice', False)",
-        ):
-            self.assertIn(needle, src)
-        body = src[src.index("def _ui_drop") : src.index("def _ui_typed")]
+        import inspect
+
+        from julius.runtime import brain_turn, inputs, listen
+
+        wiring = {
+            inputs: ("dropstage.DropStage(", '"drop": lambda p: ui_drop(s, p)', "stage(paths)"),
+            brain_turn: ("s.drop_stage.model_block()",),
+            listen: ('getattr(entry, "drop_notice", False)',),
+        }
+        for module, needles in wiring.items():
+            for needle in needles:
+                self.assertIn(needle, inspect.getsource(module))
+        body = inspect.getsource(inputs.ui_drop)
         for forbidden in ("read_text", "open(", "shutil", "unlink", "rename", "process("):
             self.assertNotIn(forbidden, body)
 

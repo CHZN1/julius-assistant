@@ -40,13 +40,13 @@ class SpokenMathTests(unittest.TestCase):
             self.assertIsNone(arithmetic_expression(text), text)
 
     def test_actual_candidate_bypasses_model_for_number_words(self):
-        from tests.test_candidate import load_candidate_turn
+        from tests.harness import TurnHarness
 
-        ns = load_candidate_turn()
-        ns["llm_chat"] = Mock(side_effect=AssertionError("brain should not load"))
-        answer = ns["ask_streaming"]("What is two plus two?", "", speak_fn=lambda _: None)
+        h = TurnHarness()
+        h.llm_chat = Mock(side_effect=AssertionError("brain should not load"))
+        answer = h.ask("What is two plus two?", "", speak_fn=lambda _: None)
         self.assertEqual(answer, "That's 4.")
-        ns["llm_chat"].assert_not_called()
+        h.llm_chat.assert_not_called()
 
     def test_compact_numeric_spelling_still_routes(self):
         self.assertEqual(arithmetic_expression("2times3"), "2*3")

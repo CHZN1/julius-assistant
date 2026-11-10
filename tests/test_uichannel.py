@@ -246,15 +246,20 @@ class ConfigAndWiring(unittest.TestCase):
             config.load_config(p)
 
     def test_candidate_wires_typing_through_the_keyboard_queue_and_text_only_flag(self):
-        src = (REPO_ROOT / "julius/runtime.py").read_text()
-        for needle in (
-            "uichannel.start_from_config",
-            "typed.append(uichannel.TypedText(text))",
-            "_text_only",
-            "'typed_reply') == 'text'",
-        ):
-            self.assertIn(needle, src)
-        self.assertIn("if globals().get('_text_only'): return", src)
+        import inspect
+
+        from julius.runtime import inputs, listen, speech
+        from tests.harness import make_session
+
+        self.assertIn("uichannel.start_from_config", inspect.getsource(inputs))
+        s = make_session()
+        self.assertEqual(inputs.ui_typed(s, "hello"), {"queued": True})
+        self.assertIsInstance(s.typed[0], uc.TypedText)
+        self.assertIn('"typed_reply") == "text"', inspect.getsource(listen))
+        # With text_only set the reply is shown, never synthesized.
+        s.text_only = True
+        speech.speak_sentence(s, "Hello there.")
+        s.tts.synthesize.assert_not_called()
 
 
 if __name__ == "__main__":

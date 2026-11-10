@@ -1,45 +1,41 @@
+"""A failed recognition must not stop listening; every path goes through the recovering wrapper."""
+
 import ast
 import unittest
 from unittest.mock import Mock, patch
 
 from julius.paths import REPO_ROOT
+from julius.runtime import asr
+from tests.harness import make_session
 
 
 class RecognitionRecoveryTests(unittest.TestCase):
-    def wrapper(self, recognizer):
-        tree = ast.parse((REPO_ROOT / "julius/runtime.py").read_text())
-        fn = next(
-            n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "transcribe_input"
-        )
-        ns = {"transcribe": recognizer}
-        exec(compile(ast.Module(body=[fn], type_ignores=[]), "recognition_recovery", "exec"), ns)
-        return ns
-
     def test_failed_turn_is_discarded_and_next_turn_recovers(self):
+        s = make_session()
         recognizer = Mock(side_effect=[RuntimeError("failed decoder"), ("two plus two", "en", 0)])
-        ns = self.wrapper(recognizer)
-        with patch("builtins.print"):
-            self.assertEqual(ns["transcribe_input"]([1]), ("", "?", 1.0))
-        self.assertEqual(ns["_last_asr_confidence"]["rejected"], "recognition_failure")
-        self.assertEqual(ns["transcribe_input"]([2]), ("two plus two", "en", 0))
+        with patch.object(asr, "transcribe", recognizer), patch("builtins.print"):
+            self.assertEqual(asr.transcribe_input(s, [1]), ("", "?", 1.0))
+            self.assertEqual(s.last_asr_confidence["rejected"], "recognition_failure")
+            self.assertEqual(asr.transcribe_input(s, [2]), ("two plus two", "en", 0))
 
     def test_interrupt_is_not_swallowed(self):
-        ns = self.wrapper(Mock(side_effect=KeyboardInterrupt))
-        with self.assertRaises(KeyboardInterrupt):
-            ns["transcribe_input"]([1])
+        with (
+            patch.object(asr, "transcribe", Mock(side_effect=KeyboardInterrupt)),
+            self.assertRaises(KeyboardInterrupt),
+        ):
+            asr.transcribe_input(make_session(), [1])
 
     def test_live_and_scripted_audio_use_recovery(self):
-        tree = ast.parse((REPO_ROOT / "julius/runtime.py").read_text())
-        calls = [
-            n
-            for n in ast.walk(tree)
-            if isinstance(n, ast.Call)
-            and isinstance(n.func, ast.Name)
-            and n.func.id == "transcribe_input"
-        ]
-        self.assertEqual(
-            len(calls), 3
-        )  # scripted audio, the live utterance, and the cascade wake check
+        calls = 0
+        raw_calls = 0
+        for path in (REPO_ROOT / "julius/runtime").glob("*.py"):
+            for node in ast.walk(ast.parse(path.read_text())):
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                    calls += node.func.id == "transcribe_input"
+                    raw_calls += node.func.id == "transcribe" and path.name != "asr.py"
+        # scripted audio, the live utterance, and the cascade wake check
+        self.assertEqual(calls, 3)
+        self.assertEqual(raw_calls, 0)
 
 
 if __name__ == "__main__":

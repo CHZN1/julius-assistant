@@ -66,9 +66,16 @@ class LowConfTests(unittest.TestCase):
         self.assertEqual(g.step("yes", SURE), ("run", "yes", None))
 
     def test_candidate_wires_gate(self):
-        src = open(REPO_ROOT / "julius/runtime.py").read()
-        self.assertIn("julius.audio.lowconf", src)
-        self.assertIn("_lowconf_gate.step", src)
+        from unittest.mock import Mock
+
+        from tests.harness import ProcessHarness
+
+        h = ProcessHarness()
+        h.session.lowconf_gate = Mock()
+        h.session.lowconf_gate.step.return_value = ("ask", "delete it", "Did you say: delete it?")
+        h.process("delete it")
+        h.session.lowconf_gate.step.assert_called_once()
+        self.assertEqual(h["turn.speak"].call_args.args[1], "Did you say: delete it?")
 
 
 if __name__ == "__main__":

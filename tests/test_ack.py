@@ -1,3 +1,5 @@
+from unittest.mock import Mock
+import contextlib
 import time
 import unittest
 
@@ -42,10 +44,22 @@ class AckTests(unittest.TestCase):
             time.sleep(0.05)
         self.assertEqual(said, [])
 
-    def test_candidate_wraps_tool_calls(self):
-        src = open(REPO_ROOT / "julius/runtime.py").read()
-        self.assertIn("_ack.watch()", src)
-        self.assertIn("from julius.audio import ack", src)
+    def test_tool_calls_run_inside_the_acknowledger_watch(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        import julius.brain.tools as jt
+        from julius.runtime.brain_turn import BrainTurn
+        from tests.harness import make_session
+
+        turn = BrainTurn(make_session(), "weather", None, None, False, None)
+        turn.ack = Mock()
+        turn.ack.watch.return_value = contextlib.nullcontext()
+        call = SimpleNamespace(function=SimpleNamespace(name="get_weather", arguments={}))
+        jt.dispatcher().last_result = {"ok": True}
+        with patch.object(jt, "call", return_value="Sunny."):
+            turn.run_calls([call])
+        turn.ack.watch.assert_called_once()
 
 
 if __name__ == "__main__":

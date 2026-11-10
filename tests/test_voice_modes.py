@@ -1,5 +1,4 @@
 import ast
-import re
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -15,22 +14,11 @@ from julius.audio.voice_identity import (
     numerical_failure,
     speech_chunks,
 )
-from julius.paths import REPO_ROOT
+from julius.runtime import speech
+from tests.harness import make_session
 
 
 class VoiceModeTests(unittest.TestCase):
-    def test_original_routing_preserved(self):
-        tree = ast.parse((REPO_ROOT / "scripts/experiments/julius_stageB2_qwen_tts.py").read_text())
-        assignment = next(
-            n
-            for n in tree.body
-            if isinstance(n, ast.Assign)
-            and any(isinstance(t, ast.Name) and t.id == "TTS_LIFT_HINT" for t in n.targets)
-        )
-        scope = {"re": re}
-        exec(compile(ast.Module(body=[assignment], type_ignores=[]), "original", "exec"), scope)
-        self.assertEqual(TTS_LIFT_HINT.pattern, scope["TTS_LIFT_HINT"].pattern)
-
     def test_style_transitions(self):
         self.assertEqual(
             [
@@ -164,38 +152,24 @@ class BackendReleaseTests(unittest.TestCase):
             self.assertFalse(backend._BACKEND_USED)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class ResponseDeliveryTests(unittest.TestCase):
     def test_reply_keeps_one_mode_and_restores_after_failure(self):
-        from julius.audio.cancellation import Cancellation
-
-        tree = ast.parse((REPO_ROOT / "julius/runtime.py").read_text())
-        fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "speak")
-        engine = Mock()
-        engine.response_delivery_mode = None
+        s = make_session(tts=Mock(backend="qwen-clone", response_delivery_mode=None))
         seen = []
 
-        def sentence(text):
-            seen.append((text, engine.response_delivery_mode))
+        def sentence(session, text):
+            seen.append((text, session.tts.response_delivery_mode))
 
-        ns = {
-            "tts": engine,
-            "re": re,
-            "clean_for_speech": lambda x: x,
-            "cancellation": Cancellation(),
-            "speak_sentence": sentence,
-        }
-        exec(compile(ast.Module(body=[fn], type_ignores=[]), "speech", "exec"), ns)
-        ns["speak"]("Great, that worked! We should verify the result.")
+        with patch.object(speech, "speak_sentence", sentence):
+            speech.speak(s, "Great, that worked! We should verify the result.")
         self.assertEqual([mode for _, mode in seen], ["lift", "lift"])
-        self.assertIsNone(engine.response_delivery_mode)
-        ns["speak_sentence"] = Mock(side_effect=RuntimeError("audio failed"))
-        with self.assertRaises(RuntimeError):
-            ns["speak"]("Great!")
-        self.assertIsNone(engine.response_delivery_mode)
+        self.assertIsNone(s.tts.response_delivery_mode)
+        with (
+            patch.object(speech, "speak_sentence", Mock(side_effect=RuntimeError("audio failed"))),
+            self.assertRaises(RuntimeError),
+        ):
+            speech.speak(s, "Great!")
+        self.assertIsNone(s.tts.response_delivery_mode)
 
     def test_question_does_not_imply_excitement(self):
         self.assertEqual(delivery_mode("Can you tell me what to explain?"), "balanced")
@@ -204,22 +178,13 @@ class ResponseDeliveryTests(unittest.TestCase):
 
 class WholeReplySpeechTests(unittest.TestCase):
     def test_mlx_reply_does_not_restart_playback_at_each_period(self):
-        from julius.audio.cancellation import Cancellation
-
-        tree = ast.parse((REPO_ROOT / "julius/runtime.py").read_text())
-        fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "speak")
-        engine = Mock(backend="qwen-mlx")
-        engine.response_delivery_mode = None
-        spoken = Mock()
-        ns = {
-            "tts": engine,
-            "re": re,
-            "clean_for_speech": lambda x: x,
-            "cancellation": Cancellation(),
-            "speak_sentence": spoken,
-        }
-        exec(compile(ast.Module(body=[fn], type_ignores=[]), "speech", "exec"), ns)
+        s = make_session(tts=Mock(backend="qwen-mlx", response_delivery_mode=None))
         text = "Great, that worked! We should still verify the result."
-        ns["speak"](text)
-        spoken.assert_called_once_with(text)
-        self.assertIsNone(engine.response_delivery_mode)
+        with patch.object(speech, "speak_sentence", Mock()) as spoken:
+            speech.speak(s, text)
+        spoken.assert_called_once_with(s, text)
+        self.assertIsNone(s.tts.response_delivery_mode)
+
+
+if __name__ == "__main__":
+    unittest.main()

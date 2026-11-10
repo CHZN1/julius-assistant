@@ -86,9 +86,17 @@ class UndoTests(unittest.TestCase):
         self.assertEqual(c.handle("undo"), "Undid m. done")
 
     def test_candidate_wires_coordinator(self):
-        src = open(REPO_ROOT / "julius/runtime.py").read()
-        self.assertIn("_undo_coordinator.handle", src)
-        self.assertIn("_undo_coordinator.observe", src)
+        from unittest.mock import Mock
+
+        from tests.harness import ProcessHarness
+
+        h = ProcessHarness()
+        h.session.undo_coordinator = Mock()
+        h.session.undo_coordinator.handle.return_value = "Undid the last file change."
+        h.process("undo")
+        h.session.undo_coordinator.observe.assert_called_once_with(1)
+        h.session.undo_coordinator.handle.assert_called_once_with("undo")
+        self.assertEqual(h["turn.speak"].call_args.args[1], "Undid the last file change.")
 
 
 if __name__ == "__main__":

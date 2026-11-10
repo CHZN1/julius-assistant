@@ -26,7 +26,7 @@ def run(cases):
         "JULIUS_MEMORY_DIR": str(tmp / "mem"),
     }
     p = subprocess.run(
-        [sys.executable, str(ROOT / "julius/runtime.py")],
+        [sys.executable, "-m", "julius"],
         env=env,
         cwd=ROOT,
         capture_output=True,

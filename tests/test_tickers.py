@@ -265,12 +265,14 @@ class ForcedFreshCalls(unittest.TestCase):
         self.assertEqual(seen, {"temperature": 0.4})
 
     def test_candidate_forces_only_the_first_call_of_the_turn(self):
-        src = (REPO_ROOT / "julius/runtime.py").read_text()
-        self.assertIn(
-            "force_tool=jt.live_tool_required(user_text) and not _livedata.tool_result_this_turn(msgs)",
-            src,
-        )
-        self.assertIn('"force_tool": True', src)
+        import inspect
+
+        from julius.runtime import brain_turn
+
+        src = inspect.getsource(brain_turn.BrainTurn.model_tool_message)
+        self.assertIn("jt.live_tool_required(self.user_text)", src)
+        self.assertIn("livedata.tool_result_this_turn", src)
+        self.assertIn('options["force_tool"] = True', inspect.getsource(brain_turn.BrainTurn.stream))
 
     def test_prompt_tells_him_earlier_answers_are_stale(self):
         self.assertIn(

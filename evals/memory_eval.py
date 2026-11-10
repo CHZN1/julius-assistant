@@ -291,9 +291,8 @@ def section_a():
 
 
 def section_prompt():
-    src = (ROOT / "julius/runtime.py").read_text()
-    m = re.search(r'SYSTEM = """(.*?)"""', src, re.S)
-    text = m.group(1) if m else ""
+    from julius.runtime.prompt import BASE_PROMPT as text
+
     ok = bool(re.search(r"long-term memory", text)) and bool(
         re.search(r"Never say you cannot remember", text)
     )

@@ -1,3 +1,4 @@
+import inspect
 from julius.paths import REPO_ROOT
 
 """Regression tests for what the first voice recording showed (2026-11-07)."""
@@ -156,12 +157,8 @@ class SpokenDatesAndLeaks(unittest.TestCase):
         self.assertNotIn("oh", n("November 08").lower())
 
     def test_model_narrating_its_instructions_is_not_spoken(self):
-        src = open(REPO_ROOT / "julius/runtime.py").read()
-        rx = eval(
-            "re.compile("
-            + re.search(r"META_LEAK = re\.compile\((.*?)\)   #", src, re.S).group(1)
-            + ")"
-        )
+        from julius.runtime.text import META_LEAK as rx
+
         for leak in (
             "The system says replies default short, but he explicitly asked for a long one, so I'll give a fuller story, kept spoken-friendly.",
             "the user wants a long story, and the system says default replies are short, but he explicitly asked for a long one, so I'll give him a proper tale without tools.",
@@ -182,11 +179,17 @@ class SpokenDatesAndLeaks(unittest.TestCase):
         self.assertIn("[interrupted by the user]", BREVITY_PROMPT)
         self.assertIn("not a complaint", BREVITY_PROMPT)
         self.assertIn("still give long answers in full", BREVITY_PROMPT)
-        src = open(REPO_ROOT / "julius/runtime.py").read()
-        self.assertIn("\"[interrupted by the user]\" if turn_error == 'cancelled' else reply", src)
-        self.assertIn("raw_backfill", src)
-        self.assertIn("only for lists that came back from a tool", src)
-        self.assertIn("Never refuse because it is long", src)
+        from julius.runtime import capture, turn
+        from julius.runtime.prompt import BASE_PROMPT
+        from tests.harness import make_session
+
+        s = make_session()
+        t = turn.Turn("hi", "typed", 0.0, reply="Response stopped by user.", error="cancelled")
+        turn.remember_exchange(s, t)
+        self.assertEqual(s.history[-1]["content"], "[interrupted by the user]")
+        self.assertIn("raw_backfill", inspect.getsource(capture))
+        self.assertIn("only for lists that came back from a tool", BASE_PROMPT)
+        self.assertIn("Never refuse because it is long", BASE_PROMPT)
 
 
 class TranscriptWindow(unittest.TestCase):
@@ -314,8 +317,10 @@ class LiveDataRule(unittest.TestCase):
         )
 
     def test_candidate_applies_the_guard_and_the_prompt_states_the_rule(self):
-        src = open(REPO_ROOT / "julius/runtime.py").read()
-        self.assertIn("_livedata.blocked(sent", src)
+        from julius.runtime import brain_turn
+
+        src = inspect.getsource(brain_turn)
+        self.assertIn("livedata.blocked(sent", src)
         self.assertIn("UNGROUNDED_LINE", src)
         from julius.audio.speech_text import TOOL_POLICY_PROMPT
 

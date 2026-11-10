@@ -1,11 +1,12 @@
-import ast
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import numpy as np
 
 from julius.audio.mic_gate import MicrophoneGate
-from julius.paths import REPO_ROOT
+from julius.runtime import capture, speech
+from julius.runtime.listen import Listener
+from tests.harness import make_session
 
 
 class GateTests(unittest.TestCase):
@@ -24,63 +25,42 @@ class GateTests(unittest.TestCase):
         now[0] += 0.36
         self.assertTrue(gate.accepting())
 
-    def test_actual_callback_drops_playback_and_retains_user_audio(self):
-        from collections import deque
-
+    def test_callback_drops_playback_and_retains_user_audio(self):
         now = [10.0]
-        gate = MicrophoneGate(clock=lambda: now[0])
-        queue = deque()
-        tree = ast.parse((REPO_ROOT / "julius/runtime.py").read_text())
-        fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "cb")
-        scope = {"microphone_gate": gate, "q": queue, "time": Mock(perf_counter=lambda: now[0])}
-        exec(compile(ast.Module(body=[fn], type_ignores=[]), "callback", "exec"), scope)
+        s = make_session(microphone_gate=MicrophoneGate(clock=lambda: now[0]))
         audio = np.ones((100, 1))
-        with gate.output():
-            scope["cb"](audio, 100, None, None)
-        scope["cb"](audio, 100, None, None)
-        self.assertFalse(queue)
-        now[0] += 0.36
-        scope["cb"](audio, 100, None, None)
-        self.assertEqual(len(queue), 1)
-        samples, captured_at = queue[0]
+        with patch.object(capture.time, "perf_counter", lambda: now[0]):
+            with s.microphone_gate.output():
+                capture.callback(s, audio, 100, None, None)
+            capture.callback(s, audio, 100, None, None)
+            self.assertFalse(s.chunks)
+            now[0] += 0.36
+            capture.callback(s, audio, 100, None, None)
+        self.assertEqual(len(s.chunks), 1)
+        samples, captured_at = s.chunks[0]
         self.assertEqual(captured_at, now[0])
         audio[:] = 0
         self.assertTrue(np.all(samples == 1))
 
-    def test_actual_speech_failure_releases_gate(self):
+    def test_speech_failure_releases_gate(self):
         now = [10.0]
-        gate = MicrophoneGate(clock=lambda: now[0])
-        engine = Mock(backend="qwen-mlx")
-        engine.synthesize.side_effect = RuntimeError("voice failed")
-        tree = ast.parse((REPO_ROOT / "julius/runtime.py").read_text())
-        fn = next(
-            n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "speak_sentence"
-        )
-        scope = {
-            "microphone_gate": gate,
-            "tts": engine,
-            "SPEED": 1.0,
-            "clean_for_speech": lambda x: x,
-            "close_backend": Mock(),
-        }
-        exec(compile(ast.Module(body=[fn], type_ignores=[]), "speech", "exec"), scope)
-        with self.assertRaises(RuntimeError):
-            scope["speak_sentence"]("Hello.")
-        self.assertFalse(gate.accepting())
+        s = make_session(microphone_gate=MicrophoneGate(clock=lambda: now[0]))
+        s.tts.synthesize.side_effect = RuntimeError("voice failed")
+        with patch.object(speech, "close_backend", Mock()), self.assertRaises(RuntimeError):
+            speech.speak_sentence(s, "Hello.")
+        self.assertFalse(s.microphone_gate.accepting())
         now[0] += 0.36
-        self.assertTrue(gate.accepting())
+        self.assertTrue(s.microphone_gate.accepting())
 
     def test_capture_gap_resets_wake_engine(self):
-        """Regression: audio around Julius's own playback must not be stitched into one wake candidate (the wake stream is reset on every capture gap)."""
-        tree = ast.parse((REPO_ROOT / "julius/runtime.py").read_text())
-        hits = [
-            n
-            for n in ast.walk(tree)
-            if isinstance(n, ast.If) and "discontinuous" in ast.dump(n.test)
-        ]
-        self.assertTrue(hits)
-        for n in hits:
-            self.assertIn("reset", ast.dump(ast.Module(body=n.body, type_ignores=[])))
+        """Regression: audio around Julius's own playback must not be stitched into one wake
+        candidate (the wake stream is reset on every capture gap)."""
+        s = make_session(wake_engine=Mock(), capture_clock=Mock())
+        s.capture_clock.discontinuous.return_value = True
+        s.chunks.append((np.zeros(1024, dtype=np.float32), 1.0))
+        with patch("builtins.print"):
+            Listener(s).process_chunk(awake=True)
+        s.wake_engine.reset.assert_called_once()
 
 
 if __name__ == "__main__":

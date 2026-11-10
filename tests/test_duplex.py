@@ -1,3 +1,4 @@
+import inspect
 from julius.paths import REPO_ROOT
 
 """Duplex audio: sample alignment of the echo reference, automatic fallback to the microphone gate, barge-in on the cleaned signal, playback abort."""
@@ -524,13 +525,18 @@ class Switch(unittest.TestCase):
         )
 
     def test_candidate_wires_fallback_to_the_gate(self):
-        src = (REPO_ROOT / "julius/runtime.py").read_text()
-        fb = src[src.index("def _duplex_fallback") : src.index("def cb(")]
-        self.assertIn("microphone_gate.bypass = False", fb)
-        self.assertIn("use_cleaned = False", fb)
-        self.assertIn("duplex_fallback", fb)
-        self.assertIn("_talked_over(duplex=True)", src)
-        self.assertIn("microphone_gate.bypass = True", src)
+        from unittest.mock import Mock
+
+        from julius.runtime import boot, capture
+        from tests.harness import make_session
+
+        s = make_session(duplex=Mock())
+        s.microphone_gate.bypass = True
+        capture.duplex_fallback(s, "echo leak")
+        self.assertFalse(s.microphone_gate.bypass)
+        self.assertFalse(s.duplex.use_cleaned)
+        self.assertIn("talked_over(s, duplex=True)", inspect.getsource(capture))
+        self.assertIn("microphone_gate.bypass = True", inspect.getsource(boot))
 
 
 if __name__ == "__main__":

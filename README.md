@@ -8,7 +8,7 @@ A local-first voice assistant for macOS: always-on wake word, streaming speech r
 
 ## Run
 - `python julius_service.py on` installs it as a login service; `status`, `logs`, `smoke [--restart]`, `doctor`.
-- `python julius_candidate.py` runs it in the foreground; type or say "Julius".
+- `python -m julius` runs it in the foreground; type or say "Julius".
 - Config is `julius.toml`; keys come from the environment or `.env` and are never logged.
 
 ## Interfaces

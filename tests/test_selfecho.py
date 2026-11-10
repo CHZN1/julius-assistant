@@ -107,8 +107,16 @@ class WakeVoiceActivityTests(unittest.TestCase):
         x = (rng.standard_normal(32000) * 0.0035).astype(np.float32)
         self.assertFalse(has_voice_activity(x, 16000, 0.0045))
         self.assertTrue(has_voice_activity(x, 16000, 0.0015))
-        src = (REPO_ROOT / "julius/runtime.py").read_text()
-        self.assertIn("min(globals().get('TH',.0045),.0015) if wake", src)
+        from unittest.mock import patch
+
+        from julius.runtime import asr
+        from tests.harness import make_session
+
+        s = make_session(threshold=0.0045)
+        for wake, expected in ((True, 0.0015), (False, 0.0045)):
+            with patch.object(asr, "has_voice_activity", return_value=False) as check:
+                asr.transcribe(s, x, wake=wake)
+            self.assertEqual(check.call_args.args[2], expected)
 
 
 class FarFieldTests(unittest.TestCase):

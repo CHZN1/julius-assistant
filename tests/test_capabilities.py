@@ -52,8 +52,11 @@ class PromptTests(unittest.TestCase):
             self.assertIn(tool, {s["function"]["name"] for s in jt.select_schemas(said)}, said)
 
     def test_the_production_system_prompt_includes_the_capabilities(self):
-        source = (REPO_ROOT / "julius/runtime.py").read_text()
-        self.assertIn("cloud.CAPABILITIES_PROMPT", source)
+        from julius.brain import cloud
+        from julius.runtime.prompt import build_system
+
+        self.assertIn(cloud.CAPABILITIES_PROMPT, build_system(False, cloud=True))
+        self.assertNotIn(cloud.CAPABILITIES_PROMPT, build_system(False, cloud=False))
 
 
 class BackupToolTests(unittest.TestCase):

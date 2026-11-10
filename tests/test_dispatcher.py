@@ -129,9 +129,9 @@ class DispatcherTests(unittest.TestCase):
         self.assertTrue(self.d.dispatch("get_weather")["ok"])
 
     def test_actual_candidate_direct_routes_use_dispatcher(self):
-        from tests.test_candidate import load_candidate_turn
+        from tests.harness import TurnHarness
 
-        ns = load_candidate_turn()
+        h = TurnHarness()
         with (
             patch.object(tools, "_dispatcher", self.d),
             patch.dict(
@@ -154,7 +154,7 @@ class DispatcherTests(unittest.TestCase):
             ]:
                 self.d.begin_turn()
                 spoken = []
-                reply = ns["ask_streaming"](text, "", speak_fn=spoken.append)
+                reply = h.ask(text, "", speak_fn=spoken.append)
                 self.assertEqual(self.d.last_result["agent"], owner)
                 self.assertEqual(spoken, [reply])
                 self.assertNotIn("https://", reply)
@@ -162,16 +162,16 @@ class DispatcherTests(unittest.TestCase):
     def test_model_selected_tool_failure_cannot_be_rewritten_as_success(self):
         from types import SimpleNamespace as S
 
-        from tests.test_candidate import load_candidate_turn
+        from tests.harness import TurnHarness
 
-        ns = load_candidate_turn()
+        h = TurnHarness()
         tool_call = S(function=S(name="get_weather", arguments={"location": "Tokyo"}))
         model = Mock(return_value=S(message=S(tool_calls=[tool_call], content="")))
-        ns["llm_chat"] = model
+        h.llm_chat = model
         self.registry["get_weather"] = Mock(side_effect=TimeoutError("offline"))
         with patch.object(tools, "_dispatcher", self.d):
             spoken = []
-            reply = ns["ask_streaming"](
+            reply = h.ask(
                 "Look up Tokyo current temperature", "", speak_fn=spoken.append
             )
         self.assertIn("failed", reply)
@@ -181,22 +181,22 @@ class DispatcherTests(unittest.TestCase):
     def test_inference_hook_runs_before_model_but_not_direct_tools(self):
         from types import SimpleNamespace as S
 
-        from tests.test_candidate import load_candidate_turn
+        from tests.harness import TurnHarness
 
-        ns = load_candidate_turn()
+        h = TurnHarness()
         order = []
 
         def model(**kwargs):
             order.append("model")
             return iter([S(message=S(content="Hello."))])
 
-        ns["llm_chat"] = model
+        h.llm_chat = model
         hook = lambda: order.append("voice_released")
         with patch.object(tools, "_dispatcher", self.d):
-            ns["ask_streaming"]("Say hello", "", speak_fn=lambda _: None, before_inference=hook)
+            h.ask("Say hello", "", speak_fn=lambda _: None, before_inference=hook)
             self.assertEqual(order, ["voice_released", "model"])
             order.clear()
-            ns["ask_streaming"]("2 plus 2", "", speak_fn=lambda _: None, before_inference=hook)
+            h.ask("2 plus 2", "", speak_fn=lambda _: None, before_inference=hook)
             self.assertEqual(order, [])
 
     def test_file_preview_status_and_unrelated_followup(self):

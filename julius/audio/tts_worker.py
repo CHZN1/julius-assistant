@@ -7,6 +7,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from julius import state
+
 os.environ["JULIUS_TTS_WORKER"] = "1"
 os.environ["JULIUS_TTS"] = "qwen-clone"
 import numpy as np
@@ -16,9 +18,7 @@ from julius.audio.tts import SpeechEngine
 with contextlib.redirect_stdout(sys.stderr):
     engine = SpeechEngine()
 print(json.dumps({"ready": True}), flush=True)
-with tempfile.TemporaryDirectory(
-    prefix="julius_tts_", dir=__import__("julius.state").tmp_dir()
-) as directory:
+with tempfile.TemporaryDirectory(prefix="julius_tts_", dir=state.tmp_dir()) as directory:
     for line in sys.stdin:
         try:
             req = json.loads(line)

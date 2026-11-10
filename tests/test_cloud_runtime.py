@@ -1,24 +1,14 @@
-from julius.paths import REPO_ROOT
-
 """Runtime wiring for the cloud brain: voice stays loaded, escalation hints reach tool turns."""
-import ast
 import os
-import re
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from julius.paths import REPO_ROOT
+
 from julius.audio.tts import SpeechEngine
-
-
-def candidate_constant(name):
-    for n in ast.parse((REPO_ROOT / "julius/runtime.py").read_text()).body:
-        if isinstance(n, ast.Assign) and any(
-            isinstance(t, ast.Name) and t.id == name for t in n.targets
-        ):
-            ns = {"re": re}
-            exec(compile(ast.Module(body=[n], type_ignores=[]), "<c>", "exec"), ns)
-            return ns[name]
+from julius.runtime import boot
+from julius.runtime.text import ESCALATE_HINT
 
 
 class VoiceStaysLoadedTests(unittest.TestCase):
@@ -46,13 +36,13 @@ class VoiceStaysLoadedTests(unittest.TestCase):
         self.assertTrue(e.close.called or e.worker.mock_calls)
 
     def test_cloud_profile_keeps_the_voice_by_default(self):
-        launcher = Path("run_julius.sh").read_text()
+        launcher = (REPO_ROOT / "run_julius.sh").read_text()
         self.assertIn("cloud) PROFILE_BACKEND=cloud", launcher)
         self.assertIn("JULIUS_KEEP_VOICE", launcher)
         self.assertIn("${JULIUS_PROFILE:-cloud}", launcher)
 
     def test_default_cloud_profile_uses_the_mlx_voice_and_torch_remains_a_fallback_profile(self):
-        launcher = Path("run_julius.sh").read_text()
+        launcher = (REPO_ROOT / "run_julius.sh").read_text()
         cloud = launcher.split("  cloud) ")[1].split(";;")[0]
         torch = launcher.split("  cloud-torch) ")[1].split(";;")[0]
         self.assertIn("JULIUS_SILENCE_SECONDS:-0.6", cloud)
@@ -62,12 +52,12 @@ class VoiceStaysLoadedTests(unittest.TestCase):
         self.assertIn("JULIUS_KEEP_VOICE", torch)
         import subprocess
 
-        self.assertEqual(subprocess.run(["zsh", "-n", "run_julius.sh"]).returncode, 0)
+        self.assertEqual(subprocess.run(["zsh", "-n", str(REPO_ROOT / "run_julius.sh")]).returncode, 0)
 
 
 class EscalationHintTests(unittest.TestCase):
     def test_multistep_requests_get_the_tool_turn(self):
-        hint = candidate_constant("ESCALATE_HINT")
+        hint = ESCALATE_HINT
         for text in [
             "Organize my downloads by file type",
             "Plan my week around the game",
@@ -81,16 +71,7 @@ class EscalationHintTests(unittest.TestCase):
 
 class AsrModelChoiceTests(unittest.TestCase):
     def asr_for(self, value):
-        import ast
-
-        src = ast.parse((REPO_ROOT / "julius/runtime.py").read_text())
-        ns = {"os": os}
-        for node in src.body:
-            if isinstance(node, ast.Assign) and any(
-                isinstance(t, ast.Name) and t.id in ("ASR_MODELS", "ASR") for t in node.targets
-            ):
-                exec(compile(ast.Module(body=[node], type_ignores=[]), "<c>", "exec"), ns)
-        return ns["ASR"]
+        return boot.asr_model_for(os.environ.get("JULIUS_ASR_MODEL", "small.en"))
 
     def test_small_en_is_the_default_and_the_others_stay_selectable(self):
         with patch.dict(os.environ, {}, clear=False):

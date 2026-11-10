@@ -11,12 +11,13 @@ from unittest.mock import patch
 import julius.brain.tools as jt
 from julius.audio.speech_text import (
     EXACT_REQUEST,
+    BREVITY_PROMPT,
     SPOKEN_STYLE_PROMPT,
     TOOL_POLICY_PROMPT,
     speakable,
 )
 from julius.audio.speech_text import normalize_for_speech as n
-from tests.test_candidate import load_candidate_turn
+from tests.harness import TurnHarness
 
 
 class NormalizeTests(unittest.TestCase):
@@ -67,15 +68,8 @@ class NormalizeTests(unittest.TestCase):
             self.assertEqual(n(n(text)), n(text))
 
     def test_runtime_cleaner_applies_it_before_the_existing_fixes(self):
-        src = ast.parse((REPO_ROOT / "julius/runtime.py").read_text())
-        ns = {"re": re, "normalize_for_speech": n}
-        for node in src.body:
-            if (
-                isinstance(node, ast.Assign)
-                and any(isinstance(t, ast.Name) and t.id == "FIXES" for t in node.targets)
-            ) or (isinstance(node, ast.FunctionDef) and node.name == "clean_for_speech"):
-                exec(compile(ast.Module(body=[node], type_ignores=[]), "<c>", "exec"), ns)
-        clean = ns["clean_for_speech"]
+        from julius.runtime.text import clean_for_speech as clean
+
         self.assertEqual(clean("It's 77°F and clear."), "It's 77 degrees and clear.")
         self.assertIn("A.I.", clean("The AI said 17% 🎉"))
         self.assertIn("17 percent", clean("The AI said 17% 🎉"))
@@ -119,7 +113,20 @@ class TranscriptFixTests(unittest.TestCase):
             self.assertEqual(fix(text), text)
 
     def test_runtime_applies_the_fix_to_every_transcription(self):
-        self.assertIn("text = fix_transcript(text)", (REPO_ROOT / "julius/runtime.py").read_text())
+        from unittest.mock import patch
+
+        from julius.runtime import asr
+        from tests.harness import make_session
+
+        s = make_session(threshold=0.0)
+        result = {"text": " what about prize picks ", "segments": [], "language": "en"}
+        with (
+            patch.object(asr, "_whisper", return_value=result),
+            patch.object(asr, "has_voice_activity", return_value=True),
+            patch.object(asr, "fix_transcript", side_effect=lambda text: f"FIXED {text}"),
+        ):
+            text, _lang, _nsp = asr.transcribe(s, None)
+        self.assertEqual(text, "FIXED what about prize picks")
 
 
 class SpeakableTests(unittest.TestCase):
@@ -236,10 +243,8 @@ class OneRoundTripTests(unittest.TestCase):
         )
 
     def run_turn(self, text, tool_phase, cloud, out="x"):
-        ns = load_candidate_turn()
-        ns["speakable"] = speakable
-        ns["EXACT_REQUEST"] = EXACT_REQUEST
-        ns["cloud_brain"] = object() if cloud else None
+        h = TurnHarness()
+        h.session.cloud_brain = object() if cloud else None
         calls = []
         spoken = []
 
@@ -256,10 +261,10 @@ class OneRoundTripTests(unittest.TestCase):
             )
             return as_parts(r) if kw.get("stream") else r
 
-        ns["llm_chat"] = llm
+        h.llm_chat = llm
         with patch.object(jt, "call", return_value=out):
             jt.dispatcher().last_result = {"ok": True}
-            result = ns["ask_streaming"](text, "", speak_fn=spoken.append)
+            result = h.ask(text, "", speak_fn=spoken.append)
         return result, spoken, calls
 
     def test_a_simple_tool_is_one_model_call_and_a_ready_sentence(self):
@@ -342,12 +347,12 @@ class OneRoundTripTests(unittest.TestCase):
         many.assert_called_once()  # both lookups ran as one concurrent batch, then one composed answer
 
     def test_no_tool_text_answer_is_spoken_sentence_by_sentence_with_one_call(self):
-        ns = load_candidate_turn()
-        ns["cloud_brain"] = object()
-        ns["_tool_carry_next"] = True
+        h = TurnHarness()
+        h.session.cloud_brain = object()
+        h.session.tool_carry_next = True
         spoken = []
         calls = []
-        ns["llm_chat"] = lambda **kw: (
+        h.llm_chat = lambda **kw: (
             calls.append(kw)
             or as_parts(
                 SimpleNamespace(
@@ -358,7 +363,7 @@ class OneRoundTripTests(unittest.TestCase):
                 )
             )
         )
-        result = ns["ask_streaming"]("explain overfitting simply", "", speak_fn=spoken.append)
+        result = h.ask("explain overfitting simply", "", speak_fn=spoken.append)
         self.assertEqual(len(calls), 1)
         self.assertEqual(
             spoken,
@@ -369,9 +374,9 @@ class OneRoundTripTests(unittest.TestCase):
         )
 
     def test_local_brain_keeps_its_streamed_second_call_for_text_answers(self):
-        ns = load_candidate_turn()
-        ns["cloud_brain"] = None
-        ns["_tool_carry_next"] = True
+        h = TurnHarness()
+        h.session.cloud_brain = None
+        h.session.tool_carry_next = True
         calls = []
 
         def llm(**kw):
@@ -384,8 +389,8 @@ class OneRoundTripTests(unittest.TestCase):
                 )
             )
 
-        ns["llm_chat"] = llm
-        ns["ask_streaming"]("explain overfitting simply", "", speak_fn=lambda s: None)
+        h.llm_chat = llm
+        h.ask("explain overfitting simply", "", speak_fn=lambda s: None)
         self.assertEqual([bool(c.get("stream")) for c in calls], [False, True])
 
 
@@ -415,11 +420,18 @@ class PolicyPromptTests(unittest.TestCase):
             self.assertIn(phrase, BREVITY_PROMPT)
 
     def test_cloud_system_prompt_includes_both_and_local_prompts_do_not(self):
-        src = (REPO_ROOT / "julius/runtime.py").read_text()
-        self.assertIn(
-            "SYSTEM += cloud.CAPABILITIES_PROMPT + cloud.PLANNING_PROMPT + SPOKEN_STYLE_PROMPT + TOOL_POLICY_PROMPT + BREVITY_PROMPT",
-            src,
-        )
+        from julius.brain import cloud
+        from julius.runtime.prompt import build_system
+
+        cloud_system = build_system(False, cloud=True)
+        for section in (
+            cloud.CAPABILITIES_PROMPT + cloud.PLANNING_PROMPT,
+            SPOKEN_STYLE_PROMPT + TOOL_POLICY_PROMPT + BREVITY_PROMPT,
+        ):
+            self.assertIn(section, cloud_system)
+        local_system = build_system(False, cloud=False)
+        for section in (SPOKEN_STYLE_PROMPT, TOOL_POLICY_PROMPT, BREVITY_PROMPT):
+            self.assertNotIn(section, local_system)
         from julius.brain.conversation import conversation_messages
 
         with patch.dict(os.environ, {"JULIUS_BACKEND": "cloud"}):

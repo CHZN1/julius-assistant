@@ -7,7 +7,7 @@ from unittest.mock import patch
 import julius.brain.tools as jt
 from julius.audio.listening import normalize_request
 from julius.brain.intents import LiveIntentRouter
-from tests.test_candidate import load_candidate_turn
+from tests.harness import TurnHarness
 
 
 def weather_router():
@@ -145,18 +145,18 @@ class RouterFollowUpTests(unittest.TestCase):
 
 
 class TurnTests(unittest.TestCase):
-    def ask(self, ns, text, spoken):
-        return ns["ask_streaming"](text, "", speak_fn=spoken.append)
+    def ask(self, h, text, spoken):
+        return h.ask(text, "", speak_fn=spoken.append)
 
     def test_what_about_tomorrow_follow_up_runs_the_forecast_tool_through_the_real_turn_function(
         self,
     ):
         for second in ["what about tomorrow?", "Julius, what about tomorrow?"]:
-            ns = load_candidate_turn()
+            h = TurnHarness()
             spoken = []
             with patch.object(jt, "call", side_effect=lambda n, a: f"{n} ok") as call:
-                self.ask(ns, "What's the weather in Springfield?", spoken)
-                self.ask(ns, second, spoken)
+                self.ask(h, "What's the weather in Springfield?", spoken)
+                self.ask(h, second, spoken)
             self.assertEqual(
                 call.call_args_list[0].args, ("get_weather", {"location": "Springfield"}), second
             )
@@ -169,15 +169,15 @@ class TurnTests(unittest.TestCase):
     def test_percent_question_with_courtesy_and_wake_word_hits_the_calculator_without_the_model(
         self,
     ):
-        ns = load_candidate_turn()
+        h = TurnHarness()
         spoken = []
-        ns["llm_chat"] = lambda **kw: self.fail("the model must not be called")
-        self.ask(ns, "Thanks, Julius. What's 17% of 2480?", spoken)
+        h.llm_chat = lambda **kw: self.fail("the model must not be called")
+        self.ask(h, "Thanks, Julius. What's 17% of 2480?", spoken)
         self.assertEqual(spoken, ["That's 421.6."])
 
     def test_a_turn_that_used_a_tool_carries_tools_into_the_next_turn(self):
         def run(first):
-            ns = load_candidate_turn()
+            h = TurnHarness()
             calls = []
             tool_turns = [0]
 
@@ -202,14 +202,14 @@ class TurnTests(unittest.TestCase):
                     )
                 return SimpleNamespace(message=SimpleNamespace(content="", tool_calls=None))
 
-            ns["llm_chat"] = llm
+            h.llm_chat = llm
             spoken = []
             with patch.object(jt, "call", return_value="Giants lost 3-2"):
                 jt.dispatcher().last_result = {"ok": True}
                 if first:
-                    self.ask(ns, "Who won the Giants game yesterday?", spoken)
+                    self.ask(h, "Who won the Giants game yesterday?", spoken)
                 before = len([c for c in calls if not c.get("stream")])
-                self.ask(ns, "And the Dodgers?", spoken)
+                self.ask(h, "And the Dodgers?", spoken)
             tool_turns_calls = [c for c in calls if not c.get("stream")]
             return len(tool_turns_calls) - before, bool(
                 tool_turns_calls and tool_turns_calls[-1].get("tools") is not None
@@ -221,8 +221,8 @@ class TurnTests(unittest.TestCase):
         )  # without a previous tool, plain chat stays tool-free
 
     def test_carry_lasts_one_turn_unless_a_tool_is_used_again(self):
-        ns = load_candidate_turn()
-        ns["_tool_carry_next"] = True
+        h = TurnHarness()
+        h.session.tool_carry_next = True
         spoken = []
         tool_calls = []
 
@@ -232,9 +232,9 @@ class TurnTests(unittest.TestCase):
             tool_calls.append(kw.get("tools") is not None)
             return SimpleNamespace(message=SimpleNamespace(content="", tool_calls=None))
 
-        ns["llm_chat"] = llm
-        self.ask(ns, "And the Dodgers?", spoken)
-        self.ask(ns, "And the Padres?", spoken)
+        h.llm_chat = llm
+        self.ask(h, "And the Dodgers?", spoken)
+        self.ask(h, "And the Padres?", spoken)
         self.assertEqual(tool_calls, [True])  # second turn is plain chat again
 
 

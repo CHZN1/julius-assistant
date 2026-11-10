@@ -1,7 +1,4 @@
-from julius.paths import REPO_ROOT
-
 """Streaming protocol recovery, buffered IPC, and continuous output contracts."""
-import ast
 import io
 import json
 import tempfile
@@ -12,6 +9,8 @@ from unittest.mock import Mock, patch
 import numpy as np
 
 from julius.audio.tts import SpeechEngine
+from julius.runtime import speech
+from tests.harness import make_session
 
 
 class StreamingProtocolTests(unittest.TestCase):
@@ -83,16 +82,10 @@ class StreamingProtocolTests(unittest.TestCase):
 
 class ContinuousPlaybackTests(unittest.TestCase):
     def speak(self, chunks):
-        tree = ast.parse((REPO_ROOT / "julius/runtime.py").read_text())
-        fn = next(
-            n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "speak_sentence"
-        )
-        engine = Mock()
-        engine.backend = "qwen-mlx"
-        engine.synthesize.return_value = iter(chunks)
+        """Returns (speak function, sd mock, output mock) with a scripted voice and output device."""
+        engine = Mock(backend="qwen-mlx")
 
-        # Runtime generators support close; use a real generator in the harness.
-        def generate():
+        def generate():  # a real generator: the runtime closes it
             yield from chunks
 
         engine.synthesize.return_value = generate()
@@ -100,19 +93,14 @@ class ContinuousPlaybackTests(unittest.TestCase):
         output = Mock()
         sd.OutputStream.return_value.__enter__ = Mock(return_value=output)
         sd.OutputStream.return_value.__exit__ = Mock(return_value=False)
-        from julius.audio.output import ready_output
-
         sd.PortAudioError = RuntimeError
-        scope = {
-            "ready_output": ready_output,
-            "tts": engine,
-            "sd": sd,
-            "SPEED": 1.05,
-            "clean_for_speech": lambda x: x,
-            "_validation_no_devices": False,
-        }
-        exec(compile(ast.Module(body=[fn], type_ignores=[]), "speech", "exec"), scope)
-        return scope["speak_sentence"], sd, output
+        s = make_session(tts=engine, no_devices=False)
+
+        def speak(text):
+            with patch.object(speech, "sd", sd), patch.object(speech, "close_backend", Mock()):
+                speech.speak_sentence(s, text)
+
+        return speak, sd, output
 
     def test_one_output_stream_for_multiple_chunks(self):
         speak, sd, output = self.speak([(np.zeros(8), 24000), (np.ones(8), 24000)])
@@ -127,20 +115,11 @@ class ContinuousPlaybackTests(unittest.TestCase):
             speak("Hello.")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class PlayerRouteTests(unittest.TestCase):
     def test_speak_sentence_uses_the_persistent_player_when_present_and_notes_first_audio(self):
         from julius.audio.player import SpeechPlayer
 
-        tree = ast.parse((REPO_ROOT / "julius/runtime.py").read_text())
-        fn = next(
-            n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "speak_sentence"
-        )
-        engine = Mock()
-        engine.backend = "qwen-mlx"
+        engine = Mock(backend="qwen-mlx")
 
         def generate():
             yield np.zeros(2400, dtype=np.float32), 24000
@@ -152,19 +131,14 @@ class PlayerRouteTests(unittest.TestCase):
         sd = Mock()
         sd.OutputStream.return_value = stream
         player = SpeechPlayer(sd, idle_seconds=60, log=lambda *a, **k: None)
-        scope = {
-            "tts": engine,
-            "sd": sd,
-            "SPEED": 1.05,
-            "clean_for_speech": lambda x: x,
-            "_validation_no_devices": False,
-            "speech_player": player,
-            "_response_started": 1.0,
-            "_first_audio_at": None,
-        }
-        exec(compile(ast.Module(body=[fn], type_ignores=[]), "speech", "exec"), scope)
-        scope["speak_sentence"]("Hello.")
+        s = make_session(tts=engine, no_devices=False, speech_player=player, response_started=1.0)
+        with patch.object(speech, "close_backend", Mock()):
+            speech.speak_sentence(s, "Hello.")
         sd.OutputStream.assert_called_once()
         self.assertEqual(stream.write.call_count, 3)
-        self.assertIsNotNone(scope["_first_audio_at"])
+        self.assertIsNotNone(s.first_audio_at)
         player.close()
+
+
+if __name__ == "__main__":
+    unittest.main()

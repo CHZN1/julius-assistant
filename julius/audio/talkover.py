@@ -2,7 +2,7 @@
 
 While Julius talks the microphone is gated (it would transcribe his own voice). This watches the gated audio instead: his echo in the microphone is roughly
 a fixed fraction of what is being played, so sound well above that fraction, for long enough, is somebody talking. It only decides "someone is talking over me";
-what to do then (stop speaking and listen) lives in julius_candidate.
+what to do then (stop speaking and listen) lives in julius.runtime.capture.
 
 update() takes the microphone level and the recent playback level for a short window and returns True once, when the excess has lasted `sustain` seconds."""
 

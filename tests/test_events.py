@@ -120,7 +120,13 @@ class Feed(unittest.TestCase):
         self.hub.set_state("asleep")
         self.hub.set_state("quiet")
         self.assertEqual(self.hub.state, "quiet")
-        self.assertIn("'quiet'", open(REPO_ROOT / "julius/runtime.py").read())
+        from unittest.mock import patch
+
+        from julius.runtime import controls
+        from tests.harness import make_session
+
+        with patch.object(controls.state, "is_quiet", return_value=True):
+            self.assertEqual(controls.ui_state(make_session()), "quiet")
 
     def test_accept_key_matches_rfc6455_example(self):
         self.assertEqual(ev.accept_key("dGhlIHNhbXBsZSBub25jZQ=="), "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=")
@@ -172,9 +178,14 @@ class Feed(unittest.TestCase):
 
 class Wiring(unittest.TestCase):
     def test_candidate_publishes(self):
-        src = open(REPO_ROOT / "julius/runtime.py").read()
-        for needle in ("from julius.ui_bridge import events", "_events_hub.say(", "_ui_state"):
-            self.assertIn(needle, src)
+        import inspect
+
+        from julius.runtime import boot, speech, turn
+
+        self.assertIn("from julius.ui_bridge import events", inspect.getsource(boot))
+        self.assertIn("controls.ui_state(s)", inspect.getsource(boot))
+        self.assertIn('events_hub.say("julius"', inspect.getsource(speech))
+        self.assertIn('events_hub.say("you"', inspect.getsource(turn))
 
 
 if __name__ == "__main__":

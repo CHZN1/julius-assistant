@@ -16,13 +16,9 @@ import julius.brain.cloud as jc
 import julius.brain.tools as jt
 from julius.brain.vision_mode import vision_capability_prompt
 
-ns = {}
-for n in ast.parse((root / "julius/runtime.py").read_text()).body:
-    if isinstance(n, ast.Assign) and any(
-        isinstance(t, ast.Name) and t.id == "SYSTEM" for t in n.targets
-    ):
-        exec(compile(ast.Module(body=[n], type_ignores=[]), "<c>", "exec"), ns)
-system = ns["SYSTEM"] + vision_capability_prompt(False) + jc.PLANNING_PROMPT
+from julius.runtime.prompt import BASE_PROMPT
+
+system = BASE_PROMPT + vision_capability_prompt(False) + jc.PLANNING_PROMPT
 tools = jc.convert_tools(list(jt.SCHEMAS) + [jc.ESCALATE_SCHEMA])
 client = jc.make_client()
 

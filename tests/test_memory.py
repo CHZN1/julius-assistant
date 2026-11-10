@@ -291,9 +291,10 @@ class RetrievalTests(unittest.TestCase):
             self.assertFalse(a.worth_a_look(t), t)
 
     def test_system_prompt_says_julius_has_long_term_memory(self):
-        src = (REPO_ROOT / "julius/runtime.py").read_text()
-        self.assertIn("You have long-term memory", src)
-        self.assertIn("Never say you cannot remember", src)
+        from julius.runtime.prompt import BASE_PROMPT
+
+        self.assertIn("You have long-term memory", BASE_PROMPT)
+        self.assertIn("Never say you cannot remember", BASE_PROMPT)
 
     def test_natural_forget_phrasings_are_commands_and_file_deletes_are_not(self):
         for t, exp in [

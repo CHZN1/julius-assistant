@@ -1,11 +1,12 @@
-from julius.paths import REPO_ROOT
-
 """Native brain handoff and stream cancellation must release every model owner."""
+import os
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import julius.brain.backend as backend
+from julius.runtime import boot
+from julius.runtime.session import Session
 
 
 class NativeCleanupTests(unittest.TestCase):
@@ -53,9 +54,9 @@ class StreamCleanupTests(unittest.TestCase):
         import io
 
         from julius.audio.cancellation import TurnCancelled
-        from tests.test_candidate import load_candidate_turn
+        from tests.harness import TurnHarness
 
-        ns = load_candidate_turn()
+        h = TurnHarness()
         closed = []
 
         def stream():
@@ -65,13 +66,13 @@ class StreamCleanupTests(unittest.TestCase):
             finally:
                 closed.append(True)
 
-        ns["llm_chat"] = lambda **kwargs: stream()
+        h.llm_chat = lambda **kwargs: stream()
 
         def stop(_):
             raise TurnCancelled("stop")
 
         with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(TurnCancelled):
-            ns["ask_streaming"]("Tell me something.", "", speak_fn=stop)
+            h.ask("Tell me something.", "", speak_fn=stop)
         self.assertEqual(closed, [True])
 
 
@@ -92,30 +93,22 @@ class PreparationTests(unittest.TestCase):
 
 
 class StartupOrderTests(unittest.TestCase):
-    def test_actual_startup_primes_before_constructing_voice(self):
-        import ast
-        import os
-
-        tree = ast.parse((REPO_ROOT / "julius/runtime.py").read_text())
+    def test_startup_primes_before_constructing_voice(self):
         events = []
-        prime = next(
-            n
-            for n in tree.body
-            if isinstance(n, ast.If) and "JULIUS_MLX_BRAIN_PREPARE" in ast.unparse(n.test)
-        )
-        voice = next(
-            n
-            for n in tree.body
-            if isinstance(n, ast.Assign)
-            and any(isinstance(t, ast.Name) and t.id == "tts" for t in n.targets)
-        )
-        self.assertLess(tree.body.index(prime), tree.body.index(voice))
-        ns = {
-            "os": os,
-            "print": lambda *args, **kwargs: None,
-            "prepare_backend": lambda: events.append("prime and release"),
-            "SpeechEngine": lambda: events.append("voice"),
-        }
-        with patch.dict(os.environ, {"JULIUS_MLX_BRAIN_PREPARE": "1"}):
-            exec(compile(ast.Module(body=[prime, voice], type_ignores=[]), "startup", "exec"), ns)
+        with (
+            patch.dict(os.environ, {"JULIUS_MLX_BRAIN_PREPARE": "1"}),
+            patch.object(boot, "create_vision") as vision,
+            patch.object(boot, "prepare_backend", lambda: events.append("prime and release")),
+            patch.object(boot, "SpeechEngine", lambda: events.append("voice") or Mock()),
+            patch("builtins.print"),
+        ):
+            vision.return_value.start.return_value = Mock(enabled=False)
+            s = Session()
+            boot.setup_basics(s)
+            boot.setup_vision(s)
+            boot.setup_voice(s)
         self.assertEqual(events, ["prime and release", "voice"])
+
+
+if __name__ == "__main__":
+    unittest.main()

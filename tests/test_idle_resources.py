@@ -1,75 +1,63 @@
-import ast
+"""Going to sleep releases model weights; the messages say exactly what was released."""
+
 import contextlib
 import unittest
-import unittest.mock
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
-from julius.paths import REPO_ROOT
+from julius.runtime import handlers
+from tests.harness import make_session
 
 
 class IdleReleaseTests(unittest.TestCase):
-    def runtime(self):
-        fn = next(
-            n
-            for n in ast.parse((REPO_ROOT / "julius/runtime.py").read_text()).body
-            if isinstance(n, ast.FunctionDef) and n.name == "release_idle_models"
-        )
+    def release(self, backend="ollama", environment=None, suspend_error=None):
+        """Run release_idle_models with recorded collaborators: (result, events, last message)."""
         events = []
-        tts = Mock()
-        tts.suspend.side_effect = lambda: events.append("voice")
+        s = make_session()
+        s.tts.suspend.side_effect = suspend_error or (lambda: events.append("voice"))
 
         @contextlib.contextmanager
         def recognition(release=True):
             events.append("recognition" if release else "recognition-kept")
             yield
 
-        ns = {
-            "tts": tts,
-            "close_backend": lambda: events.append("brain"),
-            "recognition_resources": recognition,
-            "print": Mock(),
-        }
-        exec(compile(ast.Module(body=[fn], type_ignores=[]), "idle", "exec"), ns)
-        return ns, events
+        printed = Mock()
+        with (
+            patch.object(handlers, "close_backend", lambda: events.append("brain")),
+            patch.object(handlers, "recognition_resources", recognition),
+            patch.object(handlers, "LLM_BACKEND", backend),
+            patch.dict("os.environ", environment or {}, clear=False),
+            patch("builtins.print", printed),
+        ):
+            result = handlers.release_idle_models(s)
+        return result, events, printed.call_args.args[0]
 
     def test_sleep_releases_voice_brain_and_recognition(self):
-        ns, events = self.runtime()
-        self.assertTrue(ns["release_idle_models"]())
+        result, events, _ = self.release()
+        self.assertTrue(result)
         self.assertEqual(events, ["voice", "brain", "recognition"])
 
     def test_failed_release_is_reported_without_loading_other_models(self):
-        ns, events = self.runtime()
-        ns["tts"].suspend.side_effect = RuntimeError("failed unload")
-        self.assertFalse(ns["release_idle_models"]())
+        result, events, message = self.release(suspend_error=RuntimeError("failed unload"))
+        self.assertFalse(result)
         self.assertFalse(events)
-        self.assertIn("idle release failed", ns["print"].call_args.args[0])
+        self.assertIn("idle release failed", message)
 
     def test_message_says_all_weights_released_with_a_local_brain(self):
-        ns, events = self.runtime()
-        ns["LLM_BACKEND"] = "ollama"
-        with unittest.mock.patch.dict("os.environ", {"JULIUS_KEEP_VOICE": "0"}):
-            ns["release_idle_models"]()
-        self.assertIn("idle model weights released", ns["print"].call_args.args[0])
+        _, _, message = self.release("ollama", {"JULIUS_KEEP_VOICE": "0"})
+        self.assertIn("idle model weights released", message)
 
     def test_cloud_profile_message_only_claims_speech_recognition_was_released(self):
-        ns, events = self.runtime()
-        ns["LLM_BACKEND"] = "cloud"
-        with unittest.mock.patch.dict("os.environ", {"JULIUS_KEEP_VOICE": "1"}):
-            ns["release_idle_models"]()
-        said = ns["print"].call_args.args[0]
-        self.assertIn("speech recognition released", said)
-        self.assertIn("voice stays loaded", said)
-        self.assertNotIn("model weights released", said)
+        _, _, message = self.release("cloud", {"JULIUS_KEEP_VOICE": "1", "JULIUS_ASR_RESIDENT": "0"})
+        self.assertIn("speech recognition released", message)
+        self.assertIn("voice stays loaded", message)
+        self.assertNotIn("model weights released", message)
 
     def test_resident_whisper_stays_loaded_while_sleeping(self):
-        ns, events = self.runtime()
-        ns["LLM_BACKEND"] = "cloud"
-        with unittest.mock.patch.dict(
-            "os.environ", {"JULIUS_KEEP_VOICE": "1", "JULIUS_ASR_RESIDENT": "1"}
-        ):
-            ns["release_idle_models"]()
+        _, events, message = self.release(
+            "cloud", {"JULIUS_KEEP_VOICE": "1", "JULIUS_ASR_RESIDENT": "1"}
+        )
         self.assertIn("recognition-kept", events)
-        self.assertNotIn("speech recognition released", ns["print"].call_args.args[0])
+        self.assertNotIn("speech recognition released", message)
 
 
 if __name__ == "__main__":

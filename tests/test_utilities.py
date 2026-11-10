@@ -339,12 +339,7 @@ class DocumentTests(unittest.TestCase):
 class CandidateUtilityIntegrationTests(unittest.TestCase):
     setUp = PlanningTests.setUp
 
-    def test_actual_candidate_handles_planning_and_conversions_without_model(self):
-        import ast
-        import contextlib
-        import io
-        import json
-        import time
+    def test_planning_and_conversions_are_handled_without_the_model(self):
         from unittest.mock import patch
 
         import julius.agents.files as jf
@@ -352,71 +347,27 @@ class CandidateUtilityIntegrationTests(unittest.TestCase):
         from julius.agents.file_agent import FileAgent
         from julius.agents.file_session import FileSession
         from julius.brain.dispatcher import Dispatcher
-        from julius.brain.intents import LiveIntentRouter
-        from tests.test_candidate import load_candidate_turn
+        from julius.runtime import brain_turn
+        from tests.harness import ProcessHarness, patched
 
         root = Path(self.tmp.name)
         (root / "Documents").mkdir()
         file_agent = FileAgent(root, root / "file_state")
         dispatcher = Dispatcher(jt.REGISTRY, jt.SCHEMAS, file_agent)
-        turn = load_candidate_turn()
-        turn["llm_chat"] = Mock(side_effect=AssertionError("model not needed"))
-        ns = {
-            "time": time,
-            "jt": jt,
-            "jf": jf,
-            "_utility_session": self.s,
-            "_file_session": FileSession(file_agent),
-            "intent_router": LiveIntentRouter(),
-            "TURN": {"n": 0},
-            "history": [],
-            "_print_tool": Mock(),
-            "eyes": Mock(),
-            "jm": Mock(),
-            "_validation_output": str(root / "validation.json"),
-            "_validation_turns": [],
-            "_json": json,
-            "Path": Path,
-            "tts": Mock(backend="qwen-clone", worker_metrics={}),
-            "close_backend": Mock(),
-            "LLM_BACKEND": "ollama",
-            "LLM": "llama3.2:3b",
-            "speak": Mock(),
-            "speak_sentence": Mock(),
-            "ask_streaming": turn["ask_streaming"],
-        }
-        from julius.audio.cancellation import Cancellation, TurnCancelled
-        from julius.audio.listening import incomplete_fragment
-        from julius.brain.conversation import authority_discussion_reply
+        h = ProcessHarness(
+            validation_output=str(root / "validation.json"),
+            utility_session=self.s,
+            file_session=FileSession(file_agent),
+        )
+        for name in ("turn.handle_files", "turn.jt", "turn.jf"):
+            del h.mocks[name]  # the real controllers run
+        model = Mock(side_effect=AssertionError("model not needed"))
 
-        ns.update(
-            handle_memory=Mock(return_value=None),
-            handle_code=Mock(return_value=None),
-            memory_autocapture=Mock(),
-            cancellation=Cancellation(),
-            TurnCancelled=TurnCancelled,
-            incomplete_fragment=incomplete_fragment,
-            authority_discussion_reply=authority_discussion_reply,
-        )
-        ns["eyes"].snapshot.return_value = {}
-        ns["eyes"].describe.return_value = ""
-        source = ast.parse((REPO_ROOT / "julius/runtime.py").read_text())
-        exec(
-            compile(
-                ast.Module(
-                    body=[
-                        n
-                        for n in source.body
-                        if isinstance(n, ast.FunctionDef)
-                        and n.name in {"handle_files", "process", "_process"}
-                    ],
-                    type_ignores=[],
-                ),
-                "<candidate>",
-                "exec",
-            ),
-            ns,
-        )
+        def ask(session, *args, **kwargs):  # the real brain turn, with a model that must stay unused
+            with patched(**{"brain_turn.llm_chat": model}):
+                return brain_turn.ask_streaming(session, *args, **kwargs)
+
+        h.mocks["turn.ask_streaming"] = ask
         (root / "Documents" / "notes.txt").write_text("Launch Friday")
         commands = [
             "add task buy milk",
@@ -428,20 +379,24 @@ class CandidateUtilityIntegrationTests(unittest.TestCase):
         with (
             patch.object(jt, "_dispatcher", dispatcher),
             patch.object(jf, "agent", return_value=file_agent),
-            contextlib.redirect_stdout(io.StringIO()),
         ):
             for command in commands + ["show my tasks"] * 10:
-                ns["process"](command, "typed")
-            ns["speak"].side_effect = RuntimeError("playback offline")
-            ns["process"]("add task saved despite speaker failure", "typed")
-        self.assertTrue(all(r["error"] is None for r in ns["_validation_turns"][:-1]))
-        self.assertIn("playback offline", ns["_validation_turns"][-1]["error"])
-        self.assertLessEqual(len(ns["history"]), 9)
+                h.process(command)
+            h["turn.speak"].side_effect = RuntimeError("playback offline")
+            h.process("add task saved despite speaker failure")
+        turns = h.session.validation_turns
+        self.assertTrue(all(r["error"] is None for r in turns[:-1]))
+        self.assertIn("playback offline", turns[-1]["error"])
+        self.assertLessEqual(len(h.session.history), 9)
         self.assertIn(
             "saved despite speaker failure",
             [r["title"] for r in self.p.list("task")["data"]["items"]],
         )
-        self.assertIn("1609.344", ns["_validation_turns"][3]["answer"])
-        self.assertIn("Launch Friday", ns["_validation_turns"][4]["answer"])
-        self.assertEqual(ns["_validation_turns"][4]["dispatcher_tasks"][0]["agent"], "documents")
-        turn["llm_chat"].assert_not_called()
+        self.assertIn("1609.344", turns[3]["answer"])
+        self.assertIn("Launch Friday", turns[4]["answer"])
+        self.assertEqual(turns[4]["dispatcher_tasks"][0]["agent"], "documents")
+        model.assert_not_called()
+
+
+if __name__ == "__main__":
+    unittest.main()

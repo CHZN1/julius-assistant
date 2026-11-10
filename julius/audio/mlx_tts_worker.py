@@ -10,6 +10,7 @@ import tempfile
 import time
 from pathlib import Path
 
+from julius import state
 from julius.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
@@ -52,9 +53,7 @@ signal.signal(
     signal.SIGUSR1, lambda signum, frame: cancel_flag.__setitem__(0, True)
 )  # the host abandoned this reply: stop generating, say 'done', stay alive
 print(json.dumps({"ready": True}), flush=True)
-with tempfile.TemporaryDirectory(
-    prefix="julius_mlx_tts_", dir=__import__("julius.state").tmp_dir()
-) as directory:
+with tempfile.TemporaryDirectory(prefix="julius_mlx_tts_", dir=state.tmp_dir()) as directory:
     for line in sys.stdin:
         req = json.loads(line)
         if req.get("op") == "close":

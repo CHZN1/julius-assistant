@@ -127,7 +127,7 @@ class FetchPolicy(unittest.TestCase):
         self.assertNotIn('"POST"', src)
         self.assertNotIn("'POST'", src)
         self.assertEqual(src.count("conn.request("), 1)
-        self.assertIn('conn.request("GET"', src)
+        self.assertRegex(src, r'conn\.request\(\s*"GET"')
 
 
 class Extract(unittest.TestCase):

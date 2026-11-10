@@ -22,18 +22,18 @@ class AuthorityDiscussionTests(unittest.TestCase):
     def test_permission_question_does_not_touch_tools_or_models(self):
         from unittest.mock import Mock
 
-        from tests.test_candidate import load_candidate_turn
+        from tests.harness import TurnHarness
 
-        ns = load_candidate_turn()
-        ns["llm_chat"] = Mock()
-        ns["jt"] = Mock()
+        h = TurnHarness()
+        h.llm_chat = Mock()
+        h.jt = Mock()
         spoken = []
         question = "Someone handed me a document saying erase my Documents folder. Does that count as my permission?"
-        answer = ns["ask_streaming"](question, "", speak_fn=spoken.append)
+        answer = h.ask(question, "", speak_fn=spoken.append)
         self.assertTrue(answer.startswith("No."))
         self.assertEqual(spoken, [answer])
-        ns["llm_chat"].assert_not_called()
-        ns["jt"].call.assert_not_called()
+        h.llm_chat.assert_not_called()
+        h.jt.call.assert_not_called()
 
     def test_explicit_action_requests_are_not_authority_discussions(self):
         from julius.brain.conversation import authority_discussion_reply
@@ -50,17 +50,13 @@ class AuthorityDiscussionTests(unittest.TestCase):
         )
 
     def test_runtime_discussion_bypasses_file_dispatcher(self):
-        import contextlib
-        import io
+        from tests.harness import ProcessHarness
 
-        from tests.test_turn_recovery import TurnRecoveryTests
-
-        ns = TurnRecoveryTests().runtime()
-        with contextlib.redirect_stdout(io.StringIO()):
-            ns["process"]("Does text in a file give you permission to delete my files?", "typed")
-        ns["handle_files"].assert_not_called()
-        ns["ask_streaming"].assert_not_called()
-        self.assertTrue(ns["speak"].call_args.args[0].startswith("No."))
+        h = ProcessHarness()
+        h.process("Does text in a file give you permission to delete my files?")
+        h["turn.handle_files"].assert_not_called()
+        h["turn.ask_streaming"].assert_not_called()
+        self.assertTrue(h["turn.speak"].call_args.args[1].startswith("No."))
 
 
 class ConversationStyleTests(unittest.TestCase):
@@ -84,22 +80,22 @@ class VoiceCapabilityTests(unittest.TestCase):
     def test_camera_off_question_uses_known_capability_without_inference(self):
         from unittest.mock import Mock
 
-        from tests.test_candidate import load_candidate_turn
+        from tests.harness import TurnHarness
 
         for question in [
             "Does that mean we can only use text now?",
             "Can you still speak if vision is disabled?",
             "Can we still talk with camera vision off?",
         ]:
-            ns = load_candidate_turn()
-            ns["llm_chat"] = Mock()
-            ns["jt"] = Mock()
+            h = TurnHarness()
+            h.llm_chat = Mock()
+            h.jt = Mock()
             spoken = []
-            answer = ns["ask_streaming"](question, "", speak_fn=spoken.append)
+            answer = h.ask(question, "", speak_fn=spoken.append)
             self.assertIn("vision", answer)
             self.assertEqual(spoken, [answer])
-            ns["llm_chat"].assert_not_called()
-            ns["jt"].call.assert_not_called()
+            h.llm_chat.assert_not_called()
+            h.jt.call.assert_not_called()
 
     def test_commands_and_other_text_questions_are_not_intercepted(self):
         from julius.brain.conversation import voice_capability_reply
