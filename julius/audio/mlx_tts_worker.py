@@ -16,7 +16,22 @@ from julius.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
 os.environ.setdefault("HF_HOME", str(ROOT / ".cache/huggingface-mlx-tts"))
-os.environ.setdefault("HF_HUB_OFFLINE", "1")
+
+
+def _model_is_cached(repo: str) -> bool:
+    try:
+        from huggingface_hub import snapshot_download
+
+        snapshot_download(repo, local_files_only=True)
+        return True
+    except Exception:
+        return False
+
+
+# Once the voice model is on disk the worker never touches the network; the first run downloads it.
+if _model_is_cached("mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16"):
+    os.environ.setdefault("HF_HUB_OFFLINE", "1")
+
 from typing import Never
 
 import mlx.core as mx
