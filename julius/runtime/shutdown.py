@@ -6,6 +6,7 @@ import subprocess
 import sys
 
 import julius.memory.sessions as jm
+from julius import log
 from julius.brain.backend import LLM_BACKEND, close_backend, llm_chat
 from julius.paths import REPO_ROOT
 from julius.runtime.session import Session
@@ -70,9 +71,9 @@ def stage_session_memory(turns: list[dict]) -> None:
             jm.stage(staged)
         if data.get("summary"):
             jm.set_last_session(data["summary"])
-        print(f"  staged {len(staged)} item(s)")
+        log.console(f"  staged {len(staged)} item(s)")
     except Exception as exc:
-        print(f"  extraction failed ({type(exc).__name__}) — transcript saved")
+        log.console(f"  extraction failed ({type(exc).__name__}) — transcript saved")
 
 
 def offer_review() -> None:
@@ -80,12 +81,12 @@ def offer_review() -> None:
     try:
         subprocess.run([sys.executable, "-m", "julius.memory.review"], cwd=REPO_ROOT)
     except Exception:
-        print("  run: python -m julius.memory.review")
+        log.console("  run: python -m julius.memory.review")
 
 
 def wrap_up(s: Session) -> None:
     """Called on Ctrl+C or /quit."""
-    print("\n  wrapping up...")
+    log.console("\n  wrapping up...")
     s.eyes.stop()
     if s.speech_player is not None:
         s.speech_player.close()
@@ -95,6 +96,6 @@ def wrap_up(s: Session) -> None:
         stage_session_memory(turns)
     if LLM_BACKEND == "ollama":
         close_backend()
-    print("  goodbye")
+    log.console("  goodbye")
     if not s.scripted and jm.staged():
         offer_review()

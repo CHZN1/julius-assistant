@@ -10,6 +10,7 @@ from unittest.mock import Mock
 import julius.agents.files as jf
 import julius.brain.tools as jt
 import julius.memory.sessions as jm
+from julius import log
 from julius.audio.cancellation import TurnCancelled
 from julius.audio.listening import incomplete_fragment
 from julius.brain import orchestrator
@@ -95,11 +96,11 @@ def cap_notice(s: Session) -> None:
     notice = s.cloud_brain.cap_notice()
     if not notice:
         return
-    print(f"  JULIUS: {notice}", flush=True)
+    log.console(f"  JULIUS: {notice}", flush=True)
     try:
         speak(s, notice)
     except Exception as exc:
-        print(f"  [speech unavailable: {exc}]", flush=True)
+        log.console(f"  [speech unavailable: {exc}]", flush=True)
 
 
 def begin_turn(s: Session, text: str, lang: str) -> Turn:
@@ -108,11 +109,11 @@ def begin_turn(s: Session, text: str, lang: str) -> Turn:
     reset_timings(s, started, lang)
     snapshot = s.eyes.snapshot()
     turn = Turn(text, lang, started, snapshot, s.eyes.describe(snapshot))
-    print(f"  YOU [{lang}]: {text}")
+    log.console(f"  YOU [{lang}]: {text}")
     if s.events_hub is not None:
         s.events_hub.say("you", text, s.turn + 1)
     if turn.vision_line:
-        print(f"  (sees: {turn.vision_line})")
+        log.console(f"  (sees: {turn.vision_line})")
     s.turn += 1
     s.rec_event("turn", n=s.turn, text=text, lang=lang)
     jf.set_turn(s.turn)
@@ -160,15 +161,15 @@ def spoken_form(routed: str) -> str:
 
 def answer_routed(s: Session, turn: Turn) -> None:
     """Speak a shortcut reply and record it."""
-    print(f"  JULIUS: {turn.routed}\n", flush=True)
+    log.console(f"  JULIUS: {turn.routed}\n", flush=True)
     try:
         speak(s, spoken_form(turn.routed))
     except TurnCancelled:
         turn.error = "cancelled"
-        print("  [response stopped; completed actions remain completed]", flush=True)
+        log.console("  [response stopped; completed actions remain completed]", flush=True)
     except Exception as exc:
         turn.error = f"{type(exc).__name__}: {exc}"
-        print(f"  [speech unavailable: {exc}; result shown as text]", flush=True)
+        log.console(f"  [speech unavailable: {exc}; result shown as text]", flush=True)
     s.history.append({"role": "user", "content": turn.text})
     s.history.append({"role": "assistant", "content": turn.routed})
     jm.log_turn(turn.text, turn.routed)
@@ -222,15 +223,15 @@ def answer_with_brain(s: Session, turn: Turn) -> None:
     except TurnCancelled:
         turn.error = "cancelled"
         turn.reply = "Response stopped by user."
-        print("  [response stopped; completed actions remain completed]", flush=True)
+        log.console("  [response stopped; completed actions remain completed]", flush=True)
     except Exception as exc:
         turn.error = f"{type(exc).__name__}: {exc}"
-        print(f"  [turn failed: {type(exc).__name__}: {exc}]", flush=True)
+        log.console(f"  [turn failed: {type(exc).__name__}: {exc}]", flush=True)
         turn.reply = "I couldn't complete that request. Please try again."
         try:
             speak(s, turn.reply)
         except Exception as speech_error:
-            print(f"  [speech unavailable: {speech_error}; reply shown as text]", flush=True)
+            log.console(f"  [speech unavailable: {speech_error}; reply shown as text]", flush=True)
     remember_exchange(s, turn)
     jm.log_turn(
         turn.text,
@@ -283,7 +284,7 @@ def timing_line(s: Session, turn: Turn) -> str:
 def report_timing(s: Session, turn: Turn) -> None:
     try:
         line = timing_line(s, turn)
-        print("  [timing: " + line + "]", flush=True)
+        log.console("  [timing: " + line + "]", flush=True)
         s.rec_event("reply", n=s.turn, text=turn.answer, timing=line)
     except Exception:
         pass
@@ -349,10 +350,10 @@ def finish_turn(s: Session, turn: Turn) -> None:
     """Audio underflows, the timing line, the cost line, history trimming, validation output."""
     underflows = s.speech_player.pop_events() if s.speech_player is not None else []
     if underflows:
-        print(f"  [audio underflows this turn: {len(underflows)}]", flush=True)
+        log.console(f"  [audio underflows this turn: {len(underflows)}]", flush=True)
     report_timing(s, turn)
     if s.cloud_tracker is not None:
-        print(s.cloud_tracker.status_line(), flush=True)
+        log.console(s.cloud_tracker.status_line(), flush=True)
     trim_history(s.history)
     if s.validation_output:
         record_validation(s, turn, underflows)

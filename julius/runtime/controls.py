@@ -10,7 +10,7 @@ from julius.runtime.session import Session
 def stop_now(s: Session, source: str = "hotkey") -> None:
     """Stop generation and speech immediately (global hotkey, typed /stop)."""
     if s.cancellation.request():
-        print(f"  [stop requested: {source}]", flush=True)
+        log.console(f"  [stop requested: {source}]", flush=True)
     if s.speech_player is not None:
         s.speech_player.abort()
 
@@ -70,7 +70,7 @@ def enter_quiet(s: Session) -> None:
     """Quiet mode: the detector is fully off until the wake hotkey."""
     s.microphone_gate.set_quiet(True)
     state.set_quiet(True)
-    print("  [quiet: detector off until the wake hotkey]", flush=True)
+    log.console("  [quiet: detector off until the wake hotkey]", flush=True)
     log.event("quiet", on=True)
 
 
@@ -80,7 +80,7 @@ def leave_quiet(s: Session, source: str = "hotkey") -> None:
         return
     s.microphone_gate.set_quiet(False)
     state.set_quiet(False)
-    print(f"  [listening again: {source}]", flush=True)
+    log.console(f"  [listening again: {source}]", flush=True)
     log.event("quiet", on=False, source=source)
     if s.wake_engine is not None:
         s.wake_engine.reset()
@@ -94,5 +94,5 @@ def hotkey_wake(s: Session, source: str = "hotkey") -> None:
     """
     leave_quiet(s, source)
     if time.time() >= s.awake_until:
-        print(f"  [awake: {source}]", flush=True)
+        log.console(f"  [awake: {source}]", flush=True)
         s.typed.append("wake up")

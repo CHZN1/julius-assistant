@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import julius.brain.tools as jt
+from julius import log
 
 LLM_BACKEND = os.environ.get(
     "JULIUS_BACKEND", "cloud"
@@ -49,7 +50,7 @@ def _load_mlx_brain() -> Any:
     """Load the quantized Qwen3 brain once, in-process."""
     global _MLX_MODEL, _MLX_TOKENIZER
     if _MLX_MODEL is None:
-        print(f"loading MLX brain: {LLM}...", flush=True)
+        log.console(f"loading MLX brain: {LLM}...", flush=True)
         _t = time.time()
         import mlx.core as mx
         from mlx_lm import load as mlx_load
@@ -61,7 +62,7 @@ def _load_mlx_brain() -> Any:
                 raise ValueError("MLX brain memory guidance must be between 2 and 8 GiB")
             mx.set_memory_limit(int(limit * 1024**3))
         _MLX_MODEL, _MLX_TOKENIZER = mlx_load(LLM)
-        print(f"  MLX brain loaded in {time.time() - _t:.1f}s", flush=True)
+        log.console(f"  MLX brain loaded in {time.time() - _t:.1f}s", flush=True)
     return _MLX_MODEL, _MLX_TOKENIZER
 
 
@@ -170,7 +171,7 @@ def _ollama_chat(**kwargs) -> Any:
 
     def switch(exc: Any) -> Any:
         global _ACTIVE_OLLAMA
-        print(
+        log.console(
             f"  [brain {model} unavailable ({str(exc)[:80]}); using fallback {OLLAMA_FALLBACK}]",
             flush=True,
         )

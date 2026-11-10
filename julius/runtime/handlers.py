@@ -24,12 +24,12 @@ def release_idle_models(s: Session) -> bool:
             pass
         if os.environ.get("JULIUS_KEEP_VOICE") == "1" and LLM_BACKEND == "cloud":
             released = "" if resident else "; speech recognition released"
-            print(f"  [idle: the voice stays loaded{released}]", flush=True)
+            log.console(f"  [idle: the voice stays loaded{released}]", flush=True)
         else:
-            print("  [idle model weights released]", flush=True)
+            log.console("  [idle model weights released]", flush=True)
         return True
     except Exception as exc:
-        print(
+        log.console(
             f"  [idle release failed: {type(exc).__name__}; "
             "release will retry before the next model phase]",
             flush=True,
@@ -39,7 +39,7 @@ def release_idle_models(s: Session) -> bool:
 
 def announce_reminder(s: Session, message: str) -> None:
     """Speak a reminder that has come due."""
-    print(f"  JULIUS REMINDER: {message}", flush=True)
+    log.console(f"  JULIUS REMINDER: {message}", flush=True)
     if s.tts.backend in CLONE_BACKENDS:
         close_backend()
     speak(s, message)
@@ -59,7 +59,7 @@ def _capture_facts(s: Session, text: str) -> None:
     stored = s.memory.autocapture(text, _complete)
     for row in stored:
         s.memory.last_added = row
-        print(f"  [noted: {row['text']}]", flush=True)
+        log.console(f"  [noted: {row['text']}]", flush=True)
         with contextlib.suppress(Exception):
             log.event("memory", "auto", id=row["id"])
     if not stored or not (config.load_config().get("memory") or {}).get("announce_auto", True):
@@ -87,7 +87,7 @@ def handle_memory(s: Session, text: str) -> str | None:
     try:
         return s.memory.handle(text)
     except Exception as exc:
-        print(f"  [memory command failed: {type(exc).__name__}: {exc}]", flush=True)
+        log.console(f"  [memory command failed: {type(exc).__name__}: {exc}]", flush=True)
         return None
 
 
@@ -97,15 +97,15 @@ def handle_code(s: Session, text: str) -> str | None:
     try:
         out = s.code_session.handle(text, s.turn)
     except Exception as exc:
-        print(f"  [coding command failed: {type(exc).__name__}: {exc}]", flush=True)
+        log.console(f"  [coding command failed: {type(exc).__name__}: {exc}]", flush=True)
         return None
     if out is None:
         return None
     s.file_session.pending = None
     s.intent_router.last = None
     for line in (out.get("data") or {}).get("lines", [])[:40]:
-        print(f"    {line}", flush=True)
-    print(f"  [coding agent: {out['code']}]", flush=True)
+        log.console(f"    {line}", flush=True)
+    log.console(f"  [coding agent: {out['code']}]", flush=True)
     return out["message"]
 
 

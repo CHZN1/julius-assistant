@@ -206,7 +206,7 @@ class LiveIssueTests(unittest.TestCase):
         """Regression: '\\r  JULIUS: ' left the tail of '...thinking' on screen, which looked like a spoken 'ing' before tool calls."""
         from julius.runtime import brain_turn
 
-        self.assertIn('print("\\r\\033[K  JULIUS: "', inspect.getsource(brain_turn))
+        self.assertIn('log.console("\\r\\033[K  JULIUS: "', inspect.getsource(brain_turn))
 
     def test_cloud_profile_keeps_whisper_resident(self):
         self.assertIn(

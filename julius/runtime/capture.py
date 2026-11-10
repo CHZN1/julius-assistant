@@ -33,11 +33,11 @@ def microphone_stream(s: Session) -> Any:
 def talked_over(s: Session, duplex: bool = False) -> None:
     """the user started speaking while Julius was talking: cut the speech now and listen to him."""
     if s.cancellation.busy.is_set():
-        print("  [you spoke over Julius: stopping]", flush=True)
+        log.console("  [you spoke over Julius: stopping]", flush=True)
         s.rec_event("talk_over")
         stop_now(s, "voice")
     else:
-        print("  [you started speaking right after Julius finished: listening]", flush=True)
+        log.console("  [you started speaking right after Julius finished: listening]", flush=True)
     s.microphone_gate.force_open()
     s.talkover_pending = (
         True  # the main loop must not clear what the user said while the turn was cancelled
@@ -131,7 +131,7 @@ def callback(s: Session, indata: ndarray, frames: int, when: None, status: None)
 
 def calibrate(s: Session) -> None:
     """Listen to the room for two seconds and set the speech threshold from its noise floor."""
-    print("calibrating room noise — stay quiet 2s...")
+    log.console("calibrating room noise — stay quiet 2s...")
     with microphone_stream(s):
         time.sleep(2)
     heard = [audio for audio, _ in s.chunks]
@@ -140,4 +140,4 @@ def calibrate(s: Session) -> None:
     s.threshold = min(0.020, max(0.0045, floor * 2.2))
     s.chunks.clear()
     s.pre_roll.clear()
-    print(f"noise floor {floor:.4f} -> threshold {s.threshold:.4f} (0.5s preroll)")
+    log.console(f"noise floor {floor:.4f} -> threshold {s.threshold:.4f} (0.5s preroll)")

@@ -78,14 +78,14 @@ class Listener:
         try:
             speak(self.s, text)
         except TurnCancelled:
-            print("  [response stopped]", flush=True)
+            log.console("  [response stopped]", flush=True)
 
     def apply_control(self, text: str, control: str, record: bool = True) -> None:
         """'go to sleep' / 'wake up' (spoken or typed): change state, answer, free models on sleep."""
         s = self.s
         sleeping = control == "sleep"
         s.awake_until = 0.0 if sleeping else time.time() + SESSION_SECONDS
-        print(f"  [{'asleep' if sleeping else 'awake'}]", flush=True)
+        log.console(f"  [{'asleep' if sleeping else 'awake'}]", flush=True)
         line = sleep_line(s, text) if sleeping else "I am here."
         if record:
             s.rec_event("reply", text=line, control=control)
@@ -107,7 +107,7 @@ class Listener:
         s = self.s
         if s.awake_until and time.time() >= s.awake_until and not s.recording:
             s.awake_until = 0.0
-            print("  [asleep]\n", flush=True)
+            log.console("  [asleep]\n", flush=True)
             release_idle_models(s)
 
     def poll_reminders(self) -> None:
@@ -122,7 +122,7 @@ class Listener:
             if s.utility_session.deliver_due(lambda message: announce_reminder(s, message)):
                 s.chunks.clear()
         except Exception as exc:
-            print(f"  [reminder delivery failed: {type(exc).__name__}: {exc}]", flush=True)
+            log.console(f"  [reminder delivery failed: {type(exc).__name__}: {exc}]", flush=True)
             self.next_reminder_poll = time.monotonic() + 30
 
     def answer_held(self) -> bool:
@@ -187,13 +187,13 @@ class Listener:
         if not (s.code_done and not s.recording and not s.chunks):
             return False
         said = code_agent.spoken_result(s.code_done.popleft())
-        print(f"  JULIUS: {said}", flush=True)
+        log.console(f"  JULIUS: {said}", flush=True)
         try:
             speak(s, said)
         except TurnCancelled:
             pass
         except Exception as exc:
-            print(f"  [speech unavailable: {exc}; result shown as text]", flush=True)
+            log.console(f"  [speech unavailable: {exc}; result shown as text]", flush=True)
         s.chunks.clear()
         return True
 
@@ -208,7 +208,7 @@ class Listener:
         try:
             speak(s, str(entry))
         except TurnCancelled:
-            print("  [response stopped]", flush=True)
+            log.console("  [response stopped]", flush=True)
         finally:
             s.text_only = False
         self.finish_exchange()
@@ -274,7 +274,7 @@ class Listener:
         handling as a transcript that starts with 'Julius')."""
         s = self.s
         text = event["request"].strip()
-        print("  [awake]", flush=True)
+        log.console("  [awake]", flush=True)
         control = listening_control(text) if text else None
         if control:
             self.apply_control(text, control)
@@ -327,7 +327,7 @@ class Listener:
 
     def drop(self, reason: str, message: str, **fields) -> None:
         self.s.rec_event("drop", reason=reason, **fields)
-        print(message, flush=True)
+        log.console(message, flush=True)
 
     def end_utterance(self, now: float) -> None:
         """Silence ended the utterance: recognize it and, if it is a request, answer it."""
@@ -380,7 +380,7 @@ class Listener:
                     "no_wake", f"  [ignored: no wake word ({len(text.split())} words)]", text=text
                 )
                 return None
-            print("  [awake]")
+            log.console("  [awake]")
             return strip_wake(text)
         if s.wake_engine is not None and has_wake(text):
             s.wake_engine.note_spoken_wake(text)
@@ -408,7 +408,7 @@ class Listener:
         s.held = {"text": text, "t": time.time()}
         self.stay_awake()
         s.rec_event("hold", text=text)
-        print(
+        log.console(
             f"  [waiting for the rest of the sentence ({len(text.split())} words so far)]",
             flush=True,
         )
@@ -421,7 +421,7 @@ class Listener:
         pending = getattr(s.file_session, "pending", None) or s.code_session.pending
         if not stop_only(text) or pending:
             return False
-        print("  [stopped]", flush=True)
+        log.console("  [stopped]", flush=True)
         s.rec_event("stop_word", text=text)
         s.rec_event("reply", text="", control="stop")
         self.finish_exchange()
@@ -462,11 +462,11 @@ class Listener:
             self.reset_capture()
             if s.wake_engine is not None:
                 s.wake_engine.reset()  # a gap (Julius speaking) must not stitch old audio to the echo tail
-            print("  [audio capture resumed; partial input discarded]", flush=True)
+            log.console("  [audio capture resumed; partial input discarded]", flush=True)
         if s.recording and len(self.buffer) >= MAX_UTTERANCE_CHUNKS:
             self.reset_capture(keep_speech_start=True)
             s.chunks.clear()
-            print("  [capture exceeded 30 seconds; discarded incomplete input]", flush=True)
+            log.console("  [capture exceeded 30 seconds; discarded incomplete input]", flush=True)
             return
         if not s.recording:
             s.pre_roll.append(chunk)

@@ -26,7 +26,7 @@ def read_terminal(s: Session) -> None:
             if s.cancellation.busy.is_set():
                 stop_now(s, "typed")
             else:
-                print("  [no response is active]", flush=True)
+                log.console("  [no response is active]", flush=True)
         elif command:
             if command == "/quit":
                 s.cancellation.request()
@@ -71,4 +71,4 @@ def start_ui_channel(s: Session) -> None:
         s.ui_channel = uichannel.start_from_config(config.load_config().get("ui"), handlers)
     except Exception as exc:
         s.ui_channel = None
-        print(f"  [ui channel unavailable: {type(exc).__name__}: {exc}]", flush=True)
+        log.console(f"  [ui channel unavailable: {type(exc).__name__}: {exc}]", flush=True)

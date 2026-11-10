@@ -12,6 +12,7 @@ import soundfile as sf
 from numpy import ndarray
 
 import julius.memory.sessions as jm
+from julius import log
 from julius.audio.asr_resources import recognition_resources
 from julius.audio.listening import has_voice_activity, has_wake
 from julius.audio.speech_text import fix_transcript
@@ -101,7 +102,7 @@ def transcribe_input(s: Session, audio: list[int], wake: bool = False) -> tuple[
         result = transcribe(s, audio, wake)
         if os.environ.get("JULIUS_DEBUG_ASR") == "1":
             text, lang, no_speech = result
-            print(
+            log.console(
                 f"  [heard {text!r} lang={lang} no_speech={no_speech:.2f} wake_word={has_wake(text)}]",
                 flush=True,
             )
@@ -111,7 +112,7 @@ def transcribe_input(s: Session, audio: list[int], wake: bool = False) -> tuple[
             "rejected": "recognition_failure",
             "error_type": type(exc).__name__,
         }
-        print(
+        log.console(
             f"  [recognition failed: {type(exc).__name__}; input discarded, listening continues]",
             flush=True,
         )
@@ -125,7 +126,7 @@ def wake_verify(s: Session, clip: Any) -> tuple[bool, str, float]:
     text, _lang, no_speech = transcribe_input(s, clip, wake=True)
     if text and s.self_echo.is_echo(text):
         s.rec_event("drop", reason="wake_echo", text=text)
-        print("  [wake ignored: that was Julius's own voice]", flush=True)
+        log.console("  [wake ignored: that was Julius's own voice]", flush=True)
         return False, text, time.perf_counter() - started
     heard = bool(text) and no_speech <= NO_SPEECH_LIMIT and has_wake(text)
     return heard, text, time.perf_counter() - started

@@ -9,6 +9,7 @@ from typing import Any
 from unittest.mock import Mock
 
 import julius.brain.tools as jt
+from julius import log
 from julius.audio import ack
 from julius.audio.speech_text import EXACT_REQUEST, speakable
 from julius.brain import livedata
@@ -47,7 +48,7 @@ SENTENCE_END = re.compile(r"[.!?…\n](\s|$)")
 
 def _say(text: str, speak_fn: Callable) -> str:
     """Print and speak a ready-made answer."""
-    print(f"  JULIUS: {text}", flush=True)
+    log.console(f"  JULIUS: {text}", flush=True)
     if speak_fn:
         speak_fn(text)
     return text
@@ -171,7 +172,7 @@ class BrainTurn:
             return None
         name, args = direct
         out = jt.call(name, args)
-        print(f"\r  [tool: {name}({args})]", flush=True)
+        log.console(f"\r  [tool: {name}({args})]", flush=True)
         print_tool(name, out)
         s.intent_router.record(name, args, out)
         s.tool_carry_next = True
@@ -200,7 +201,7 @@ class BrainTurn:
             if len(sent) > 2:
                 st.spoken += 1
                 self.ack.said_something()
-                print(sent, end=" ", flush=True)  # print BEFORE speaking
+                log.console(sent, end=" ", flush=True)  # print BEFORE speaking
                 if self.speak_fn and (not self.long_tool_result or st.spoken <= 2):
                     self.speak_fn(sent)
 
@@ -215,16 +216,16 @@ class BrainTurn:
             st.pending = rest = ""
             self.dropped_ungrounded.append(1)
         if rest:
-            print(rest, end="", flush=True)
+            log.console(rest, end="", flush=True)
             if self.speak_fn and (not self.long_tool_result or st.spoken < 2):
                 self.speak_fn(rest)
         if self.dropped_ungrounded and not self.stream_calls:
             self.dropped_ungrounded.clear()
-            print(livedata.UNGROUNDED_LINE, end="", flush=True)
+            log.console(livedata.UNGROUNDED_LINE, end="", flush=True)
             if self.speak_fn:
                 self.speak_fn(livedata.UNGROUNDED_LINE)
             st.full = livedata.UNGROUNDED_LINE
-        print("\n", flush=True)
+        log.console("\n", flush=True)
         return st.full
 
     def stream(
@@ -238,7 +239,7 @@ class BrainTurn:
         """Stream one reply; sentences are spoken as they complete. None means it stalled."""
         s = self.s
         self.prepare_inference()
-        print("\r\033[K  JULIUS: ", end="", flush=True)
+        log.console("\r\033[K  JULIUS: ", end="", flush=True)
         st = StreamState()
         self.stream_calls.clear()
         kwargs = {"tools": tools} if tools is not None else {}
@@ -367,7 +368,7 @@ class BrainTurn:
         ready = speakable(name, out, args, exact=exact)
         if not ready:
             return None
-        print(f"\r  JULIUS: {ready}", flush=True)
+        log.console(f"\r  JULIUS: {ready}", flush=True)
         if self.speak_fn:
             self.speak_fn(ready)
         return ready
@@ -387,7 +388,7 @@ class BrainTurn:
             return None
         self.messages.append(_assistant_message(message.content, calls))
         for call in calls:
-            print(
+            log.console(
                 f"\r  [tool: {call.function.name}({dict(call.function.arguments)})]          ",
                 flush=True,
             )
@@ -396,14 +397,14 @@ class BrainTurn:
         if not any(ok for _, ok in batch):
             return self.failed_round(calls, batch)
         name, out, args = self.record_results(calls, batch)
-        print("  ...thinking", end="", flush=True)
+        log.console("  ...thinking", end="", flush=True)
         return self.ready_sentence(calls, name, out, args)
 
     # --- recovery ----------------------------------------------------------------------------
     def recover_from_stall(self) -> str:
         """The model said "let me check" instead of acting: make it call a tool now."""
         s = self.s
-        print("\r  [stall detected — forcing tool use]        ", flush=True)
+        log.console("\r  [stall detected — forcing tool use]        ", flush=True)
         self.messages.append({"role": "system", "content": STALL_NOTE})
         reply = llm_chat(
             messages=self.messages,
@@ -414,7 +415,7 @@ class BrainTurn:
         for call in reply.message.tool_calls or []:
             name, args = call.function.name, dict(call.function.arguments)
             s.tool_carry_next = True
-            print(f"  [tool: {name}({args})]", flush=True)
+            log.console(f"  [tool: {name}({args})]", flush=True)
             result = jt.call(name, args)
             print_tool(name, result)
             if not jt.dispatcher().last_result["ok"]:
@@ -447,7 +448,7 @@ class BrainTurn:
         if out is None:
             out = self.recover_from_stall()
         if BAD_ID.search(out):
-            print("  [identity slip logged]", flush=True)
+            log.console("  [identity slip logged]", flush=True)
         return re.sub(r"<think>.*?</think>", "", out, flags=re.DOTALL).strip()
 
 
@@ -476,5 +477,5 @@ def ask_streaming(
         user_text = f"{user_text}\n\n[you can see: {vision_line}]"
     turn = BrainTurn(s, user_text, speak_fn, before_inference, tool_carry, nudge)
     turn.build_messages(vision_line)
-    print("  ...thinking", end="", flush=True)
+    log.console("  ...thinking", end="", flush=True)
     return turn.run()

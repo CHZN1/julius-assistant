@@ -7,6 +7,7 @@ from typing import Any
 
 import sounddevice as sd
 
+from julius import log
 from julius.audio.output import ready_output
 from julius.audio.voice_identity import delivery_mode
 from julius.brain.backend import close_backend, keep_brain_loaded
@@ -19,11 +20,11 @@ CLONE_BACKENDS = ("qwen-clone", "qwen-mlx")
 def print_tool(name: str, out: str) -> None:
     """Show a tool result on screen: long ones in full, short ones on one line."""
     if out.count("\n") > 3:
-        print(f"  [{name}]", flush=True)
+        log.console(f"  [{name}]", flush=True)
         for line in out.splitlines():
-            print(f"    {line}", flush=True)
+            log.console(f"    {line}", flush=True)
     else:
-        print(f"  [-> {out[:300]}]", flush=True)
+        log.console(f"  [-> {out[:300]}]", flush=True)
 
 
 def _speed_for(text: str) -> float:

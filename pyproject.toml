@@ -19,21 +19,29 @@ target-version = "py311"
 extend-exclude = ["emotion", "scripts/experiments", "*.ipynb"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "B", "C90", "UP", "SIM"]
+select = ["E", "F", "W", "I", "B", "C90", "UP", "SIM", "T20"]
 ignore = ["E501"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 20
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["B", "SIM"]
-# The runnable scripts put the repository root on sys.path before importing the package,
-# so they work from a plain checkout without `pip install -e .`.
-"evals/*" = ["E402"]
-"diagnostics/*" = ["E402"]
-"benchmarks/*" = ["E402"]
-"scripts/*" = ["E402"]
-# The speech workers set environment variables (cache dirs, worker mode) before importing mlx/torch.
+"tests/*" = ["B", "SIM", "T20"]
+# print is the interface of the command-line tools and workers; library code writes through julius.log.console.
+"evals/*" = ["E402", "T20"]
+"diagnostics/*" = ["E402", "T20"]
+"benchmarks/*" = ["E402", "T20"]
+"scripts/*" = ["E402", "T20"]
+"julius/service/*" = ["T20"]
+"julius/wake/*" = ["T20"]
+"julius/memory/review.py" = ["T20"]
+"julius/memory/store.py" = ["T20"]
+"julius/ui_bridge/events_client.py" = ["T20"]
+"julius/audio/*_worker.py" = ["T20"]
+"julius/brain/document_worker.py" = ["T20"]
+"julius/log.py" = ["T20"]
+# E402 in the runnable tools: they put the repository root on sys.path before importing the package, so they
+# work from a plain checkout without `pip install -e .`. The speech workers set environment variables (cache dirs, worker mode) before importing mlx/torch.
 "julius/audio/mlx_tts_worker.py" = ["E402"]
 "julius/audio/tts_worker.py" = ["E402"]
 

@@ -104,6 +104,12 @@ def install(log_transcripts: bool = False, path: Any | None = None) -> Any:
     return _logger
 
 
+def console(*args: Any, **kwargs: Any) -> None:
+    """Write a line to the console (stdout). Library code uses this instead of print: the Tee installed by
+    `install` records everything written here as a `console` event, with the same redaction rules."""
+    print(*args, **kwargs)
+
+
 def event(name: str, msg: str = "", **fields) -> None:
     """A structured event (start, quiet, wake, stop, crash ...); a no-op when the JSON log is not installed."""
     if _logger is not None:

@@ -14,7 +14,7 @@ import julius.agents.files as jf
 import julius.brain.tools as jt
 import julius.config as config
 import julius.memory.sessions as jm
-from julius import state
+from julius import log, state
 from julius.agents.code_session import CodeSession
 from julius.agents.file_session import FileSession
 from julius.agents.utility_session import UtilitySession
@@ -89,7 +89,7 @@ def setup_basics(s: Session) -> None:
 
 def setup_vision(s: Session) -> None:
     """Camera and perception models, when enabled."""
-    print("initializing optional vision...", flush=True)
+    log.console("initializing optional vision...", flush=True)
     s.eyes = create_vision(
         show_window=False,
         target_fps=float(os.environ.get("JULIUS_VISION_FPS", "2")),
@@ -98,9 +98,9 @@ def setup_vision(s: Session) -> None:
         allowed_modules=["detection", "recognition"],
     ).start()
     if not s.eyes.enabled:
-        print("  [vision disabled — camera and perception models not loaded]", flush=True)
+        log.console("  [vision disabled — camera and perception models not loaded]", flush=True)
     if os.environ.get("JULIUS_MLX_BRAIN_PREPARE") == "1":
-        print("preparing native reasoning; weights will unload before voice...", flush=True)
+        log.console("preparing native reasoning; weights will unload before voice...", flush=True)
         prepare_backend()
 
 
@@ -134,7 +134,7 @@ def setup_duplex(s: Session) -> None:
         s.microphone_gate.bypass = True
         atexit.register(s.duplex.stop)
         s.rec_event("duplex", on=True, rate=s.duplex.rate)
-        print(
+        log.console(
             "  [duplex audio on: echo cancelled, mic gate off, speaking over Julius stops him "
             f"(falls back to the gate after {s.duplex_monitor.fail_seconds:.0f} s of leaking echo)]",
             flush=True,
@@ -142,7 +142,7 @@ def setup_duplex(s: Session) -> None:
     except Exception as exc:
         s.duplex = None
         s.microphone_gate.bypass = False
-        print(
+        log.console(
             f"  [duplex audio unavailable ({type(exc).__name__}: {exc}); using the microphone gate]",
             flush=True,
         )
@@ -165,7 +165,7 @@ def setup_talkover(s: Session) -> None:
 
 def setup_voice(s: Session) -> None:
     """Speech engine, optional duplex audio and the persistent output stream of the MLX voice."""
-    print("loading speech engine...", flush=True)
+    log.console("loading speech engine...", flush=True)
     s.tts = SpeechEngine()
     s.tts.cancel_event = s.cancellation.event
     s.audio_cfg = config.load_config().get("audio") or {}
@@ -209,13 +209,13 @@ def setup_events_feed(s: Session) -> None:
             lambda: controls.ui_level(s),
         )
         if server:
-            print(
+            log.console(
                 f"  [ui event feed: ws://127.0.0.1:{server.port} (read-only, this machine only)]",
                 flush=True,
             )
     except Exception as exc:
         s.events_hub = None
-        print(f"  [ui event feed unavailable: {type(exc).__name__}: {exc}]", flush=True)
+        log.console(f"  [ui event feed unavailable: {type(exc).__name__}: {exc}]", flush=True)
 
 
 def setup_stop_hotkey(s: Session) -> None:
@@ -238,7 +238,7 @@ def setup_wake_hotkey(s: Session) -> None:
     )
     if state.is_quiet():
         s.microphone_gate.set_quiet(True)
-        print("  [starting in quiet mode: press the wake hotkey]", flush=True)
+        log.console("  [starting in quiet mode: press the wake hotkey]", flush=True)
     s.wake_listener = hotkey.start(lambda: controls.hotkey_wake(s, "hotkey"), s.quiet_hotkey)
     with contextlib.suppress(Exception):
         signal.signal(signal.SIGUSR1, lambda *a: controls.hotkey_wake(s, "signal"))
@@ -253,7 +253,7 @@ def setup_cloud_brain(s: Session) -> None:
     s.cloud_brain = cloud.get_brain(offline=_offline_chat)
     s.cloud_tracker = cloud.get_tracker()
     models = s.cloud_brain.config["models"]
-    print(
+    log.console(
         f"  [cloud brain: {models['haiku']} front end, {models['sonnet']} planner; "
         f"API key {config.describe_key()}; daily cap ${s.cloud_tracker.cap_usd:.2f}, "
         f"spent ${s.cloud_tracker.today_total():.4f}; "
@@ -271,7 +271,7 @@ def import_old_facts(memory_store: Any) -> None:
                 memory_store.add(fact["text"], "fact", "auto", "")
             old.rename(jm.MEM / "facts.migrated.json")
     except Exception as exc:
-        print(f"  [memory migration skipped: {type(exc).__name__}]", flush=True)
+        log.console(f"  [memory migration skipped: {type(exc).__name__}]", flush=True)
 
 
 def setup_memory(s: Session) -> None:
@@ -279,7 +279,7 @@ def setup_memory(s: Session) -> None:
     memory_store = store.MemoryStore(jm.MEM / "memory.sqlite3")
     import_old_facts(memory_store)
     s.memory = commands.MemoryAssistant(
-        memory_store, jm.SESS, show=lambda text: print(text, flush=True)
+        memory_store, jm.SESS, show=lambda text: log.console(text, flush=True)
     )
     jt.memory_assistant = (
         s.memory
@@ -292,7 +292,7 @@ def setup_memory(s: Session) -> None:
         context = "\n".join(lines)
     s.memory_context = context
     if context.strip():
-        print(f"  [memory: {len(context.splitlines())} lines]")
+        log.console(f"  [memory: {len(context.splitlines())} lines]")
     s.system = build_system(s.vision_enabled, LLM_BACKEND == "cloud", context)
     s.history = [{"role": "system", "content": s.system}]
 
@@ -303,7 +303,7 @@ def setup_agents(s: Session) -> None:
     try:
         trash_note = jf.agent().trash_notice()
         if trash_note:
-            print(f"  [trash:{trash_note}]", flush=True)
+            log.console(f"  [trash:{trash_note}]", flush=True)
     except Exception:
         pass
     s.code_session = CodeSession(
@@ -322,7 +322,7 @@ def setup_agents(s: Session) -> None:
         s.undo_coordinator = build_undo_coordinator(s)
     except Exception as exc:
         s.undo_coordinator = None
-        print(f"  [cross-agent undo unavailable: {type(exc).__name__}: {exc}]", flush=True)
+        log.console(f"  [cross-agent undo unavailable: {type(exc).__name__}: {exc}]", flush=True)
     if s.cloud:
         from julius.brain import orchestrator
 

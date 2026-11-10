@@ -16,6 +16,7 @@ from typing import Any
 
 import julius.config as cfg
 import julius.costs as costs
+from julius import log
 
 AUTH_MESSAGE = "My API key expired or is invalid."
 CAP_MESSAGE = (
@@ -417,7 +418,7 @@ class CloudBrain:
     # ---------- failure paths ----------
     def mark_auth_bad(self) -> None:
         self.auth_bad, self.auth_pending = True, True
-        print(
+        log.console(
             "  [Anthropic API key missing or invalid; cloud brain disabled until restart]",
             flush=True,
         )
@@ -438,7 +439,7 @@ class CloudBrain:
         if self.offline is None:
             raise RuntimeError("Claude API unreachable and no offline model configured")
         if announce:
-            print(
+            log.console(
                 f"  [Claude API unreachable; using local {self.config['offline']['model']}]",
                 flush=True,
             )
