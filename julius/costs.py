@@ -5,13 +5,23 @@ Haiku 5.5 $0.10 in / $0.125 5m cache write / $0.01 cache read / $0.50 out for pr
 tokens ($0.50 / $0.625 / $0.05 / $2.50 above), Sonnet 5.5 $2 / $2.50 / $0.10 / $10.
 Thinking tokens are billed as output and are already included in usage.output_tokens.
 """
-import json, threading, time
+
+import json
+import threading
+import time
 from datetime import datetime
 from pathlib import Path
 
 RATES = {
-    "haiku": {"model": "claude-haiku-5-5", "in": 0.10, "write": 0.125, "read": 0.01, "out": 0.50,
-              "long_over": 100_000, "long": {"in": 0.50, "write": 0.625, "read": 0.05, "out": 2.50}},
+    "haiku": {
+        "model": "claude-haiku-5-5",
+        "in": 0.10,
+        "write": 0.125,
+        "read": 0.01,
+        "out": 0.50,
+        "long_over": 100_000,
+        "long": {"in": 0.50, "write": 0.625, "read": 0.05, "out": 2.50},
+    },
     "sonnet": {"model": "claude-sonnet-5-5", "in": 2.00, "write": 2.50, "read": 0.10, "out": 10.00},
 }
 
@@ -28,10 +38,14 @@ def cost_of(tier, usage):
     write, read = _n(usage, "cache_creation_input_tokens"), _n(usage, "cache_read_input_tokens")
     if card.get("long") and fresh + write + read > card["long_over"]:
         card = {**card, **card["long"]}
-    return (fresh * card["in"] + write * card["write"] + read * card["read"] + out * card["out"]) / 1_000_000
+    return (
+        fresh * card["in"] + write * card["write"] + read * card["read"] + out * card["out"]
+    ) / 1_000_000
 
 
-SEPARATE_TIERS = {"code"}   # coding-agent spend has its own daily budget and never counts toward the voice cap
+SEPARATE_TIERS = {
+    "code"
+}  # coding-agent spend has its own daily budget and never counts toward the voice cap
 
 
 class CostTracker:
@@ -56,7 +70,8 @@ class CostTracker:
                 except ValueError:
                     continue
                 if row.get("date") == self._day:
-                    if row["tier"] not in SEPARATE_TIERS: self._total += row["usd"]
+                    if row["tier"] not in SEPARATE_TIERS:
+                        self._total += row["usd"]
                     self._by_tier[row["tier"]] = self._by_tier.get(row["tier"], 0.0) + row["usd"]
 
     def _roll(self):
@@ -74,10 +89,19 @@ class CostTracker:
         usd = cost_of(tier, usage)
         with self._lock:
             self._roll()
-            row = {"ts": round(self._clock(), 3), "date": self._day, "turn": self.turn, "tier": tier,
-                   "model": RATES[tier]["model"], "input": _n(usage, "input_tokens"), "output": _n(usage, "output_tokens"),
-                   "cache_write": _n(usage, "cache_creation_input_tokens"), "cache_read": _n(usage, "cache_read_input_tokens"),
-                   "usd": round(usd, 8), "note": note}
+            row = {
+                "ts": round(self._clock(), 3),
+                "date": self._day,
+                "turn": self.turn,
+                "tier": tier,
+                "model": RATES[tier]["model"],
+                "input": _n(usage, "input_tokens"),
+                "output": _n(usage, "output_tokens"),
+                "cache_write": _n(usage, "cache_creation_input_tokens"),
+                "cache_read": _n(usage, "cache_read_input_tokens"),
+                "usd": round(usd, 8),
+                "note": note,
+            }
             self.path.parent.mkdir(parents=True, exist_ok=True)
             with self.path.open("a") as handle:
                 handle.write(json.dumps(row) + "\n")
@@ -90,12 +114,24 @@ class CostTracker:
         """Log a cost already priced elsewhere (the coding agent reports its own dollars)."""
         with self._lock:
             self._roll()
-            row = {"ts": round(self._clock(), 3), "date": self._day, "turn": self.turn, "tier": tier, "model": note, "input": 0, "output": 0,
-                   "cache_write": 0, "cache_read": 0, "usd": round(float(usd), 8), "note": note}
+            row = {
+                "ts": round(self._clock(), 3),
+                "date": self._day,
+                "turn": self.turn,
+                "tier": tier,
+                "model": note,
+                "input": 0,
+                "output": 0,
+                "cache_write": 0,
+                "cache_read": 0,
+                "usd": round(float(usd), 8),
+                "note": note,
+            }
             self.path.parent.mkdir(parents=True, exist_ok=True)
             with self.path.open("a") as handle:
                 handle.write(json.dumps(row) + "\n")
-            if tier not in SEPARATE_TIERS: self._total += float(usd)
+            if tier not in SEPARATE_TIERS:
+                self._total += float(usd)
             self._by_tier[tier] = self._by_tier.get(tier, 0.0) + float(usd)
             return row
 
@@ -129,6 +165,14 @@ class CostTracker:
     def status_line(self):
         costs = self.turn_costs()
         parts = " ".join(f"{tier} ${usd:.5f}" for tier, usd in costs.items()) or "no API calls"
-        state = " | OFFLINE (2x cap)" if self.offline_required() else " | cap reached: Haiku only" if self.cap_reached() else ""
-        return (f"  [cost: {parts} | turn ${sum(costs.values()):.5f} | "
-                f"today ${self.today_total():.4f} of ${self.cap_usd:.2f}{state}]")
+        state = (
+            " | OFFLINE (2x cap)"
+            if self.offline_required()
+            else " | cap reached: Haiku only"
+            if self.cap_reached()
+            else ""
+        )
+        return (
+            f"  [cost: {parts} | turn ${sum(costs.values()):.5f} | "
+            f"today ${self.today_total():.4f} of ${self.cap_usd:.2f}{state}]"
+        )

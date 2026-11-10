@@ -1,5 +1,6 @@
 """Default launch profile: cloud brain (Haiku/Sonnet tiers from julius.toml) with the MLX voice.
 run_julius.sh's `cloud` profile sets the same values; test_julius_default_profile.py keeps them in sync."""
+
 import os
 
 CLOUD_DEFAULTS = {
@@ -15,6 +16,7 @@ CLOUD_DEFAULTS = {
     "JULIUS_SILENCE_SECONDS": "0.6",
 }
 
+
 def apply_cloud_defaults(environ=None):
     """Fill in any cloud-profile setting the caller has not already set; explicit values always win."""
     environ = os.environ if environ is None else environ
@@ -26,21 +28,29 @@ def apply_cloud_defaults(environ=None):
 # ---- who the assistant is talking to ([profile] in julius.toml / julius.local.toml; neutral defaults) ----
 import re as _re
 
+
 def _profile():
     import julius.config as cfg
+
     return cfg.load_config().get("profile", {})
+
 
 def user_name():
     """The configured name, or "the user" when none is set."""
     return (_profile().get("name") or "").strip() or "the user"
 
+
 def home_city():
     """The default city for weather and forecasts, or "" when none is set."""
     return (_profile().get("home_city") or "").strip()
 
+
 def apply(text, profile=None):
     """Swap the author's placeholder name and city in a prompt for this install's profile. Applied to the system prompt and tool descriptions on their way to the model."""
     p = profile if profile is not None else _profile()
-    name = (p.get("name") or "").strip() or "the user"; city = (p.get("home_city") or "").strip() or "the user's home city"
-    text = _re.sub(r"\bRoy(?:'s)?\b", lambda m: name + ("'s" if m.group(0).endswith("'s") else ""), text)
+    name = (p.get("name") or "").strip() or "the user"
+    city = (p.get("home_city") or "").strip() or "the user's home city"
+    text = _re.sub(
+        r"\bRoy(?:'s)?\b", lambda m: name + ("'s" if m.group(0).endswith("'s") else ""), text
+    )
     return text.replace("Springfield, Illinois", city)

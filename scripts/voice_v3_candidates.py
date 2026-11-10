@@ -1,13 +1,12 @@
 """Voice-selection experiment (generation script, not a unit test). Run with .venv-qwen-tts/bin/python scripts/voice_v3_candidates.py"""
-from pathlib import Path
+
 import time
+from pathlib import Path
 
 import numpy as np
 import soundfile as sf
 import torch
-
 from qwen_tts import Qwen3TTSModel
-
 
 MODEL_ID = "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign"
 
@@ -32,7 +31,7 @@ LINES = [
     "That's a good question. Give me a second to think about it.",
     "Yeah, absolutely. That makes a lot more sense.",
     "Oh, that's cool. I want to see where this goes.",
-    "Alright, now we're getting somewhere."
+    "Alright, now we're getting somewhere.",
 ]
 
 OUT_DIR = Path(__file__).resolve().parent.parent / "julius_v3_candidates"
@@ -77,10 +76,6 @@ for i, text in enumerate(LINES, start=1):
     elapsed = time.perf_counter() - start
     duration = len(wav) / sample_rate
 
-    print(
-        f"  {out.name}\n"
-        f"  audio: {duration:.2f}s\n"
-        f"  generation: {elapsed:.2f}s\n"
-    )
+    print(f"  {out.name}\n  audio: {duration:.2f}s\n  generation: {elapsed:.2f}s\n")
 
 print(f"\nDone. Listen to:\n{OUT_DIR}")

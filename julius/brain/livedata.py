@@ -8,6 +8,7 @@ time or amount is dropped before it reaches the speaker, and a single honest lin
     states_a_figure(sentence)      True for a sentence with a score, price, time, count or percentage in it
     UNGROUNDED_LINE                what he says instead
 """
+
 import re
 
 LIVE_QUERY = re.compile(
@@ -15,13 +16,17 @@ LIVE_QUERY = re.compile(
     r"prices?|how much (?:is|are|does|do|did)|cost of|costs?|trading|stocks?|share price|quotes?|odds|spread|over.under|"
     r"schedules?|(?:what time|when) (?:does|do|is|are|will)\b.{0,40}\b(?:game|match|start|play|kick|tip|puck)|game (?:tonight|today|tomorrow)|plays? tonight|"
     r"news|headlines?|weather|forecast|temperature|how (?:hot|cold|warm)|rain(?:ing|y)?|traffic|"
-    r"right now|currently|latest|as of now|at the moment|this (?:morning|afternoon|evening)|tonight|today.s)\b", re.I)
+    r"right now|currently|latest|as of now|at the moment|this (?:morning|afternoon|evening)|tonight|today.s)\b",
+    re.I,
+)
 
 FIGURE = re.compile(
     r"\$\s?\d|\b\d+(?:[.,]\d+)?\s?(?:dollars?|cents?|percent|degrees|points?|goals?|runs?|yards?|touchdowns?|games?|minutes?|hours?|am|pm|a\.m\.|p\.m\.)\b|"
     r"\b\d{1,2}:\d\d\b|\b\d{1,3}\s?(?:-|to)\s?\d{1,3}\b|\b\d+(?:[.,]\d+)?\b|"
     r"\b(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million)\b"
-    r"(?:\s+(?:dollars?|cents?|percent|degrees|points?|goals?|to\s+\w+|\w+\s+(?:am|pm)))", re.I)
+    r"(?:\s+(?:dollars?|cents?|percent|degrees|points?|goals?|to\s+\w+|\w+\s+(?:am|pm)))",
+    re.I,
+)
 
 UNGROUNDED_LINE = "I can't look that up right now, so I won't guess."
 
@@ -42,4 +47,4 @@ def blocked(sentence, live_query, tool_result_this_turn):
 def tool_result_this_turn(messages):
     """True when a tool result has come back since the user's latest message."""
     last_user = max((i for i, m in enumerate(messages) if m.get("role") == "user"), default=-1)
-    return any(m.get("role") == "tool" for m in messages[last_user + 1:])
+    return any(m.get("role") == "tool" for m in messages[last_user + 1 :])

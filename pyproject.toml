@@ -1,0 +1,25 @@
+[project]
+name = "julius"
+version = "0.1.0"
+description = "A private, voice-first desktop assistant: wake word, streaming speech, tools, memory and sub-agents."
+requires-python = ">=3.11"
+readme = "README.md"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["emotion", "scripts/experiments", "*.ipynb"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "C90", "UP", "SIM"]
+ignore = ["E501"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 20
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B", "SIM"]
+"evals/*" = ["C901"]
+
+[tool.ruff.format]
+quote-style = "double"

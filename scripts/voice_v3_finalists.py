@@ -1,14 +1,13 @@
 """Voice-selection experiment (generation script, not a unit test). Run with .venv-qwen-tts/bin/python scripts/voice_v3_finalists.py"""
-from pathlib import Path
+
 import random
 import time
+from pathlib import Path
 
 import numpy as np
 import soundfile as sf
 import torch
-
 from qwen_tts import Qwen3TTSModel
-
 
 MODEL_ID = "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign"
 
@@ -74,7 +73,6 @@ print(f"Loaded in {time.perf_counter() - load_start:.2f}s\n")
 
 
 for i, seed in enumerate(SEEDS, start=1):
-
     set_seed(seed)
 
     print("=" * 70)

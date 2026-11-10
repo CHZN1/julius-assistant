@@ -1,7 +1,6 @@
 import time
 
-from mlx_lm import load, generate
-
+from mlx_lm import generate, load
 
 MODEL_ID = "mlx-community/Qwen3-8B-4bit"
 
@@ -30,18 +29,17 @@ print(f"Loaded in {time.perf_counter() - t0:.2f}s\n")
 
 
 for i, user_text in enumerate(TESTS, start=1):
-
     messages = [
         {"role": "system", "content": SYSTEM},
         {"role": "user", "content": user_text},
     ]
 
     prompt = tokenizer.apply_chat_template(
-    messages,
-    tokenize=False,
-    add_generation_prompt=True,
-    enable_thinking=False,
-    )   
+        messages,
+        tokenize=False,
+        add_generation_prompt=True,
+        enable_thinking=False,
+    )
 
     print("=" * 70)
     print(f"TEST {i}")

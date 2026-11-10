@@ -1,12 +1,10 @@
-from pathlib import Path
 import time
+from pathlib import Path
 
 import numpy as np
 import soundfile as sf
 import torch
-
 from qwen_tts import Qwen3TTSModel
-
 
 MODEL_ID = "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign"
 
@@ -18,31 +16,30 @@ TEXT = (
 # Different interpretations of the same Julius target.
 VOICE_DESIGNS = {
     "julius_02_deeper_v2": (
-    "American man in his mid-30s with a mature baritone voice. "
-    "Lower register, rich and smooth resonance, clear diction, and controlled energy. "
-    "Sound warm, intelligent, friendly, curious, and quietly cheerful. "
-    "There should be a natural sense of interest and enjoyment in the conversation, "
-    "as if he genuinely likes talking to the person and finds things fascinating. "
-    "Keep a soft smile in the voice and a lightly playful, amused undertone, "
-    "without becoming bubbly, goofy, childish, or overly enthusiastic. "
-    "He should sound relaxed and self-assured, but never bored, depressed, detached, "
-    "cold, sleepy, sluggish, or uninterested. "
-    "Friendly and conversational, but unmistakably adult. "
-    "Avoid a youthful tenor, teenage voice, exaggerated bass, raspiness, "
-    "stoner-like delivery, vocal fry, or announcer-style performance."
+        "American man in his mid-30s with a mature baritone voice. "
+        "Lower register, rich and smooth resonance, clear diction, and controlled energy. "
+        "Sound warm, intelligent, friendly, curious, and quietly cheerful. "
+        "There should be a natural sense of interest and enjoyment in the conversation, "
+        "as if he genuinely likes talking to the person and finds things fascinating. "
+        "Keep a soft smile in the voice and a lightly playful, amused undertone, "
+        "without becoming bubbly, goofy, childish, or overly enthusiastic. "
+        "He should sound relaxed and self-assured, but never bored, depressed, detached, "
+        "cold, sleepy, sluggish, or uninterested. "
+        "Friendly and conversational, but unmistakably adult. "
+        "Avoid a youthful tenor, teenage voice, exaggerated bass, raspiness, "
+        "stoner-like delivery, vocal fry, or announcer-style performance."
     ),
-
     "julius_02_deeper_v3": (
-    "Mature American male around 35 years old with a smooth, medium-low baritone voice. "
-    "Warm, intelligent, confident, approachable, and naturally upbeat. "
-    "Speak with calm authority but also clear curiosity and genuine friendliness. "
-    "The voice should carry a subtle smile and an easy sense of amusement, "
-    "like someone who is wise and powerful but still genuinely enjoys discovering new things. "
-    "Use lively but controlled conversational rhythm, with enough energy to sound engaged "
-    "without sounding hyper, jolly, theatrical, or childish. "
-    "He should feel welcoming and personable, not stern, brooding, bored, or emotionally flat. "
-    "Avoid teenage brightness, gravel, vocal fry, sleepy pacing, stoner cadence, "
-    "exaggerated bass, or radio-announcer delivery."
+        "Mature American male around 35 years old with a smooth, medium-low baritone voice. "
+        "Warm, intelligent, confident, approachable, and naturally upbeat. "
+        "Speak with calm authority but also clear curiosity and genuine friendliness. "
+        "The voice should carry a subtle smile and an easy sense of amusement, "
+        "like someone who is wise and powerful but still genuinely enjoys discovering new things. "
+        "Use lively but controlled conversational rhythm, with enough energy to sound engaged "
+        "without sounding hyper, jolly, theatrical, or childish. "
+        "He should feel welcoming and personable, not stern, brooding, bored, or emotionally flat. "
+        "Avoid teenage brightness, gravel, vocal fry, sleepy pacing, stoner cadence, "
+        "exaggerated bass, or radio-announcer delivery."
     ),
 }
 

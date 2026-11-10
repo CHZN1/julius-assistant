@@ -1,12 +1,10 @@
-from pathlib import Path
 import time
+from pathlib import Path
 
 import numpy as np
 import soundfile as sf
 import torch
-
 from qwen_tts import Qwen3TTSModel
-
 
 MODEL_ID = "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"
 
@@ -26,7 +24,6 @@ TESTS = {
             "sleepy, or intoxicated. Do not sound like an announcer."
         ),
     },
-
     "ryan_focused": {
         "speaker": "Ryan",
         "instruct": (

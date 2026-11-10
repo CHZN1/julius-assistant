@@ -3,48 +3,100 @@
 New UI/dispatcher code should use FileAgent results directly. No mutation is
 available to model tool calls; the human command session owns confirmation.
 """
-from julius.paths import REPO_ROOT
-from pathlib import Path
-import os
-from julius.agents.file_agent import FileAgent
-SAFE_ROOT=Path.home()
-STATE=Path(os.environ.get('JULIUS_STATE_DIR',os.environ.get('JULIUS_MEMORY_DIR',str(REPO_ROOT/'julius_memory')))).expanduser().resolve()
-PLANS=STATE/'plans.json'  # Legacy state retained; never silently migrated/executed.
-LOG=STATE/'file_log.jsonl'
-_TURN={'n':0}
-_INSTANCE=None
 
-def set_turn(n): _TURN['n']=n
+import os
+from pathlib import Path
+
+from julius.agents.file_agent import FileAgent
+from julius.paths import REPO_ROOT
+
+SAFE_ROOT = Path.home()
+STATE = (
+    Path(
+        os.environ.get(
+            "JULIUS_STATE_DIR",
+            os.environ.get("JULIUS_MEMORY_DIR", str(REPO_ROOT / "julius_memory")),
+        )
+    )
+    .expanduser()
+    .resolve()
+)
+PLANS = STATE / "plans.json"  # Legacy state retained; never silently migrated/executed.
+LOG = STATE / "file_log.jsonl"
+_TURN = {"n": 0}
+_INSTANCE = None
+
+
+def set_turn(n):
+    _TURN["n"] = n
+
 
 def agent():
     global _INSTANCE
-    key=(str(SAFE_ROOT),str(STATE))
-    if _INSTANCE is None or _INSTANCE[0]!=key:
+    key = (str(SAFE_ROOT), str(STATE))
+    if _INSTANCE is None or _INSTANCE[0] != key:
         from julius import config
-        _INSTANCE=(key,FileAgent(SAFE_ROOT,STATE,folders=(config.load_config().get('files') or {}).get('folders')))
+
+        _INSTANCE = (
+            key,
+            FileAgent(
+                SAFE_ROOT, STATE, folders=(config.load_config().get("files") or {}).get("folders")
+            ),
+        )
     return _INSTANCE[1]
 
-def _safe(p): return agent().resolve(p,new=True)
+
+def _safe(p):
+    return agent().resolve(p, new=True)
+
 
 def render(res):
-    text=res['message'];data=res.get('data',{})
-    if 'plan' in data:
+    text = res["message"]
+    data = res.get("data", {})
+    if "plan" in data:
         from julius.agents.file_agent import human_size
-        p=data['plan'];text=f"PLAN {p['id']}: "+text; text+='\n'+ '\n'.join(f"{op['from'] or 'New text file'} -> {op['to']}  ({human_size(op['fingerprint']['size'])})" for op in p['ops'][:20])
-        if len(p['ops'])>1: text+=f"\n{len(p['ops'])} files, {human_size(p.get('total_bytes',0))} in total"
-        for skipped in data.get('skipped',[])[:10]: text+=f"\nskipped (protected): {skipped['name']}: {skipped['reason']}"
-        if len(p['ops'])>20: text+=f"\n...and {len(p['ops'])-20} more."
-    elif 'items' in data:
-        text+='\n'+ '\n'.join(item.get('relative_path',item['name']) for item in data['items'][:40])
-    elif 'text' in data: text+='\n'+data['text']
+
+        p = data["plan"]
+        text = f"PLAN {p['id']}: " + text
+        text += "\n" + "\n".join(
+            f"{op['from'] or 'New text file'} -> {op['to']}  ({human_size(op['fingerprint']['size'])})"
+            for op in p["ops"][:20]
+        )
+        if len(p["ops"]) > 1:
+            text += f"\n{len(p['ops'])} files, {human_size(p.get('total_bytes', 0))} in total"
+        for skipped in data.get("skipped", [])[:10]:
+            text += f"\nskipped (protected): {skipped['name']}: {skipped['reason']}"
+        if len(p["ops"]) > 20:
+            text += f"\n...and {len(p['ops']) - 20} more."
+    elif "items" in data:
+        text += "\n" + "\n".join(
+            item.get("relative_path", item["name"]) for item in data["items"][:40]
+        )
+    elif "text" in data:
+        text += "\n" + data["text"]
     return text
 
-def propose_move(pattern='*',source='.',destination=None,recursive=False,**_):
-    return render(agent().propose('move',pattern=pattern,source=source,destination=destination,recursive=recursive,turn=_TURN['n']))
 
-def show_plan(plan_id,**_): return render(agent().show(plan_id))
+def propose_move(pattern="*", source=".", destination=None, recursive=False, **_):
+    return render(
+        agent().propose(
+            "move",
+            pattern=pattern,
+            source=source,
+            destination=destination,
+            recursive=recursive,
+            turn=_TURN["n"],
+        )
+    )
 
-def execute_plan(plan_id,confirmed=False,**_):
-    return render(agent().execute(plan_id,confirmed=confirmed,turn=_TURN['n']))
 
-def undo_last(**_): return render(agent().undo())
+def show_plan(plan_id, **_):
+    return render(agent().show(plan_id))
+
+
+def execute_plan(plan_id, confirmed=False, **_):
+    return render(agent().execute(plan_id, confirmed=confirmed, turn=_TURN["n"]))
+
+
+def undo_last(**_):
+    return render(agent().undo())

@@ -2,9 +2,9 @@ import json
 import re
 import time
 
-from mlx_lm import load, generate
-import julius.brain.tools as jt
+from mlx_lm import generate, load
 
+import julius.brain.tools as jt
 
 MODEL_ID = "mlx-community/Qwen3-8B-4bit"
 

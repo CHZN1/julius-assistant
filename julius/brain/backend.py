@@ -1,14 +1,32 @@
 """Shared, lazy backend adapter; importing does not load models or devices."""
-import os, time, re, json as _json
+
+import json as _json
+import os
+import re
+import time
 from types import SimpleNamespace
+
 import julius.brain.tools as jt
-LLM_BACKEND = os.environ.get("JULIUS_BACKEND", "cloud")  # "ollama", "mlx" or "cloud" (Claude Haiku front end)
+
+LLM_BACKEND = os.environ.get(
+    "JULIUS_BACKEND", "cloud"
+)  # "ollama", "mlx" or "cloud" (Claude Haiku front end)
 if LLM_BACKEND == "cloud":
     import julius.config as _cfg
-    if _cfg.load_config()["brain"]["mode"] == "local":  # julius.toml / JULIUS_BRAIN=local turns the cloud brain off
+
+    if (
+        _cfg.load_config()["brain"]["mode"] == "local"
+    ):  # julius.toml / JULIUS_BRAIN=local turns the cloud brain off
         LLM_BACKEND = "ollama"
-        os.environ["JULIUS_MODEL"] = os.environ.get("JULIUS_LOCAL_MODEL", "qwen3:4b-instruct-2507-q4_K_M")
-LLM = os.environ.get("JULIUS_MODEL", {"ollama": "qwen3:4b-instruct-2507-q4_K_M", "cloud": "claude-haiku-5-5"}.get(LLM_BACKEND, "mlx-community/Qwen3-8B-4bit"))
+        os.environ["JULIUS_MODEL"] = os.environ.get(
+            "JULIUS_LOCAL_MODEL", "qwen3:4b-instruct-2507-q4_K_M"
+        )
+LLM = os.environ.get(
+    "JULIUS_MODEL",
+    {"ollama": "qwen3:4b-instruct-2507-q4_K_M", "cloud": "claude-haiku-5-5"}.get(
+        LLM_BACKEND, "mlx-community/Qwen3-8B-4bit"
+    ),
+)
 # Used for the turn when the primary Ollama model is missing or cannot be loaded; "" disables it.
 OLLAMA_FALLBACK = os.environ.get("JULIUS_FALLBACK_MODEL", "llama3.2:3b")
 _ACTIVE_OLLAMA = None
@@ -32,15 +50,17 @@ def _load_mlx_brain():
     if _MLX_MODEL is None:
         print(f"loading MLX brain: {LLM}...", flush=True)
         _t = time.time()
-        from mlx_lm import load as mlx_load
         import mlx.core as mx
+        from mlx_lm import load as mlx_load
+
         mx.set_cache_limit(256 * 1024 * 1024)
-        if os.environ.get('JULIUS_MLX_BRAIN_MEMORY_GB'):
-            limit=float(os.environ['JULIUS_MLX_BRAIN_MEMORY_GB'])
-            if not 2<=limit<=8:raise ValueError('MLX brain memory guidance must be between 2 and 8 GiB')
-            mx.set_memory_limit(int(limit*1024**3))
+        if os.environ.get("JULIUS_MLX_BRAIN_MEMORY_GB"):
+            limit = float(os.environ["JULIUS_MLX_BRAIN_MEMORY_GB"])
+            if not 2 <= limit <= 8:
+                raise ValueError("MLX brain memory guidance must be between 2 and 8 GiB")
+            mx.set_memory_limit(int(limit * 1024**3))
         _MLX_MODEL, _MLX_TOKENIZER = mlx_load(LLM)
-        print(f"  MLX brain loaded in {time.time()-_t:.1f}s", flush=True)
+        print(f"  MLX brain loaded in {time.time() - _t:.1f}s", flush=True)
     return _MLX_MODEL, _MLX_TOKENIZER
 
 
@@ -60,13 +80,15 @@ def _normalize_mlx_messages(messages):
                         args = _json.loads(args)
                     except Exception:
                         args = {}
-                normalized.append({
-                    "type": "function",
-                    "function": {
-                        "name": fn.get("name", ""),
-                        "arguments": args,
-                    },
-                })
+                normalized.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": fn.get("name", ""),
+                            "arguments": args,
+                        },
+                    }
+                )
             m["tool_calls"] = normalized
 
         out.append(m)
@@ -81,8 +103,7 @@ def _render_mlx_prompt(messages, tools=None):
     # A prior tool call/result still needs the tool-aware Qwen template even when
     # the caller is now asking for the final natural-language response.
     has_tool_history = any(
-        m.get("role") == "tool"
-        or (m.get("role") == "assistant" and m.get("tool_calls"))
+        m.get("role") == "tool" or (m.get("role") == "assistant" and m.get("tool_calls"))
         for m in msgs
     )
     active_tools = tools if tools is not None else (jt.SCHEMAS if has_tool_history else None)
@@ -125,13 +146,14 @@ def _mlx_generation_kwargs(options=None):
 
     kwargs = {"max_tokens": max_tokens}
     from mlx_lm.sample_utils import make_sampler
+
     kwargs["sampler"] = make_sampler(temp=temperature, top_p=0.9)
     return kwargs
 
 
 def _fallback_applies(exc, model):
     """Missing model (404) or a model too large to load (5xx mentioning memory)."""
-    if not OLLAMA_FALLBACK or OLLAMA_FALLBACK == model:
+    if not OLLAMA_FALLBACK or model == OLLAMA_FALLBACK:
         return False
     status = getattr(exc, "status_code", None) or 0
     return status == 404 or (status >= 500 and "memory" in str(exc).lower())
@@ -142,11 +164,15 @@ def _ollama_chat(**kwargs):
     until close_backend() resets it, so the primary is retried at the next model phase."""
     global _ACTIVE_OLLAMA
     import ollama
+
     model = _ACTIVE_OLLAMA or LLM
 
     def switch(exc):
         global _ACTIVE_OLLAMA
-        print(f"  [brain {model} unavailable ({str(exc)[:80]}); using fallback {OLLAMA_FALLBACK}]", flush=True)
+        print(
+            f"  [brain {model} unavailable ({str(exc)[:80]}); using fallback {OLLAMA_FALLBACK}]",
+            flush=True,
+        )
         _ACTIVE_OLLAMA = OLLAMA_FALLBACK
         return OLLAMA_FALLBACK
 
@@ -171,18 +197,31 @@ def _ollama_chat(**kwargs):
             first = next(it)
         yield first
         yield from it
+
     return parts()
 
 
 def _offline_chat(messages, tools, stream, options):
     """Local fallback for the cloud brain: the offline model is loaded only now and released when the API is back."""
-    import ollama; from julius import config
+    import ollama
+
+    from julius import config
+
     global _OFFLINE_LOADED
     model = config.load_config()["offline"]["model"]
     _OFFLINE_LOADED = model
-    local_tools = [t for t in (tools or []) if t["function"]["name"] != "escalate_to_planner"] or None
-    return ollama.chat(model=model, messages=messages, tools=local_tools, think=False, stream=stream,
-                       keep_alive="2m", options={"num_ctx": 4096, **(options or {})})
+    local_tools = [
+        t for t in (tools or []) if t["function"]["name"] != "escalate_to_planner"
+    ] or None
+    return ollama.chat(
+        model=model,
+        messages=messages,
+        tools=local_tools,
+        think=False,
+        stream=stream,
+        keep_alive="2m",
+        options={"num_ctx": 4096, **(options or {})},
+    )
 
 
 def release_offline():
@@ -190,14 +229,16 @@ def release_offline():
     global _OFFLINE_LOADED
     if _OFFLINE_LOADED:
         import ollama
+
         try:
             ollama.generate(model=_OFFLINE_LOADED, prompt="", keep_alive=0)
         finally:
             _OFFLINE_LOADED = None
 
 
-def llm_chat(*, messages, tools=None, think=False, stream=False,
-             keep_alive=KEEP_ALIVE, options=None):
+def llm_chat(
+    *, messages, tools=None, think=False, stream=False, keep_alive=KEEP_ALIVE, options=None
+):
     """MLX-backed drop-in adapter for the subset of ollama.chat Julius uses.
 
     The rest of Julius can keep using:
@@ -210,29 +251,41 @@ def llm_chat(*, messages, tools=None, think=False, stream=False,
     _GENERATION_METRICS.clear()
     if LLM_BACKEND == "cloud":
         from julius.brain import cloud
-        return cloud.get_brain(offline=_offline_chat).chat(messages, tools=tools, stream=stream, options=options)
+
+        return cloud.get_brain(offline=_offline_chat).chat(
+            messages, tools=tools, stream=stream, options=options
+        )
     if LLM_BACKEND == "ollama":
-        import ollama
-        defaults={"num_ctx":4096}
-        if os.environ.get('JULIUS_LLM_BATCH_SIZE'):
-            batch=int(os.environ['JULIUS_LLM_BATCH_SIZE'])
-            if not 32<=batch<=512:raise ValueError('JULIUS_LLM_BATCH_SIZE must be between 32 and 512')
-            defaults['num_batch']=batch
+        defaults = {"num_ctx": 4096}
+        if os.environ.get("JULIUS_LLM_BATCH_SIZE"):
+            batch = int(os.environ["JULIUS_LLM_BATCH_SIZE"])
+            if not 32 <= batch <= 512:
+                raise ValueError("JULIUS_LLM_BATCH_SIZE must be between 32 and 512")
+            defaults["num_batch"] = batch
         options = {**defaults, **(options or {})}
-        return _ollama_chat(messages=messages, tools=tools, think=False,
-                            stream=stream, keep_alive=keep_alive, options=options)
-    from mlx_lm import generate as mlx_generate, stream_generate as mlx_stream_generate
+        return _ollama_chat(
+            messages=messages,
+            tools=tools,
+            think=False,
+            stream=stream,
+            keep_alive=keep_alive,
+            options=options,
+        )
+    from mlx_lm import stream_generate as mlx_stream_generate
+
     if LLM_BACKEND != "mlx":
         raise RuntimeError(f"Unsupported LLM backend: {LLM_BACKEND}")
 
     model, tok = _load_mlx_brain()
     prompt = _render_mlx_prompt(messages, tools=tools)
     gen_kwargs = _mlx_generation_kwargs(options)
-    prefill=int(os.environ.get('JULIUS_MLX_PREFILL_STEP_SIZE','256'))
-    if not 64<=prefill<=512:raise ValueError('MLX prefill step must be between 64 and 512 tokens')
+    prefill = int(os.environ.get("JULIUS_MLX_PREFILL_STEP_SIZE", "256"))
+    if not 64 <= prefill <= 512:
+        raise ValueError("MLX prefill step must be between 64 and 512 tokens")
     gen_kwargs["prefill_step_size"] = prefill
 
     from mlx_lm.models.cache import LRUPromptCache, make_prompt_cache
+
     global _PROMPT_CACHE
     if _PROMPT_CACHE is None:
         _PROMPT_CACHE = LRUPromptCache(max_size=1, max_bytes=768 * 1024 * 1024)
@@ -244,6 +297,7 @@ def llm_chat(*, messages, tools=None, think=False, stream=False,
     if not rest:
         # Keep one prompt token to compute the next-token distribution.
         from mlx_lm.models.cache import trim_prompt_cache
+
         trim_prompt_cache(cache, 1)
         rest = tokens[-1:]
 
@@ -251,12 +305,21 @@ def llm_chat(*, messages, tools=None, think=False, stream=False,
         key = tokens[:]
         completed = False
         try:
-            for part in mlx_stream_generate(model, tok, prompt=rest,
-                                            prompt_cache=cache, **gen_kwargs):
+            for part in mlx_stream_generate(
+                model, tok, prompt=rest, prompt_cache=cache, **gen_kwargs
+            ):
                 key.append(part.token)
-                for name in ('prompt_tokens','prompt_tps','generation_tokens','generation_tps','peak_memory','finish_reason'):
-                    value=getattr(part,name,None)
-                    if value is not None:_GENERATION_METRICS[name]=value
+                for name in (
+                    "prompt_tokens",
+                    "prompt_tps",
+                    "generation_tokens",
+                    "generation_tps",
+                    "peak_memory",
+                    "finish_reason",
+                ):
+                    value = getattr(part, name, None)
+                    if value is not None:
+                        _GENERATION_METRICS[name] = value
                 yield SimpleNamespace(message=SimpleNamespace(content=part.text))
             completed = True
         finally:
@@ -273,12 +336,17 @@ def llm_chat(*, messages, tools=None, think=False, stream=False,
 
 def prepare_backend():
     """Warm native imports/kernels before readiness, then release all weights."""
-    if LLM_BACKEND!='mlx':return
+    if LLM_BACKEND != "mlx":
+        return
     from julius.brain.conversation import conversation_messages
+
     try:
-        llm_chat(messages=conversation_messages([{'role':'user','content':'Reply only Ready.'}]),
-                 options={'temperature':0.4,'num_predict':2})
-    finally:close_backend()
+        llm_chat(
+            messages=conversation_messages([{"role": "user", "content": "Reply only Ready."}]),
+            options={"temperature": 0.4, "num_predict": 2},
+        )
+    finally:
+        close_backend()
 
 
 def _free_memory_percent():
@@ -287,6 +355,7 @@ def _free_memory_percent():
     now = time.monotonic()
     if now - _FREE_CACHE[0] > 5:
         import subprocess
+
         try:
             out = subprocess.check_output(["/usr/bin/memory_pressure", "-Q"], text=True, timeout=5)
             _FREE_CACHE = (now, float(re.search(r"free percentage: (\d+)%", out).group(1)))
@@ -324,19 +393,25 @@ def close_backend():
         return
     if _BACKEND_USED and LLM_BACKEND == "ollama":
         import ollama
+
         ollama.generate(model=_ACTIVE_OLLAMA or LLM, prompt="", keep_alive=0)
         _ACTIVE_OLLAMA = None
         _BACKEND_USED = False
         _RELEASE_METRICS.clear()
-        _RELEASE_METRICS.update(backend='ollama',released=True)
+        _RELEASE_METRICS.update(backend="ollama", released=True)
     elif LLM_BACKEND == "mlx" and (_BACKEND_USED or _MLX_MODEL is not None):
         import gc
+
         import mlx.core as mx
+
         mx.synchronize()
-        _PROMPT_CACHE=None
-        _MLX_MODEL=None
-        _MLX_TOKENIZER=None
-        gc.collect();mx.clear_cache()
-        _BACKEND_USED=False
+        _PROMPT_CACHE = None
+        _MLX_MODEL = None
+        _MLX_TOKENIZER = None
+        gc.collect()
+        mx.clear_cache()
+        _BACKEND_USED = False
         _RELEASE_METRICS.clear()
-        _RELEASE_METRICS.update(backend='mlx',released=True,active_memory_bytes=mx.get_active_memory())
+        _RELEASE_METRICS.update(
+            backend="mlx", released=True, active_memory_bytes=mx.get_active_memory()
+        )

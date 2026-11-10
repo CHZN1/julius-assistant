@@ -5,19 +5,40 @@ This player (1) holds back playback until one extra chunk has arrived (prefill),
 stream open between sentences (no start/stop pop per sentence) and ends each sentence with a short silent tail, (4) raises the prefill
 after an underflow and relaxes it after clean sentences, and (5) records every underflow so live runs show them.
 """
-import threading, time
+
+import threading
+import time
+
 import numpy as np
 
 
 class SpeechPlayer:
-    def __init__(self, sd, prefill_chunks=1, latency=0.4, idle_seconds=1.5, max_prefill=4, tail_seconds=0.02, clock=time.perf_counter, log=print, sleep=time.sleep, drain_margin=0.05):
-        self.sd, self.base_prefill, self.latency, self.idle_seconds, self.max_prefill = sd, prefill_chunks, latency, idle_seconds, max_prefill
+    def __init__(
+        self,
+        sd,
+        prefill_chunks=1,
+        latency=0.4,
+        idle_seconds=1.5,
+        max_prefill=4,
+        tail_seconds=0.02,
+        clock=time.perf_counter,
+        log=print,
+        sleep=time.sleep,
+        drain_margin=0.05,
+    ):
+        self.sd, self.base_prefill, self.latency, self.idle_seconds, self.max_prefill = (
+            sd,
+            prefill_chunks,
+            latency,
+            idle_seconds,
+            max_prefill,
+        )
         self.tail_seconds, self.clock, self.log = tail_seconds, clock, log
         self.sleep, self.drain_margin = sleep, drain_margin
         self.prefill_chunks = prefill_chunks
         self.stream = None
         self.rate = None
-        self.events = []          # underflows since the last pop_events()
+        self.events = []  # underflows since the last pop_events()
         self.total_underflows = 0
         self._clean_run = 0
         self._lock = threading.RLock()
@@ -28,7 +49,9 @@ class SpeechPlayer:
         if self.stream is not None and self.rate != rate:
             self._close_stream()
         if self.stream is None:
-            self.stream = self.sd.OutputStream(samplerate=rate, channels=1, dtype="float32", latency=self.latency)
+            self.stream = self.sd.OutputStream(
+                samplerate=rate, channels=1, dtype="float32", latency=self.latency
+            )
             self.stream.start()
             self.rate = rate
         if self._timer is not None:
@@ -87,25 +110,46 @@ class SpeechPlayer:
                 on_start()  # first audio is about to be written
             started, sentence_underflows, written, seconds_written = self.clock(), 0, 0, 0.0
             try:
+
                 def put(audio, sample_rate, index):
                     nonlocal sentence_underflows, written, seconds_written
                     if sample_rate != rate:
                         raise RuntimeError("Speech sample rate changed")
                     tap = getattr(self, "tap", None)
                     if tap is not None:
-                        try: tap(audio, sample_rate)   # session recorder (voice eval); never allowed to disturb playback
-                        except Exception: pass
-                    flagged = stream.write(np.ascontiguousarray(audio, dtype=np.float32).reshape(-1, 1))
-                    if flagged and index > 0:  # the first write of a sentence follows the natural pause between sentences
+                        try:
+                            tap(
+                                audio, sample_rate
+                            )  # session recorder (voice eval); never allowed to disturb playback
+                        except Exception:
+                            pass
+                    flagged = stream.write(
+                        np.ascontiguousarray(audio, dtype=np.float32).reshape(-1, 1)
+                    )
+                    if (
+                        flagged and index > 0
+                    ):  # the first write of a sentence follows the natural pause between sentences
                         sentence_underflows += 1
-                        event = {"at_seconds": round(self.clock() - started, 2), "chunk": index, "prefill_chunks": self.prefill_chunks}
+                        event = {
+                            "at_seconds": round(self.clock() - started, 2),
+                            "chunk": index,
+                            "prefill_chunks": self.prefill_chunks,
+                        }
                         self.events.append(event)
-                        self.log(f"  [audio underflow at chunk {index}, {event['at_seconds']} s into the sentence]", flush=True)
+                        self.log(
+                            f"  [audio underflow at chunk {index}, {event['at_seconds']} s into the sentence]",
+                            flush=True,
+                        )
                     written += 1
                     seconds_written += len(audio) / sample_rate
+
                 for index, (audio, sample_rate) in enumerate(held):
                     put(audio, sample_rate, index)
-                ahead, lead, exhausted = [], 0, False   # lead: chunks to keep queued ahead once a sentence has underflowed
+                ahead, lead, exhausted = (
+                    [],
+                    0,
+                    False,
+                )  # lead: chunks to keep queued ahead once a sentence has underflowed
                 while True:
                     if cancel_check is not None:
                         cancel_check()
@@ -119,17 +163,29 @@ class SpeechPlayer:
                     before = sentence_underflows
                     audio, sample_rate = ahead.pop(0)
                     put(audio, sample_rate, written)
-                    if sentence_underflows > before:  # the voice is falling behind: fewer, longer gaps beat a stutter on every chunk
+                    if (
+                        sentence_underflows > before
+                    ):  # the voice is falling behind: fewer, longer gaps beat a stutter on every chunk
                         lead = min(self.max_prefill, lead + 1)
-                stream.write(np.zeros((int(self.tail_seconds * rate), 1), dtype=np.float32))  # clean end: the stream stays open on silence
+                stream.write(
+                    np.zeros((int(self.tail_seconds * rate), 1), dtype=np.float32)
+                )  # clean end: the stream stays open on silence
                 seconds_written += self.tail_seconds
                 # write() returns once audio is queued, not once it has been heard. Wait for the queue to play out so the microphone
                 # gate does not reopen while Julius is still speaking (it would transcribe its own voice).
-                remaining = started + seconds_written - self.clock() + self.drain_margin + (0.15 if sentence_underflows else 0.0)
+                remaining = (
+                    started
+                    + seconds_written
+                    - self.clock()
+                    + self.drain_margin
+                    + (0.15 if sentence_underflows else 0.0)
+                )
                 if remaining > 0:
                     self.sleep(remaining)
             except BaseException:
-                self._close_stream(abort=True)  # cancelled or failed: stop now, reopen on the next sentence
+                self._close_stream(
+                    abort=True
+                )  # cancelled or failed: stop now, reopen on the next sentence
                 if cancel_check is not None:
                     cancel_check()  # an abort() from the hotkey surfaces as a write error; report it as the cancellation it is
                 raise
@@ -142,7 +198,11 @@ class SpeechPlayer:
             self._timer = threading.Timer(self.idle_seconds, self._idle_close)
             self._timer.daemon = True
             self._timer.start()
-            return {"chunks": written, "underflows": sentence_underflows, "prefill_chunks": self.prefill_chunks}
+            return {
+                "chunks": written,
+                "underflows": sentence_underflows,
+                "prefill_chunks": self.prefill_chunks,
+            }
 
     def _adapt(self, underflows):
         """More prefill after an underflow (up to max_prefill), back toward the base after five clean sentences."""
