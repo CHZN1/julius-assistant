@@ -224,6 +224,165 @@ def brain_turn(case, brain, tracker, system):
         }
 
 
+def run_shortcuts(cases):
+    """Try the deterministic stage on every case: (rows for those it answered, cases left over)."""
+    sb = Sandbox()
+    rows, pending = {}, []
+    for i, case in enumerate(cases, 1):
+        got = shortcut(case["text"], sb, case.get("ctx"), i, case.get("history"))
+        if got:
+            got.update(seconds=0.0, usd=0.0)
+            rows[case["id"]] = got
+        else:
+            pending.append(case)
+    return rows, pending
+
+
+def run_brain(pending, runs, workers):
+    """Run every pending case through the paid brain several times; one representative row per case."""
+    import julius.brain.cloud as jc
+
+    brain, tracker, system = jc.get_brain(), jc.get_tracker(), system_prompt()
+    jobs = [(c, k) for c in pending for k in range(runs)]
+    by_case = {}
+    with ThreadPoolExecutor(workers) as ex:
+        for (case, _k), got in zip(
+            jobs, ex.map(lambda j: brain_turn(j[0], brain, tracker, system), jobs)
+        ):
+            by_case.setdefault(case["id"], []).append(got)
+    rows = {}
+    for case in pending:
+        rs = by_case[case["id"]]
+        verdicts = [all(judge(case, r)) for r in rs]
+
+        def sig(r):
+            return (r["path"], r.get("tool", ""))
+
+        majority_ok = sum(verdicts) * 2 > len(rs)
+        # a run on the majority side represents the case
+        pick = next((r for r, v in zip(rs, verdicts) if v == majority_ok), rs[0])
+        rows[case["id"]] = dict(
+            pick,
+            seconds=sum(r["seconds"] for r in rs) / len(rs),
+            usd=sum(r["usd"] for r in rs),
+            votes_ok=f"{sum(verdicts)}/{len(rs)}",
+            varies=len({sig(r) for r in rs}) > 1,
+            alt="; ".join(sorted({f"{sig(r)[0]}/{sig(r)[1]}" for r in rs})),
+        )
+    return rows
+
+
+def without_brain(pending):
+    """Deterministic-only run: a missing shortcut is still a failure; brain cases are skipped."""
+    rows, skipped = {}, set()
+    for case in pending:
+        if case["expect"]["path"] == "shortcut" and "path_in" not in case["expect"]:
+            rows[case["id"]] = {
+                "path": "fell_through_to_brain",
+                "tool": "",
+                "args": "",
+                "detail": "no shortcut matched",
+                "seconds": 0.0,
+                "usd": 0.0,
+            }
+        else:
+            skipped.add(case["id"])
+    return rows, skipped
+
+
+def result_row(case, got):
+    """The CSV row for one judged case."""
+    e = case["expect"]
+    p, t, ar, s = judge(case, got)
+    if "votes_ok" in got:
+        yes, total = got["votes_ok"].split("/")
+        ok = int(yes) * 2 > int(total)
+    else:
+        ok = p and t and ar and s
+    return {
+        "id": case["id"],
+        "cat": case["cat"],
+        "text": case["text"],
+        "expected_path": e["path"],
+        "expected_tool": e.get("tool")
+        or "|".join(e.get("tool_in", []))
+        or "+".join(e.get("tools_all", [])),
+        "actual_path": got["path"],
+        "actual_tool": got.get("tool", ""),
+        "args": got.get("args", ""),
+        "path_ok": p,
+        "tool_ok": t,
+        "args_ok": ar,
+        "ok": ok,
+        "votes_ok": got.get("votes_ok", ""),
+        "varies": got.get("varies", False),
+        "variants": got.get("alt", ""),
+        "seconds": round(got.get("seconds", 0), 2),
+        "usd": round(got.get("usd", 0), 6),
+        "detail": got.get("detail", ""),
+    }
+
+
+def _pct(xs):
+    return round(100 * sum(xs) / len(xs), 1) if xs else None
+
+
+def _breakdown(out, key):
+    return {
+        k: {
+            "n": sum(1 for r in out if r[key] == k),
+            "ok_pct": _pct([r["ok"] for r in out if r[key] == k]),
+            "path_pct": _pct([r["path_ok"] for r in out if r[key] == k]),
+        }
+        for k in sorted({r[key] for r in out})
+    }
+
+
+def summarize(out, skipped, runs):
+    """Aggregate accuracy, variation, latency and cost over the result rows."""
+    brain_rows = [r for r in out if r["seconds"] > 0]
+    summary = {
+        "suite": "routing",
+        "date": time.strftime("%Y-%m-%d %H:%M"),
+        "cases": len(out),
+        "skipped_brain_cases": len(skipped),
+        "ok_pct": _pct([r["ok"] for r in out]),
+        "path_ok_pct": _pct([r["path_ok"] for r in out]),
+        "tool_ok_pct": _pct([r["tool_ok"] for r in out]),
+        "by_category": _breakdown(out, "cat"),
+        "by_expected_path": _breakdown(out, "expected_path"),
+        "varying_cases": sum(1 for r in out if r["varies"]),
+        "runs_per_brain_case": runs,
+        "brain_mean_seconds": round(sum(r["seconds"] for r in brain_rows) / len(brain_rows), 2)
+        if brain_rows
+        else None,
+        "total_usd": round(sum(r["usd"] for r in out), 4),
+        "confusion": {f"{r['expected_path']}->{r['actual_path']}": 0 for r in out},
+    }
+    for r in out:
+        summary["confusion"][f"{r['expected_path']}->{r['actual_path']}"] += 1
+    return summary
+
+
+def print_report(out, summary, path, broke, fixed, vs, previous):
+    n = len(out)
+    print(
+        f"routing: {summary['varying_cases']} of {sum(1 for r in out if r['votes_ok'])} brain cases vary between runs; {summary['ok_pct']}% correct ({sum(r['ok'] for r in out)}/{n}); path {summary['path_ok_pct']}%, tool {summary['tool_ok_pct']}%; ${summary['total_usd']}; results {path.name}"
+    )
+    for k, v in summary["by_category"].items():
+        print(f"  {k:9} n={v['n']:3} ok={v['ok_pct']}% path={v['path_pct']}%")
+    print("  confusion:", {k: v for k, v in sorted(summary["confusion"].items())})
+    for r in out:
+        if not r["ok"]:
+            print(
+                f"  MISS {r['id']} [{r['cat']}] {r['text'][:70]!r}: expected {r['expected_path']}/{r['expected_tool']} got {r['actual_path']}/{r['actual_tool']} {r['args'][:60]} {r['detail'][:60]}"
+            )
+    if broke:
+        print(f"  REGRESSIONS vs {vs}: {broke}")
+    elif previous:
+        print(f"  no regressions vs {vs}" + (f"; newly passing: {fixed}" if fixed else ""))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument(
@@ -241,120 +400,15 @@ def main():
     )
     os.environ.setdefault("JULIUS_MEMORY_DIR", tempfile.mkdtemp(prefix="julius_eval_mem_"))
     cases = load_cases(set(a.only.split(",")) if a.only else None)
-    sb = Sandbox()
-    rows, pending = {}, []
-    for i, case in enumerate(cases, 1):
-        got = shortcut(case["text"], sb, case.get("ctx"), i, case.get("history"))
-        if got:
-            got.update(seconds=0.0, usd=0.0)
-            rows[case["id"]] = got
-        else:
-            pending.append(case)
+    rows, pending = run_shortcuts(cases)
     skipped = set()
-    runs = {}
     if pending and not a.no_brain:
-        import julius.brain.cloud as jc
-
-        brain, tracker, system = jc.get_brain(), jc.get_tracker(), system_prompt()
-        jobs = [(c, k) for c in pending for k in range(a.runs)]
-        with ThreadPoolExecutor(a.workers) as ex:
-            for (case, k), got in zip(
-                jobs, ex.map(lambda j: brain_turn(j[0], brain, tracker, system), jobs)
-            ):
-                runs.setdefault(case["id"], []).append(got)
-        for case in pending:
-            rs = runs[case["id"]]
-            verdicts = [all(judge(case, r)) for r in rs]
-            sig = lambda r: (r["path"], r.get("tool", ""))
-            majority_ok = sum(verdicts) * 2 > len(rs)
-            pick = next(
-                (r for r, v in zip(rs, verdicts) if v == majority_ok), rs[0]
-            )  # a run on the majority side represents the case
-            rows[case["id"]] = dict(
-                pick,
-                seconds=sum(r["seconds"] for r in rs) / len(rs),
-                usd=sum(r["usd"] for r in rs),
-                votes_ok=f"{sum(verdicts)}/{len(rs)}",
-                varies=len({sig(r) for r in rs}) > 1,
-                alt="; ".join(sorted({f"{sig(r)[0]}/{sig(r)[1]}" for r in rs})),
-            )
-    else:  # deterministic-only run: a missing shortcut is still a failure; brain-dependent cases are skipped
-        for case in pending:
-            if case["expect"]["path"] == "shortcut" and "path_in" not in case["expect"]:
-                rows[case["id"]] = {
-                    "path": "fell_through_to_brain",
-                    "tool": "",
-                    "args": "",
-                    "detail": "no shortcut matched",
-                    "seconds": 0.0,
-                    "usd": 0.0,
-                }
-            else:
-                skipped.add(case["id"])
-    out = []
-    for case in cases:
-        e = case["expect"]
-        if case["id"] in skipped:
-            continue
-        got = rows[case["id"]]
-        p, t, ar, s = judge(case, got)
-        out.append(
-            {
-                "id": case["id"],
-                "cat": case["cat"],
-                "text": case["text"],
-                "expected_path": e["path"],
-                "expected_tool": e.get("tool")
-                or "|".join(e.get("tool_in", []))
-                or "+".join(e.get("tools_all", [])),
-                "actual_path": got["path"],
-                "actual_tool": got.get("tool", ""),
-                "args": got.get("args", ""),
-                "path_ok": p,
-                "tool_ok": t,
-                "args_ok": ar,
-                "ok": (p and t and ar and s)
-                if "votes_ok" not in got
-                else int(got["votes_ok"].split("/")[0]) * 2 > int(got["votes_ok"].split("/")[1]),
-                "votes_ok": got.get("votes_ok", ""),
-                "varies": got.get("varies", False),
-                "variants": got.get("alt", ""),
-                "seconds": round(got.get("seconds", 0), 2),
-                "usd": round(got.get("usd", 0), 6),
-                "detail": got.get("detail", ""),
-            }
-        )
-    n = len(out)
-    pct = lambda xs: round(100 * sum(xs) / len(xs), 1) if xs else None
-    by = lambda key: {
-        k: {
-            "n": sum(1 for r in out if r[key] == k),
-            "ok_pct": pct([r["ok"] for r in out if r[key] == k]),
-            "path_pct": pct([r["path_ok"] for r in out if r[key] == k]),
-        }
-        for k in sorted({r[key] for r in out})
-    }
-    brain_rows = [r for r in out if r["seconds"] > 0]
-    summary = {
-        "suite": "routing",
-        "date": time.strftime("%Y-%m-%d %H:%M"),
-        "cases": n,
-        "skipped_brain_cases": len(skipped),
-        "ok_pct": pct([r["ok"] for r in out]),
-        "path_ok_pct": pct([r["path_ok"] for r in out]),
-        "tool_ok_pct": pct([r["tool_ok"] for r in out]),
-        "by_category": by("cat"),
-        "by_expected_path": by("expected_path"),
-        "varying_cases": sum(1 for r in out if r["varies"]),
-        "runs_per_brain_case": a.runs if not a.no_brain else 0,
-        "brain_mean_seconds": round(sum(r["seconds"] for r in brain_rows) / len(brain_rows), 2)
-        if brain_rows
-        else None,
-        "total_usd": round(sum(r["usd"] for r in out), 4),
-        "confusion": {f"{r['expected_path']}->{r['actual_path']}": 0 for r in out},
-    }
-    for r in out:
-        summary["confusion"][f"{r['expected_path']}->{r['actual_path']}"] += 1
+        rows.update(run_brain(pending, a.runs, a.workers))
+    else:
+        extra, skipped = without_brain(pending)
+        rows.update(extra)
+    out = [result_row(c, rows[c["id"]]) for c in cases if c["id"] not in skipped]
+    summary = summarize(out, skipped, a.runs if not a.no_brain else 0)
     path, previous = common.write_results(
         "partial_routing" if (a.only or a.no_brain) else "routing", out, summary
     )
@@ -365,21 +419,7 @@ def main():
         "newly_passing": fixed,
     }
     path.with_suffix(".summary.json").write_text(json.dumps(summary, indent=1))
-    print(
-        f"routing: {summary['varying_cases']} of {sum(1 for r in out if r['votes_ok'])} brain cases vary between runs; {summary['ok_pct']}% correct ({sum(r['ok'] for r in out)}/{n}); path {summary['path_ok_pct']}%, tool {summary['tool_ok_pct']}%; ${summary['total_usd']}; results {path.name}"
-    )
-    for k, v in summary["by_category"].items():
-        print(f"  {k:9} n={v['n']:3} ok={v['ok_pct']}% path={v['path_pct']}%")
-    print("  confusion:", {k: v for k, v in sorted(summary["confusion"].items())})
-    for r in out:
-        if not r["ok"]:
-            print(
-                f"  MISS {r['id']} [{r['cat']}] {r['text'][:70]!r}: expected {r['expected_path']}/{r['expected_tool']} got {r['actual_path']}/{r['actual_tool']} {r['args'][:60]} {r['detail'][:60]}"
-            )
-    if broke:
-        print(f"  REGRESSIONS vs {vs}: {broke}")
-    elif previous:
-        print(f"  no regressions vs {vs}" + (f"; newly passing: {fixed}" if fixed else ""))
+    print_report(out, summary, path, broke, fixed, vs, previous)
     return 1 if broke else 0
 
 
