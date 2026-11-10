@@ -1,6 +1,7 @@
 """Unit tests for postsoak."""
 
 import datetime
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -72,9 +73,11 @@ class PostSoak(unittest.TestCase):
                 "Log scan (since the soak start)",
                 "Service smoke check with restart",
                 "Event feed check",
-                "Orb app build",
             ],
         )
+        os.environ["JULIUS_UI_REPO"] = "/some/ui"
+        self.addCleanup(os.environ.pop, "JULIUS_UI_REPO", None)
+        self.assertEqual(ps.steps()[-1][0], "UI app build")
         src = Path(ps.__file__).read_text()
         self.assertNotIn('"on"', src.split("def steps")[1].split("def render")[0])
         self.assertNotIn('"run"', src.split("def steps")[1].split("def render")[0])

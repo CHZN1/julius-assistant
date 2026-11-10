@@ -1,10 +1,10 @@
 # Julius
 
-A local-first voice assistant for macOS. Say "Julius" and talk. The wake word, speech recognition and the voice run on your Mac; the thinking is done by Claude (Haiku for conversation, Sonnet for planning, Opus for coding tasks) using your own Anthropic API key. It can look things up, remember what you tell it, tidy your files (always with a preview and a spoken yes), run a sandboxed coding agent, research the web with sources, and be interrupted mid-sentence.
+A voice assistant for macOS with on-device speech and a Claude brain. Say "Julius" and talk. The wake word, speech recognition and the voice run on your Mac; the thinking is done by Claude (Haiku for conversation, Sonnet for planning, Opus for coding tasks) using your own Anthropic API key. It can look things up, remember what you tell it, tidy your files (always with a preview and a spoken yes), run a sandboxed coding agent, research the web with sources, and be interrupted mid-sentence.
 
 ![The Julius orb following a conversation](docs/orb_demo.gif)
 
-*The orb is a separate UI. It follows Julius through a small read-only WebSocket ([docs/EVENT_FEED.md](docs/EVENT_FEED.md)) and an authenticated local write channel ([docs/UI_CHANNEL.md](docs/UI_CHANNEL.md)); anything that speaks those protocols can drive a UI.*
+*The orb in the demo is a separate app and is **not included** in this repository. Julius exposes a read-only WebSocket ([docs/EVENT_FEED.md](docs/EVENT_FEED.md)) and an authenticated local write channel ([docs/UI_CHANNEL.md](docs/UI_CHANNEL.md)); the reference UI here is the events client, `python -m julius.ui_bridge.events_client`, which prints the live feed. Anything that speaks those protocols can drive a UI.*
 
 ## What it does
 
@@ -69,7 +69,7 @@ Numbers come from the author's Mac (M-series, 16 GB) and the suites in `evals/`.
 | Coding task (Opus, small bugfix) | $0.02 to $0.04; default cap $1.50, hard maximum $5 |
 | Day | capped at $5 by default (`[spend] daily_cap_usd`); at 2x Julius switches to the offline model |
 
-## Setup (Apple Silicon, macOS 14+, 16 GB recommended)
+## Setup (Apple Silicon, macOS 14+, Python 3.12, 16 GB recommended)
 
 1. Clone and create an environment: `python -m venv .venv && . .venv/bin/activate && pip install -r requirements-cloud.txt`, and for the local voice `pip install -r requirements-mlx-voice.txt`.
 2. `cp .env.example .env` and paste your `ANTHROPIC_API_KEY` (never committed, never logged). Set a spend cap in the Anthropic console too.

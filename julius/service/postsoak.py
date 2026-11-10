@@ -4,7 +4,7 @@
     python -m julius.service.postsoak unschedule   unload it (its plist file is left for you to delete)
     python -m julius.service.postsoak run          do the steps now (refuses before the soak has ended unless --force)
 
-Steps, in order: soak report, log scan (both --since the soak start, before the restart), `python -m julius.service.service smoke --restart`, event feed check on ws://127.0.0.1:8765, `julius_orb.py build`.
+Steps, in order: soak report, log scan (both --since the soak start, before the restart), `python -m julius.service.service smoke --restart`, event feed check on ws://127.0.0.1:8765, the optional UI build (only when JULIUS_UI_REPO is set).
 Results are appended to JULIUS_POSTSOAK.md. It then STOPS: it does not run the voice script, start the orb, or install the orb login item (`julius_orb.py on`); those wait for the user."""
 
 import datetime
@@ -29,7 +29,9 @@ SOAK_START = "2026-11-08T00:13"
 SOAK_END = "2026-11-09T00:13:48"
 RESULTS = ROOT / "JULIUS_POSTSOAK.md"
 FEED_PORT = 8765
-ORB_REPO = Path("a private UI repo").expanduser()  # the UI lives in its own private repo
+ORB_REPO = Path(
+    os.environ.get("JULIUS_UI_REPO", "")
+).expanduser()  # optional: a separate UI repo with a build command
 
 
 def feed_check(
@@ -89,8 +91,11 @@ def steps() -> list[tuple[str, Callable]]:
             lambda: sh([PY, "-m", "julius.service.service", "smoke", "--restart"], 400),
         ),
         ("Event feed check", lambda: feed_check()),
-        ("Orb app build", lambda: sh([PY, str(ORB_REPO / "julius_orb.py"), "build"], 600)),
-    ]
+    ] + (
+        [("UI app build", lambda: sh([PY, str(ORB_REPO / "julius_orb.py"), "build"], 600))]
+        if os.environ.get("JULIUS_UI_REPO")
+        else []
+    )
 
 
 def render(results: list[tuple[str, bool, str]], when: str) -> str:
