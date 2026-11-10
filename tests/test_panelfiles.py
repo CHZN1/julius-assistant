@@ -124,6 +124,9 @@ class Http(unittest.TestCase):
         self.assertEqual(r.getheader("X-Content-Type-Options"), "nosniff")
         self.assertIn("default-src 'none'", r.getheader("Content-Security-Policy"))
         self.assertEqual(r.getheader("Cache-Control"), "no-store")
+        self.assertEqual(
+            r.getheader("Cross-Origin-Resource-Policy"), "cross-origin"
+        )  # the app page is file://, which is not same-site; the token and Host check are the gate
         self.assertTrue(body.startswith(b"\x89PNG"))
         self.assertTrue(self.server.base.endswith("/tok123"))
 

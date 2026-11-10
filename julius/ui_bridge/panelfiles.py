@@ -188,7 +188,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Content-Security-Policy", "default-src 'none'")
-        self.send_header("Cross-Origin-Resource-Policy", "same-site")
+        self.send_header("Cross-Origin-Resource-Policy", "cross-origin")
         self.end_headers()
         self.wfile.write(data)
 
@@ -198,10 +198,17 @@ class _Handler(BaseHTTPRequestHandler):
     do_POST = do_PUT = do_DELETE = do_PATCH = do_OPTIONS = _no
 
 
+class _Httpd(ThreadingHTTPServer):
+    def handle_error(
+        self, request: Any, client_address: Any
+    ) -> None:  # a browser dropping a connection is not an event worth a traceback
+        pass
+
+
 class PanelFileServer:
     def __init__(self, files: PanelFiles, port: int = DEFAULT_PORT) -> None:
         self.files = files
-        self.httpd = ThreadingHTTPServer((HOST, port), _Handler)
+        self.httpd = _Httpd((HOST, port), _Handler)
         self.httpd.files = files  # type: ignore[attr-defined]
         self.httpd.daemon_threads = True
         self.port = self.httpd.server_address[1]
