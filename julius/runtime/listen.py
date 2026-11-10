@@ -9,7 +9,7 @@ from typing import Any
 import numpy as np
 
 import julius.memory.sessions as jm
-from julius import config
+from julius import config, log
 from julius.agents import code_agent
 from julius.audio.cancellation import TurnCancelled
 from julius.audio.listening import (
@@ -40,6 +40,14 @@ from julius.runtime.turn import process
 
 MAX_UTTERANCE_CHUNKS = int(30 * SAMPLE_RATE / CHUNK)
 CHECK_IN = "(no spoken input — check in on the user)"
+
+
+def log_ui_pickup(entry: Any, remaining: int) -> None:
+    """Log the moment the main loop takes a line typed in the orb off the queue (how long it waited)."""
+    queued_at = getattr(entry, "queued_at", None)
+    if getattr(entry, "from_ui", False) and queued_at is not None:
+        waited = round(time.monotonic() - queued_at, 3)
+        log.event("ui_typed", stage="picked_up", waited=waited, queue=remaining)
 
 
 class Listener:
@@ -218,8 +226,21 @@ class Listener:
     def run_typed_request(self, entry: Any) -> None:
         s = self.s
         s.text_only = bool(getattr(entry, "from_ui", False)) and self.typed_reply_is_text()
+        started = time.monotonic()
         try:
             process(s, entry, "typed")
+        except Exception as exc:
+            if getattr(entry, "from_ui", False):
+                log.event("ui_typed", stage="failed", error=type(exc).__name__)
+            raise
+        else:
+            if getattr(entry, "from_ui", False):
+                log.event(
+                    "ui_typed",
+                    stage="answered",
+                    seconds=round(time.monotonic() - started, 2),
+                    spoken=not s.text_only,
+                )
         finally:
             s.text_only = False
 
@@ -230,6 +251,7 @@ class Listener:
             s.typed.popleft()
             raise KeyboardInterrupt
         entry = s.typed.popleft()
+        log_ui_pickup(entry, len(s.typed))
         if getattr(entry, "drop_notice", False):
             self.announce_drop(entry)
             return

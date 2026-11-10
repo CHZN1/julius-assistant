@@ -27,6 +27,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from julius import log
+
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8775
 MAX_BODY = 16 * 1024
@@ -158,6 +160,7 @@ class Channel:
         body = self._read_json(headers, body_reader)
         if path == "/v1/typed":
             text = validate_typed(body)
+            log.event("ui_typed", stage="received", chars=len(text))  # never the text itself
             res = self._handler("typed", "typing is not available")(text)
             self.audit("typed", 200, chars=len(text))
         else:
@@ -222,11 +225,22 @@ class Channel:
                     status, out = chan.handle(method, self.path, self.headers, self.rfile.read)
                 except Refused as r:
                     status, out = r.status, {"ok": False, "error": r.why}
+                    log.event(
+                        "ui_request_refused",
+                        endpoint=self.path.split("?")[0][:40],
+                        status=status,
+                        why=r.why,
+                    )
                     chan.audit(self.path.split("?")[0][:40], status, why=r.why)
                 except (
                     Exception
                 ) as e:  # a handler bug must not take the server down or leak internals
                     status, out = 500, {"ok": False, "error": "internal error"}
+                    log.event(
+                        "ui_request_failed",
+                        endpoint=self.path.split("?")[0][:40],
+                        error=type(e).__name__,
+                    )
                     chan.audit(self.path.split("?")[0][:40], 500, why=type(e).__name__)
                 data = json.dumps(out).encode()
                 self.send_response(status)

@@ -2,10 +2,11 @@
 
 import json
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
-from julius import config
+from julius import config, log
 from julius.agents import dropstage, files
 from julius.runtime.controls import stop_now
 from julius.runtime.session import Session
@@ -51,7 +52,10 @@ def ui_drop(s: Session, paths: Any) -> dict:
 def ui_typed(s: Session, text: str) -> dict:
     """Text typed in the orb: queued exactly like a line typed in the terminal, so it takes the same
     path as speech (and wakes him for that turn)."""
-    s.typed.append(uichannel.TypedText(text))
+    entry = uichannel.TypedText(text)
+    entry.queued_at = time.monotonic()
+    s.typed.append(entry)
+    log.event("ui_typed", stage="queued", queue=len(s.typed))
     return {"queued": True}
 
 

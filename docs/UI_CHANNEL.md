@@ -54,3 +54,17 @@ enabled = true
 port = 8775
 typed_reply = "both"   # or "text"
 ```
+
+## Log events for typed input
+
+Each line typed in the orb leaves four events in `~/Library/Logs/Julius/julius.jsonl` (all named `ui_typed`, field `stage`), so a "typing does nothing" report can be traced to the step that stopped:
+
+| stage | where | fields |
+|---|---|---|
+| `received` | the channel accepted a valid `POST /v1/typed` | `chars` |
+| `queued` | the line was put on the main loop's queue | `queue` (length) |
+| `picked_up` | the main loop took it off the queue | `waited` (seconds), `queue` |
+| `answered` | the turn finished | `seconds`, `spoken` |
+| `failed` | the turn raised | `error` (exception type) |
+
+Requests the channel refuses (`ui_request_refused`: status and reason) or that crash a handler (`ui_request_failed`) are logged too. The typed text itself is never logged.

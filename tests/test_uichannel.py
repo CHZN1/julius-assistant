@@ -87,6 +87,24 @@ class Channel(Base):
         self.assertTrue(out["queued"])
         self.assertEqual(self.got["typed"], ["what's the weather"])
 
+    def test_a_typed_request_is_logged_as_received_without_its_text(self):
+        from unittest.mock import patch
+
+        with patch("julius.ui_bridge.uichannel.log.event") as event:
+            self.req(body={"text": "what's the weather in springfield"})
+        event.assert_any_call(
+            "ui_typed", stage="received", chars=len("what's the weather in springfield")
+        )
+        self.assertNotIn("springfield", repr(event.call_args_list))
+
+    def test_refused_requests_are_logged(self):
+        from unittest.mock import patch
+
+        with patch("julius.ui_bridge.uichannel.log.event") as event:
+            self.req(body={"text": "hi"}, auth=False)
+        names = [c.args[0] for c in event.call_args_list]
+        self.assertIn("ui_request_refused", names)
+
     def test_token_is_required_and_wrong_tokens_fail(self):
         self.assertEqual(self.req(body={"text": "hi"}, auth=False)[0], 401)
         self.assertEqual(
