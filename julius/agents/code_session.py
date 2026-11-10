@@ -179,25 +179,13 @@ class CodeSession:
 
     # ---- the voice commands ----
     def handle(self, text, turn=0):
+        """Run a spoken coding-task command, or return None when the words are not one."""
         text = " ".join(text.strip().split())
         lowered = text.rstrip(".!?").strip()
         if self.pending:
-            kind, task_id = self.pending
-            if YES.match(lowered) or confirm.is_yes(lowered):
-                return self._confirm(kind, task_id)
-            if NO.match(lowered) or confirm.is_no(lowered):
-                self.pending = None
-                return self._decline(kind, task_id)
-            fresh = time.monotonic() - getattr(self, "pending_at", 0.0) <= PENDING_TTL
-            if (
-                kind == "start"
-                and fresh
-                and len(lowered.split()) >= 7
-                and not text.endswith("?")
-                and not (START.match(lowered) or CANCEL.match(lowered))
-            ):
-                return None  # garbled / stray speech (his own preview heard back) must not lose the question; merge and discard stay strict
-            self.pending = None  # an unrelated request cancels the question, as with files
+            answered, out = self._answer_pending(text, lowered)
+            if answered:
+                return out
         m = START.match(lowered)
         if m:
             return self._start_command(m.group("goal").strip())
@@ -208,15 +196,35 @@ class CodeSession:
             and (ca.running() or ((self.latest() or None) and self.latest().status in FINISHED))
         ):
             return self._status()
-        if UNDO_MERGE.match(lowered):
-            return self._undo_merge()
-        if SHOW.match(lowered):
-            return self._show()
-        if MERGE.match(lowered):
-            return self._merge_preview()
-        if DISCARD.match(lowered):
-            return self._discard_preview()
+        for pattern, action in (
+            (UNDO_MERGE, self._undo_merge),
+            (SHOW, self._show),
+            (MERGE, self._merge_preview),
+            (DISCARD, self._discard_preview),
+        ):
+            if pattern.match(lowered):
+                return action()
         return None
+
+    def _answer_pending(self, text, lowered):
+        """A yes or no to the question just asked: (True, result), else (False, None) to go on."""
+        kind, task_id = self.pending
+        if YES.match(lowered) or confirm.is_yes(lowered):
+            return True, self._confirm(kind, task_id)
+        if NO.match(lowered) or confirm.is_no(lowered):
+            self.pending = None
+            return True, self._decline(kind, task_id)
+        fresh = time.monotonic() - getattr(self, "pending_at", 0.0) <= PENDING_TTL
+        if (
+            kind == "start"
+            and fresh
+            and len(lowered.split()) >= 7
+            and not text.endswith("?")
+            and not (START.match(lowered) or CANCEL.match(lowered))
+        ):
+            return True, None  # garbled / stray speech (his own preview heard back) must not lose the question; merge and discard stay strict
+        self.pending = None  # an unrelated request cancels the question, as with files
+        return False, None
 
     def _start_command(self, goal):
         cap = None
