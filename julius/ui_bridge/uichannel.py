@@ -139,6 +139,24 @@ class Channel:
 
     def handle(self, method, path, headers, body_reader):
         """Returns (status, dict). Raises nothing; every refusal is a Refused turned into a response by the caller."""
+        self._authenticate(headers)
+        if method == "GET" and path == "/v1/ping":
+            return 200, {"ok": True}
+        if method != "POST" or path not in ("/v1/typed", "/v1/drop"):
+            raise Refused(404, "no such endpoint")
+        body = self._read_json(headers, body_reader)
+        if path == "/v1/typed":
+            text = validate_typed(body)
+            res = self._handler("typed", "typing is not available")(text)
+            self.audit("typed", 200, chars=len(text))
+        else:
+            paths = validate_paths(body)
+            res = self._handler("drop", "drops are not available")(paths)
+            self.audit("drop", 200, paths=len(paths))
+        return 200, {"ok": True, **(res or {})}
+
+    def _authenticate(self, headers):
+        """Local host, no browser Origin, under the rate limit, and the right bearer token."""
         host = (headers.get("Host") or "").lower()
         if host not in (f"127.0.0.1:{self.port}", f"localhost:{self.port}"):
             raise Refused(403, "bad Host")
@@ -152,10 +170,9 @@ class Channel:
             and hmac.compare_digest(auth[7:].strip().encode(), self.token.encode())
         ):
             raise Refused(401, "bad token")
-        if method == "GET" and path == "/v1/ping":
-            return 200, {"ok": True}
-        if method != "POST" or path not in ("/v1/typed", "/v1/drop"):
-            raise Refused(404, "no such endpoint")
+
+    @staticmethod
+    def _read_json(headers, body_reader) -> dict:
         if (headers.get("Content-Type") or "").split(";")[0].strip().lower() != "application/json":
             raise Refused(415, "Content-Type must be application/json")
         try:
@@ -170,21 +187,13 @@ class Channel:
             raise Refused(400, "body is not JSON")
         if not isinstance(body, dict):
             raise Refused(400, "body must be an object")
-        if path == "/v1/typed":
-            text = validate_typed(body)
-            h = self.handlers.get("typed")
-            if h is None:
-                raise Refused(503, "typing is not available")
-            res = h(text)
-            self.audit("typed", 200, chars=len(text))
-            return 200, {"ok": True, **(res or {})}
-        paths = validate_paths(body)
-        h = self.handlers.get("drop")
-        if h is None:
-            raise Refused(503, "drops are not available")
-        res = h(paths)
-        self.audit("drop", 200, paths=len(paths))
-        return 200, {"ok": True, **(res or {})}
+        return body
+
+    def _handler(self, name, unavailable):
+        handler = self.handlers.get(name)
+        if handler is None:
+            raise Refused(503, unavailable)
+        return handler
 
     def start(self):
         chan = self

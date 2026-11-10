@@ -118,105 +118,118 @@ class SpeechEngine:
             self.worker = None
 
     def synthesize(self, text, speed=1.05):
+        """Yield (float32 mono audio, sample rate) chunks for the text from the selected engine."""
         check_cancel(getattr(self, "cancel_event", None))
         if self.backend == "kokoro":
             for _, _, audio in self.model(text, voice="am_adam", speed=speed):
                 yield np.asarray(audio, dtype=np.float32), 24000
         elif getattr(self, "_isolated_worker", False):
-            if self.worker is None or self.worker.poll() is not None:
-                self._start_worker()
-            import json
-
-            self.worker.stdin.write(
-                json.dumps(
-                    {
-                        "text": text,
-                        "delivery_mode": getattr(self, "response_delivery_mode", None),
-                        "span_words": int(os.environ.get("JULIUS_MLX_SPAN_WORDS", "36")),
-                    }
-                )
-                + "\n"
-            )
-            self.worker.stdin.flush()
-            if self.backend == "qwen-mlx":
-                import time
-
-                deadline = time.monotonic() + 120
-                finished = False
-                self._stream_active = True
-                received = False
-                pending = (
-                    True  # pending: the worker has not yet sent 'done' or 'error' for this reply
-                )
-                try:
-                    while True:
-                        line = self._worker_line(
-                            timeout=max(0, min(90, deadline - time.monotonic()))
-                        )
-                        if not line:
-                            raise RuntimeError("MLX speech worker stopped")
-                        result = json.loads(line)
-                        if "error" in result:
-                            pending = False
-                            raise RuntimeError(result["error"])
-                        if result.get("done"):
-                            pending = False
-                            if not received:
-                                raise RuntimeError("MLX worker produced no speech")
-                            self.worker_metrics = result
-                            finished = True
-                            break
-                        if not result.get("chunk"):
-                            raise RuntimeError("Invalid MLX worker response")
-                        audio = np.load(result["path"], allow_pickle=False)
-                        if audio.ndim != 1 or not audio.size or not np.isfinite(audio).all():
-                            raise FloatingPointError("Invalid MLX worker audio")
-                        received = True
-                        yield audio, result["sample_rate"]
-                finally:
-                    # A partially consumed stream cannot leave stale messages for another request.
-                    if not finished:
-                        if pending:
-                            self._abandon_stream()  # stale chunk lines must not reach the next reply, whatever suspend() does
-                        self.suspend()
-                    self._stream_active = False
-                return
-            line = self._worker_line(timeout=90)
-            if not line:
-                raise RuntimeError("Qwen speech worker stopped")
-            result = json.loads(line)
-            if "error" in result:
-                raise RuntimeError(result["error"])
-            self.worker_metrics = result
-            yield np.load(result["path"], allow_pickle=False), result["sample_rate"]
+            yield from self._synthesize_in_worker(text)
         else:
-            import torch
+            yield from self._synthesize_in_process(text)
 
-            from julius.audio.voice_identity import delivery_mode, numerical_failure
+    def _synthesize_in_worker(self, text):
+        if self.worker is None or self.worker.poll() is not None:
+            self._start_worker()
+        import json
 
-            self.delivery_mode = (
-                (getattr(self, "response_delivery_mode", None) or delivery_mode(text))
-                if self.strategy == "two-prompt"
-                else "composite"
+        self.worker.stdin.write(
+            json.dumps(
+                {
+                    "text": text,
+                    "delivery_mode": getattr(self, "response_delivery_mode", None),
+                    "span_words": int(os.environ.get("JULIUS_MLX_SPAN_WORDS", "36")),
+                }
             )
-            try:
-                audio, sr = self._generate_qwen(text)
-            except Exception as exc:
-                if self.dtype_name != "bfloat16" or not numerical_failure(exc):
-                    raise
-                # Retry numerical failure once; allocation failures do not trigger it.
-                exc.__traceback__ = None
-                self.model = None
-                self.prompts = {}
-                import gc
+            + "\n"
+        )
+        self.worker.stdin.flush()
+        if self.backend == "qwen-mlx":
+            yield from self._stream_mlx_chunks()
+            return
+        line = self._worker_line(timeout=90)
+        if not line:
+            raise RuntimeError("Qwen speech worker stopped")
+        result = json.loads(line)
+        if "error" in result:
+            raise RuntimeError(result["error"])
+        self.worker_metrics = result
+        yield np.load(result["path"], allow_pickle=False), result["sample_rate"]
 
-                gc.collect()
-                if torch.backends.mps.is_available():
-                    torch.mps.empty_cache()
-                self.dtype_name = "float32"
-                self._load_qwen(torch.float32)
-                audio, sr = self._generate_qwen(text)
-            yield audio, sr
+    def _stream_mlx_chunks(self):
+        """Read the MLX worker's chunk lines until it says done; a partial read resets the worker."""
+        import json
+        import time
+
+        deadline = time.monotonic() + 120
+        finished = False
+        self._stream_active = True
+        received = False
+        pending = True  # pending: the worker has not yet sent 'done' or 'error' for this reply
+        try:
+            while True:
+                line = self._worker_line(timeout=max(0, min(90, deadline - time.monotonic())))
+                if not line:
+                    raise RuntimeError("MLX speech worker stopped")
+                result = json.loads(line)
+                if "error" in result:
+                    pending = False
+                    raise RuntimeError(result["error"])
+                if result.get("done"):
+                    pending = False
+                    if not received:
+                        raise RuntimeError("MLX worker produced no speech")
+                    self.worker_metrics = result
+                    finished = True
+                    break
+                audio = self._load_chunk(result)
+                received = True
+                yield audio, result["sample_rate"]
+        finally:
+            # A partially consumed stream cannot leave stale messages for another request.
+            if not finished:
+                if pending:
+                    self._abandon_stream()  # stale chunk lines must not reach the next reply, whatever suspend() does
+                self.suspend()
+            self._stream_active = False
+
+    @staticmethod
+    def _load_chunk(result):
+        if not result.get("chunk"):
+            raise RuntimeError("Invalid MLX worker response")
+        audio = np.load(result["path"], allow_pickle=False)
+        if audio.ndim != 1 or not audio.size or not np.isfinite(audio).all():
+            raise FloatingPointError("Invalid MLX worker audio")
+        return audio
+
+    def _synthesize_in_process(self, text):
+        import torch
+
+        from julius.audio.voice_identity import delivery_mode, numerical_failure
+
+        self.delivery_mode = (
+            (getattr(self, "response_delivery_mode", None) or delivery_mode(text))
+            if self.strategy == "two-prompt"
+            else "composite"
+        )
+        try:
+            audio, sr = self._generate_qwen(text)
+        except Exception as exc:
+            if self.dtype_name != "bfloat16" or not numerical_failure(exc):
+                raise
+            # Retry numerical failure once; allocation failures do not trigger it.
+            exc.__traceback__ = None
+            self.model = None
+            self.prompts = {}
+            import gc
+
+            gc.collect()
+            if torch.backends.mps.is_available():
+                torch.mps.empty_cache()
+            self.dtype_name = "float32"
+            self._load_qwen(torch.float32)
+            audio, sr = self._generate_qwen(text)
+        yield audio, sr
 
     def _load_qwen(self, dtype):
         import torch
