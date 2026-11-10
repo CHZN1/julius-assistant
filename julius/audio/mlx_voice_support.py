@@ -22,7 +22,7 @@ def load_reference_prompts(model: Any) -> Any:
 
     refs = {}
     for mode, path in [("balanced", BALANCED_REFERENCE), ("lift", LIFT_REFERENCE)]:
-        directory = ROOT / ".cache/julius-mlx-prompts"
+        directory = ROOT / "julius_1301_tuning/codec_prompts"
         info = json.loads((directory / f"{mode}.json").read_text())
         if (
             info["sha256"] != hashlib.sha256(path.read_bytes()).hexdigest()

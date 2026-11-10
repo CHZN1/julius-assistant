@@ -45,7 +45,7 @@ decoder module and evaluates full-decoder chunks separately, with 96 codec
 tokens and 25 tokens of left context. It does not edit installed package files.
 
 The official Qwen encoder now exports both complete reference-code prompts once
-to .cache/julius-mlx-prompts. MLX checks reference SHA256 and the exact transcript
+to .cache/codec_prompts. MLX checks reference SHA256 and the exact transcript
 before reusing them. This avoids its expensive full-reference encoding path.
 The worker drops the now-unused encoder weights after prompt loading. Final
 reminder tests measured about **2.29 GB active MLX allocations**, **2.84 GB peak**.
