@@ -17,6 +17,7 @@ import time
 import wave
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from numpy import ndarray
@@ -71,7 +72,7 @@ class SessionRecorder:
         except Exception:
             pass
 
-    def pair(self, raw, ref) -> None:
+    def pair(self, raw: str, ref: Any) -> None:
         """Duplex audio: the microphone as captured and what the speakers played in the same callback. The reference is placed at the microphone's own sample position, so they are exactly aligned."""
         if self._closed:
             return

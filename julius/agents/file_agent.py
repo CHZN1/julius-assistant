@@ -188,7 +188,7 @@ def result(ok: bool, code: str, message: str, **data) -> dict[str, Any]:
 
 def response(method: Callable) -> Callable:
     @wraps(method)
-    def wrapped(self, *args, **kwargs):
+    def wrapped(self, *args, **kwargs) -> Any:
         try:
             return method(self, *args, **kwargs)
         except FileProblem as exc:
@@ -295,7 +295,7 @@ class FileAgent:
         """A configured folder outside Documents/Desktop/Downloads named anywhere in a relative path ("sandbox", "sand box/a.txt", "Documents/dev/Sandbox") -> that folder plus the rest."""
         standard = {self.root / n for n in ("Documents", "Desktop", "Downloads")}
 
-        def key(x):
+        def key(x: Any) -> Any:
             return re.sub(r"[^a-z0-9]", "", str(x).casefold())
 
         extras = {
@@ -310,7 +310,9 @@ class FileAgent:
                     return extras[key("".join(words[i:j]))].joinpath(*words[j:])
         return None
 
-    def resolve(self, value: str | Path = ".", *, new=False, internal=False) -> Path:
+    def resolve(
+        self, value: str | Path = ".", *, new: bool = False, internal: bool = False
+    ) -> Path:
         """Turn a spoken or typed path into a checked absolute path inside the allowed folders."""
         raw = str(value).strip().strip('"').strip("'")
         if not raw:
@@ -509,7 +511,9 @@ class FileAgent:
             "sha256": h.hexdigest(),
         }
 
-    def _matches(self, path: str | Path, expected: dict[str, str | int], *, identity=False) -> bool:
+    def _matches(
+        self, path: str | Path, expected: dict[str, str | int], *, identity: bool = False
+    ) -> bool:
         try:
             p = self.resolve(path, internal=True)
             info = p.stat()
@@ -736,15 +740,15 @@ class FileAgent:
         self,
         action: str,
         *,
-        source=".",
-        destination=None,
-        pattern="*",
-        recursive=False,
-        path=None,
-        content=None,
-        turn=0,
-        paths=None,
-        origin="human",
+        source: str = ".",
+        destination: Any | None = None,
+        pattern: str = "*",
+        recursive: bool = False,
+        path: Any | None = None,
+        content: Any | None = None,
+        turn: int = 0,
+        paths: Any | None = None,
+        origin: str = "human",
     ) -> dict[str, Any]:
         if action == "trash":
             return self._propose_trash(source, pattern, paths, origin, turn)
@@ -1378,7 +1382,7 @@ class FileAgent:
         return h.hexdigest()
 
     @response
-    def execute(self, plan_id: str, *, confirmed=False, turn=0) -> dict[str, Any]:
+    def execute(self, plan_id: str, *, confirmed: bool = False, turn: int = 0) -> dict[str, Any]:
         if confirmed is not True:
             raise FileProblem(
                 "confirmation_required", "Please confirm the displayed file plan before running it."

@@ -5,6 +5,7 @@ import os
 import re
 import time
 from types import SimpleNamespace
+from typing import Any
 
 import julius.brain.tools as jt
 
@@ -44,7 +45,7 @@ _GENERATION_METRICS = {}
 _TOOL_CALL_RE = re.compile(r"<tool_call>\s*(.*?)\s*</tool_call>", re.DOTALL)
 
 
-def _load_mlx_brain():
+def _load_mlx_brain() -> Any:
     """Load the quantized Qwen3 brain once, in-process."""
     global _MLX_MODEL, _MLX_TOKENIZER
     if _MLX_MODEL is None:
@@ -64,7 +65,7 @@ def _load_mlx_brain():
     return _MLX_MODEL, _MLX_TOKENIZER
 
 
-def _normalize_mlx_messages(messages):
+def _normalize_mlx_messages(messages: Any) -> Any:
     """Normalize Julius/Ollama-style tool-call history for Qwen's chat template."""
     out = []
     for msg in messages:
@@ -95,7 +96,7 @@ def _normalize_mlx_messages(messages):
     return out
 
 
-def _render_mlx_prompt(messages, tools=None):
+def _render_mlx_prompt(messages: Any, tools: Any | None = None) -> Any:
     """Apply Qwen3's native chat template with thinking explicitly disabled."""
     _, tok = _load_mlx_brain()
     msgs = _normalize_mlx_messages(messages)
@@ -119,7 +120,7 @@ def _render_mlx_prompt(messages, tools=None):
     return tok.apply_chat_template(msgs, **kwargs)
 
 
-def _parse_mlx_tool_calls(text):
+def _parse_mlx_tool_calls(text: str) -> Any:
     """Convert Qwen3 <tool_call> blocks into the object shape Julius already uses."""
     calls = []
     if "<tool_call>" in (text or "") and not _TOOL_CALL_RE.search(text):
@@ -138,7 +139,7 @@ def _parse_mlx_tool_calls(text):
     return calls
 
 
-def _mlx_generation_kwargs(options=None):
+def _mlx_generation_kwargs(options: Any | None = None) -> Any:
     """Translate the small subset of Ollama options Julius actually uses."""
     options = options or {}
     max_tokens = int(options.get("num_predict", 256))
@@ -151,7 +152,7 @@ def _mlx_generation_kwargs(options=None):
     return kwargs
 
 
-def _fallback_applies(exc, model):
+def _fallback_applies(exc: Any, model: Any) -> Any:
     """Missing model (404) or a model too large to load (5xx mentioning memory)."""
     if not OLLAMA_FALLBACK or model == OLLAMA_FALLBACK:
         return False
@@ -159,7 +160,7 @@ def _fallback_applies(exc, model):
     return status == 404 or (status >= 500 and "memory" in str(exc).lower())
 
 
-def _ollama_chat(**kwargs):
+def _ollama_chat(**kwargs) -> Any:
     """ollama.chat on the primary model, falling back to OLLAMA_FALLBACK for this and later turns
     until close_backend() resets it, so the primary is retried at the next model phase."""
     global _ACTIVE_OLLAMA
@@ -167,7 +168,7 @@ def _ollama_chat(**kwargs):
 
     model = _ACTIVE_OLLAMA or LLM
 
-    def switch(exc):
+    def switch(exc: Any) -> Any:
         global _ACTIVE_OLLAMA
         print(
             f"  [brain {model} unavailable ({str(exc)[:80]}); using fallback {OLLAMA_FALLBACK}]",
@@ -201,7 +202,7 @@ def _ollama_chat(**kwargs):
     return parts()
 
 
-def _offline_chat(messages, tools, stream, options):
+def _offline_chat(messages: Any, tools: Any, stream: Any, options: Any) -> Any:
     """Local fallback for the cloud brain: the offline model is loaded only now and released when the API is back."""
     import ollama
 
@@ -237,8 +238,14 @@ def release_offline() -> None:
 
 
 def llm_chat(
-    *, messages, tools=None, think=False, stream=False, keep_alive=KEEP_ALIVE, options=None
-):
+    *,
+    messages: Any,
+    tools: Any | None = None,
+    think: bool = False,
+    stream: bool = False,
+    keep_alive: Any = KEEP_ALIVE,
+    options: Any | None = None,
+) -> Any:
     """MLX-backed drop-in adapter for the subset of ollama.chat Julius uses.
 
     The rest of Julius can keep using:
@@ -349,7 +356,7 @@ def prepare_backend() -> None:
         close_backend()
 
 
-def _free_memory_percent():
+def _free_memory_percent() -> Any:
     """System-wide free memory percentage, cached for a few seconds (shells out to memory_pressure)."""
     global _FREE_CACHE
     now = time.monotonic()
@@ -364,7 +371,7 @@ def _free_memory_percent():
     return _FREE_CACHE[1]
 
 
-def keep_brain_loaded():
+def keep_brain_loaded() -> bool:
     """True when the Ollama brain may stay resident across ASR/voice phases.
 
     Ollama's keep_alive (5m) then unloads it when idle. Idle/sleep and shutdown still call
@@ -376,11 +383,11 @@ def keep_brain_loaded():
     return _free_memory_percent() >= KEEP_BRAIN_MIN_FREE
 
 
-def generation_metrics():
+def generation_metrics() -> Any:
     return dict(_GENERATION_METRICS)
 
 
-def release_metrics():
+def release_metrics() -> Any:
     return dict(_RELEASE_METRICS)
 
 

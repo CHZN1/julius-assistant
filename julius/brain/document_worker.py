@@ -5,13 +5,14 @@ import json
 import sys
 import xml.etree.ElementTree as ET
 import zipfile
+from typing import Any
 
 MAX_BYTES = 20 * 1024 * 1024
 MAX_TEXT = 20000
 MAX_PAGES = 20
 
 
-def _pdf_chunks(raw):
+def _pdf_chunks(raw: str) -> Any:
     """-> (page chunks, truncated, warnings)."""
     from pypdf import PdfReader
 
@@ -37,7 +38,7 @@ def _pdf_chunks(raw):
     return chunks, total > MAX_PAGES, warnings
 
 
-def _docx_chunks(raw):
+def _docx_chunks(raw: str) -> Any:
     with zipfile.ZipFile(io.BytesIO(raw)) as archive:
         info = archive.getinfo("word/document.xml")
         if info.file_size > 8 * 1024 * 1024:
@@ -60,7 +61,7 @@ def _docx_chunks(raw):
     return chunks, truncated, warnings
 
 
-def _text_chunks(raw):
+def _text_chunks(raw: str) -> Any:
     if b"\x00" in raw[:8192]:
         raise ValueError("This file contains binary data.")
     chunks = []
@@ -74,7 +75,7 @@ def _text_chunks(raw):
     return chunks, truncated, []
 
 
-def _bounded(chunks):
+def _bounded(chunks: Any) -> Any:
     """Clip the chunks to MAX_TEXT characters in all; returns (chunks, whether anything was cut)."""
     bounded = []
     truncated = False
@@ -91,7 +92,7 @@ def _bounded(chunks):
     return bounded, truncated
 
 
-def extract(raw, suffix):
+def extract(raw: str, suffix: Any) -> Any:
     """Extract bounded text chunks from PDF, DOCX or text bytes into a result dict."""
     if suffix == ".pdf":
         chunks, truncated, warnings = _pdf_chunks(raw)

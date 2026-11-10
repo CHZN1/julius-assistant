@@ -105,7 +105,7 @@ def latency(rows: list[dict[str, str]]) -> dict[str, int | dict[str, float | int
         with contextlib.suppress(KeyError, ValueError):
             low_conf += float(f["asr_logprob"]) < -1.0
 
-    def pct(xs, q):
+    def pct(xs: Any, q: Any) -> Any:
         return round(sorted(xs)[min(len(xs) - 1, int(q * len(xs)))], 2)
 
     return {
@@ -287,7 +287,7 @@ def render(
     return "\n".join(out)
 
 
-def main(argv=None) -> int:
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--since", default="")
     ap.add_argument("--dir", default=str(LOG_DIR))

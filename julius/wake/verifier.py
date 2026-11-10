@@ -11,7 +11,9 @@ Training sessions used: wake, wake2, quick, talk1, talk2, talk4 (when recorded).
 
 import argparse
 import pickle
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import soundfile as sf
@@ -25,7 +27,7 @@ DATA = ROOT / "wake" / "data"
 SR, FRAME = 16000, 1280
 
 
-def windows(model, name, audio, min_score, every=None):
+def windows(model: Any, name: str, audio: Any, min_score: Any, every: Any | None = None) -> Any:
     """16 x 96 feature windows at frames whose detector score >= min_score (and, for background, every `every` frames)."""
     model.reset()
     x = np.concatenate(
@@ -40,13 +42,18 @@ def windows(model, name, audio, min_score, every=None):
     return out
 
 
-def load(path):
+def load(path: Any) -> Any:
     a, sr = sf.read(path, dtype="float32")
     return a if a.ndim == 1 else a[:, 0]
 
 
 def train(
-    out, holdout=None, min_score=0.05, seed=0, sessions="wake,wake2,quick", model=None
+    out: Callable[[str], Any],
+    holdout: Any | None = None,
+    min_score: float = 0.05,
+    seed: int = 0,
+    sessions: str = "wake,wake2,quick",
+    model: Any | None = None,
 ) -> None:
     import build_dataset as bd
     from openwakeword.model import Model
@@ -73,7 +80,7 @@ def train(
     count["negatives: your talk"] = len(neg)
     len(neg)
 
-    def sample(sub, n, label, every=None):
+    def sample(sub: Any, n: int, label: str, every: Any | None = None) -> Any:
         files = sorted((DATA / sub).glob("*.wav"))
         rng.shuffle(files)
         got = []
@@ -112,7 +119,7 @@ def train(
     )
 
 
-def load_verifier(path=None):
+def load_verifier(path: Any | None = None) -> Any:
     path = Path(path).expanduser() if path else DEFAULT
     return pickle.load(open(path, "rb")) if path.exists() else None
 

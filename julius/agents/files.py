@@ -47,7 +47,7 @@ def agent() -> FileAgent:
     return _INSTANCE[1]
 
 
-def _safe(p):
+def _safe(p: Any) -> Any:
     return agent().resolve(p, new=True)
 
 
@@ -78,7 +78,13 @@ def render(res: dict[str, Any]) -> str:
     return text
 
 
-def propose_move(pattern="*", source=".", destination=None, recursive=False, **_):
+def propose_move(
+    pattern: str = "*",
+    source: str = ".",
+    destination: Any | None = None,
+    recursive: bool = False,
+    **_,
+) -> Any:
     return render(
         agent().propose(
             "move",
@@ -91,13 +97,13 @@ def propose_move(pattern="*", source=".", destination=None, recursive=False, **_
     )
 
 
-def show_plan(plan_id, **_):
+def show_plan(plan_id: Any, **_) -> Any:
     return render(agent().show(plan_id))
 
 
-def execute_plan(plan_id, confirmed=False, **_):
+def execute_plan(plan_id: Any, confirmed: bool = False, **_) -> Any:
     return render(agent().execute(plan_id, confirmed=confirmed, turn=_TURN["n"]))
 
 
-def undo_last(**_):
+def undo_last(**_) -> Any:
     return render(agent().undo())

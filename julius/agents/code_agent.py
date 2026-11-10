@@ -407,7 +407,13 @@ def prompt_for(task: Task) -> str:
 
 
 def build_command(
-    task: Task, api_key: str, *, claude="claude", config=None, sandbox=True, proxy=None
+    task: Task,
+    api_key: str,
+    *,
+    claude: str = "claude",
+    config: dict[str, Any] | None = None,
+    sandbox: bool = True,
+    proxy: Any | None = None,
 ) -> tuple[list[str], dict[str, str], Path]:
     """(argv, env, cwd) for the run. The caller starts it; tests inspect it."""
     cfg = {**DEFAULT_CONFIG, **(config or {})}
@@ -669,7 +675,14 @@ def spent_today(tracker: CostTracker) -> int | float:
 
 
 def start(
-    task: Task, *, api_key, tracker=None, config=None, claude=None, sandbox=True, on_done=None
+    task: Task,
+    *,
+    api_key: Any,
+    tracker: Any | None = None,
+    config: dict[str, Any] | None = None,
+    claude: Any | None = None,
+    sandbox: bool = True,
+    on_done: Any | None = None,
 ) -> Run:
     """Begin the task in the background. Raises CodeProblem when something else is running or the daily coding budget would be exceeded."""
     cfg = {**DEFAULT_CONFIG, **(config or {})}
@@ -705,7 +718,15 @@ def start(
     return run
 
 
-def _execute(run, api_key, tracker, cfg, claude, sandbox, on_done) -> None:
+def _execute(
+    run: Any,
+    api_key: Any,
+    tracker: Any,
+    cfg: dict[str, Any],
+    claude: Any,
+    sandbox: Any,
+    on_done: Any,
+) -> None:
     task, result, cost, rc, proxy = run.task, {}, 0.0, None, None
     try:
         count, _ = prepare(task) if not task.baseline else (0, [])
@@ -774,7 +795,7 @@ def _execute(run, api_key, tracker, cfg, claude, sandbox, on_done) -> None:
                 on_done(task)
 
 
-def _finish(run, result, cost, rc, tracker) -> None:
+def _finish(run: Any, result: Any, cost: Any, rc: Any, tracker: Any) -> None:
     task = run.task
     task.cost_usd = round(max(cost, float(result.get("total_cost_usd") or 0)), 4)
     task.finished = time.time()

@@ -4,6 +4,7 @@ import contextlib
 import os
 import re
 import time
+from typing import Any
 
 import numpy as np
 
@@ -192,7 +193,7 @@ class Listener:
     def typed_reply_is_text(self) -> bool:
         return (config.load_config().get("ui") or {}).get("typed_reply") == "text"
 
-    def announce_drop(self, entry) -> None:
+    def announce_drop(self, entry: Any) -> None:
         """Files dropped on the orb: say what he got and ask; this is not a request."""
         s = self.s
         s.text_only = self.typed_reply_is_text()
@@ -214,7 +215,7 @@ class Listener:
         if text and no_speech <= NO_SPEECH_LIMIT:
             process(self.s, text, lang)
 
-    def run_typed_request(self, entry) -> None:
+    def run_typed_request(self, entry: Any) -> None:
         s = self.s
         s.text_only = bool(getattr(entry, "from_ui", False)) and self.typed_reply_is_text()
         try:
@@ -263,7 +264,7 @@ class Listener:
         s.chunks.clear()
         s.wake_engine.reset()
 
-    def feed_wake_detector(self, chunk) -> None:
+    def feed_wake_detector(self, chunk: Any) -> None:
         s = self.s
         if self.wake_prev_awake:
             s.wake_engine.reset()
@@ -280,7 +281,7 @@ class Listener:
             self.voiced_run = self.longest_voiced_run = 0
         s.pre_roll.clear()
 
-    def on_voiced(self, chunk, now: float, awake: bool) -> None:
+    def on_voiced(self, chunk: Any, now: float, awake: bool) -> None:
         s = self.s
         if not s.recording:
             s.recording, self.speech_started = True, now
@@ -294,7 +295,7 @@ class Listener:
         self.longest_voiced_run = max(self.longest_voiced_run, self.voiced_run)
         self.silence_started = None
 
-    def on_silent(self, chunk, now: float) -> None:
+    def on_silent(self, chunk: Any, now: float) -> None:
         self.voiced_run = 0
         self.buffer.append(chunk)
         if self.silence_started is None:

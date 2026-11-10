@@ -427,7 +427,7 @@ class DuplexAudio:
             finally:
                 s.close()
 
-    def running(self):
+    def running(self) -> Any:
         """Context for `with microphone_stream():` — starts the stream and leaves it open (playback needs it between listening sessions)."""
         from contextlib import contextmanager
 
@@ -438,13 +438,19 @@ class DuplexAudio:
 
         return ctx()
 
-    def shim(self):
+    def shim(self) -> Any:
         """An object with the part of the sounddevice API SpeechPlayer uses."""
         duplex = self
 
         class _Shim:
             @staticmethod
-            def OutputStream(samplerate=None, channels=1, dtype="float32", latency=None, **kw):
+            def OutputStream(
+                samplerate: Any | None = None,
+                channels: int = 1,
+                dtype: str = "float32",
+                latency: Any | None = None,
+                **kw,
+            ) -> Any:
                 return _OutputAdapter(duplex, samplerate)
 
         return _Shim

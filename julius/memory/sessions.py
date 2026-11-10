@@ -3,6 +3,7 @@
 import json
 import uuid
 from datetime import date, datetime
+from typing import Any
 
 from julius.paths import REPO_ROOT
 
@@ -23,18 +24,18 @@ def _init() -> None:
             p.write_text(json.dumps(d, indent=2))
 
 
-def _load(name):
+def _load(name: str) -> Any:
     _init()
     return json.loads((MEM / name).read_text())
 
 
-def _save(name, d) -> None:
+def _save(name: str, d: Any) -> None:
     _init()
     (MEM / name).write_text(json.dumps(d, indent=2))
 
 
 # ---------- session transcript ----------
-def log_turn(user, assistant, meta=None) -> None:
+def log_turn(user: Any, assistant: Any, meta: Any | None = None) -> None:
     _init()
     rec = {"t": datetime.now().isoformat(timespec="seconds"), "user": user, "julius": assistant}
     if meta:
@@ -43,7 +44,7 @@ def log_turn(user, assistant, meta=None) -> None:
         f.write(json.dumps(rec) + "\n")
 
 
-def recent_turns(n=6):
+def recent_turns(n: int = 6) -> Any:
     _init()
     rows = []
     for f in reversed(sorted(SESS.glob("*.jsonl"))):
@@ -56,7 +57,7 @@ def recent_turns(n=6):
 
 
 # ---------- context injection ----------
-def build_context():
+def build_context() -> Any:
     _load("facts.json")["facts"]
     projs = _load("projects.json")["projects"]
     last = _load("last_session.json")
@@ -76,7 +77,7 @@ def build_context():
 
 
 # ---------- staging ----------
-def stage(items, session_date=None):
+def stage(items: Any, session_date: Any | None = None) -> Any:
     s = _load("staging.json")
     for it in items:
         it.setdefault("id", uuid.uuid4().hex[:8])
@@ -86,11 +87,11 @@ def stage(items, session_date=None):
     return len(items)
 
 
-def staged():
+def staged() -> Any:
     return _load("staging.json")["items"]
 
 
-def promote(item_id) -> bool:
+def promote(item_id: Any) -> bool:
     s = _load("staging.json")
     moved = next((it for it in s["items"] if it["id"] == item_id), None)
     if not moved:
@@ -121,7 +122,7 @@ def promote(item_id) -> bool:
     return True
 
 
-def reject(item_id):
+def reject(item_id: Any) -> bool:
     s = _load("staging.json")
     n = len(s["items"])
     s["items"] = [it for it in s["items"] if it["id"] != item_id]
@@ -129,5 +130,5 @@ def reject(item_id):
     return len(s["items"]) < n
 
 
-def set_last_session(summary) -> None:
+def set_last_session(summary: Any) -> None:
     _save("last_session.json", {"date": date.today().isoformat(), "summary": summary})

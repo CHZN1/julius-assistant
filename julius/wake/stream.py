@@ -64,11 +64,11 @@ class WakeStream:
         self.hang = 99
         self.gated = True
 
-    def _threshold(self):
+    def _threshold(self) -> Any:
         quiet = np.percentile(np.array(self.level), 20) if len(self.level) > 10 else 0.002
         return min(0.02, max(self.level_floor, quiet * 2.2))
 
-    def _utterance_start(self):
+    def _utterance_start(self) -> Any:
         """(ring index where the speech nearest the fire begins, frames of silence since it ended). Gaps up to 0.4 s stay inside the utterance;
         the fire often lands after the word, so first look back (up to 3 s) for the most recent speech."""
         th = self._threshold()
@@ -206,7 +206,7 @@ class WakeStream:
         return events
 
 
-def run_clip(stream, audio, tail=2.5):
+def run_clip(stream: Any, audio: Any, tail: float = 2.5) -> Any:
     """Feed one float clip (plus trailing silence so a pending utterance completes); return every decided event."""
     stream.reset()
     x = (
@@ -225,7 +225,7 @@ def run_clip(stream, audio, tail=2.5):
     return events
 
 
-def whisper_verify():
+def whisper_verify() -> Any:
     """Stage 2: small.en on the whole utterance with the production hint (wake word next to its sound-alikes, then the vocabulary);
     accepts only a transcript the wake regex matches at the start (Julius / hey Julius, not Julia or Julian)."""
     import time
@@ -240,7 +240,7 @@ def whisper_verify():
     hint = config.asr_initial_prompt(wake=True)
     repo = "mlx-community/whisper-small.en-mlx"
 
-    def verify(clip):
+    def verify(clip: Any) -> Any:
         mx.random.seed(1301)
         t0 = time.perf_counter()
         text = fix_transcript(

@@ -14,7 +14,7 @@ from julius.brain.dispatcher import Dispatcher
 SAFE_ROOT = Path.home()
 
 
-def _safe(p):
+def _safe(p: Any) -> Any:
     import julius.agents.files as jf
 
     return jf.agent().resolve(p)
@@ -221,7 +221,7 @@ def get_scores(league: str = "mlb", day: str = "today", **_) -> str:
     return scores + f"\nSource: ESPN scoreboard; retrieved {retrieved}."
 
 
-def find_files(pattern, source=".", recursive=True, **_):
+def find_files(pattern: Any, source: str = ".", recursive: bool = True, **_) -> Any:
     import julius.agents.files as jf
 
     return jf.render(jf.agent().find(pattern=pattern, source=source, recursive=recursive))
@@ -240,7 +240,7 @@ def get_quote(symbol: str, **_) -> str:
     if s in tk.CRYPTO_CODES:
         s = f"{s}-USD"
 
-    def chart(sym):
+    def chart(sym: Any) -> Any:
         r = requests.get(
             f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}",
             params={"range": "2d", "interval": "1d"},
@@ -304,7 +304,7 @@ def get_news(query: str, **_) -> dict[str, Any]:
     return {"ok": True, "code": "completed", "message": message, "data": {"items": items}}
 
 
-def web_search(query, n=3, **_):
+def web_search(query: str, n: int = 3, **_) -> Any:
     from ddgs import DDGS
 
     with DDGS(timeout=10) as d:
@@ -314,13 +314,13 @@ def web_search(query, n=3, **_):
     return "\n".join(f"{h['title']}: {h['body'][:200]}\n{h.get('href', '')}" for h in hits)
 
 
-def list_files(directory=".", **_):
+def list_files(directory: str = ".", **_) -> Any:
     import julius.agents.files as jf
 
     return jf.render(jf.agent().list(directory))
 
 
-def read_file(path, max_chars=2000, **_):
+def read_file(path: Any, max_chars: int = 2000, **_) -> Any:
     import julius.agents.files as jf
 
     return jf.render(jf.agent().read(path, max_chars))
@@ -528,7 +528,7 @@ SCHEMAS.append(
 _planner = None
 
 
-def planner():
+def planner() -> Any:
     global _planner
     if _planner is None:
         from julius.brain.planning import Planner
@@ -537,7 +537,7 @@ def planner():
     return _planner
 
 
-def list_planner_items(kind=None):
+def list_planner_items(kind: str | None = None) -> Any:
     return planner().list(kind)
 
 
@@ -548,8 +548,13 @@ def convert_units(value: float, from_unit: str, to_unit: str) -> str:
 
 
 def date_calculate(
-    start, operation, timezone_name="America/Los_Angeles", amount=0, end=None, target_timezone=None
-):
+    start: Any,
+    operation: Any,
+    timezone_name: str = "America/Los_Angeles",
+    amount: int = 0,
+    end: Any | None = None,
+    target_timezone: Any | None = None,
+) -> Any:
     from julius.brain.conversions import date_calculate as compute
 
     return compute(start, operation, timezone_name, amount, end, target_timezone)
@@ -625,7 +630,7 @@ SCHEMAS.append(
 _reminders = None
 
 
-def reminders():
+def reminders() -> Any:
     global _reminders
     if _reminders is None:
         import os
@@ -644,15 +649,15 @@ def reminders():
     return _reminders
 
 
-def set_reminder(title, when):
+def set_reminder(title: str, when: Any) -> Any:
     return reminders().set(title, when)
 
 
-def list_reminders():
+def list_reminders() -> Any:
     return reminders().list()
 
 
-def cancel_reminder(title):
+def cancel_reminder(title: str) -> Any:
     return reminders().cancel(title)
 
 

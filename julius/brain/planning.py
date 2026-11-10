@@ -21,7 +21,7 @@ def output(ok: bool, code: str, message: str, **data) -> dict[str, Any]:
     return dict(ok=ok, code=code, message=message, data=data)
 
 
-def utc_timestamp(value):
+def utc_timestamp(value: Any) -> Any:
     parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     if parsed.tzinfo is None:
         raise ValueError("Please include a time zone or UTC offset.")

@@ -1,6 +1,7 @@
 """Pure text helpers for the runtime: spoken-text cleanup, intent hints, history repair."""
 
 import re
+from typing import Any
 
 from julius import config
 from julius.audio.speech_text import normalize_for_speech
@@ -43,7 +44,7 @@ SCHEDULE_QUERY = re.compile(
 )
 
 
-def schedule_league(text):
+def schedule_league(text: str) -> Any:
     """Which league a schedule question is about, from a league name or a team name; None when unclear."""
     low = (text or "").lower()
     for lg in ("nhl", "nfl", "mlb", "nba", "wnba"):

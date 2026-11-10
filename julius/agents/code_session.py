@@ -327,7 +327,7 @@ class CodeSession:
             return self._out(True, "cancelled", "Okay, I won't start it.")
         return self._out(True, "cancelled", "Okay, nothing was changed.")
 
-    def _done(self, task) -> None:
+    def _done(self, task: Any) -> None:
         if self.on_done:
             self.on_done(task)
 

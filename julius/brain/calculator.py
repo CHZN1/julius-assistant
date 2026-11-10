@@ -4,6 +4,7 @@ import ast
 import math
 import operator
 import re
+from typing import Any
 
 OPS = {
     ast.Add: operator.add,
@@ -21,7 +22,7 @@ _PERCENT_OF = re.compile(rf"({_NUMBER})\s*(?:%|per\s?cent)\s+of\s+({_NUMBER}|\([
 def normalize_percent(expression: str) -> str:
     """Rewrite "X% of Y" / "X percent of Y" as (X/100)*(Y); a bare "%" stays the modulo operator."""
 
-    def rewrite(match) -> str:
+    def rewrite(match: Any) -> str:
         x, y = match.group(1).replace(",", ""), match.group(2).replace(",", "")
         return f"({x}/100)*({y})"
 
@@ -35,7 +36,7 @@ def evaluate(expression: str) -> int | float:
     if sum(1 for _ in ast.walk(tree)) > 100:
         raise ValueError("That expression is too complex.")
 
-    def visit(node):
+    def visit(node: Any) -> Any:
         if isinstance(node, ast.Constant) and type(node.value) in (int, float):
             value = node.value
         elif isinstance(node, ast.Name) and node.id in {"pi", "e"}:

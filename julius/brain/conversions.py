@@ -3,6 +3,7 @@
 import math
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
+from typing import Any
 from zoneinfo import ZoneInfo
 
 # Base units: metres, kilograms, seconds, litres. No live exchange rates.
@@ -58,7 +59,7 @@ ALIASES = {
 
 
 def convert_units(value: str | float | int, from_unit: str, to_unit: str) -> str:
-    def unit(raw):
+    def unit(raw: str) -> Any:
         name = raw.strip().lower().replace("°", "")
         return ALIASES.get(name, name)
 

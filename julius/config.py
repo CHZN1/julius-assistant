@@ -7,6 +7,7 @@ use describe_key() for a safe status line.
 import datetime
 import os
 import tomllib
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -118,7 +119,9 @@ def transcripts_logging(
 _transcripts_cache = [0.0, False]
 
 
-def transcripts_logging_cached(seconds=60.0, clock=None):
+def transcripts_logging_cached(
+    seconds: float = 60.0, clock: Callable[[], float] | None = None
+) -> Any:
     """transcripts_logging() re-read at most every `seconds`, for the log writer (so a long-running service notices the end of the window and edits to julius.toml)."""
     import time
 

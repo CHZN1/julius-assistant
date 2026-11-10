@@ -1,3 +1,5 @@
+from typing import Any
+
 """Text for the synthetic wake-word dataset. Positives never use Julius's own voice (it is a hard negative, see build_dataset.py)."""
 
 BARE = ["Julius.", "Hey Julius.", "Okay Julius.", "Hey, Julius.", "Julius?", "Yo Julius."]
@@ -247,6 +249,6 @@ _JEALOUS = [
 ]
 
 
-def soundalike_sentences():
+def soundalike_sentences() -> Any:
     out = [t.format(n=n) for n in _NAMES for t in _TEMPLATES] + _JEALOUS
     return out

@@ -13,6 +13,7 @@ import random
 import subprocess
 import time
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import soundfile as sf
@@ -30,7 +31,7 @@ JULIUS_VOICES = {
 }  # legacy Kokoro voice of Julius; the live voice is the seed-1301 Qwen clone (julius_mlx_tts_worker.py)
 
 
-def resample(x, sr_in):
+def resample(x: Any, sr_in: Any) -> Any:
     return (
         x
         if sr_in == SR
@@ -40,13 +41,13 @@ def resample(x, sr_in):
     )
 
 
-def pitch(x, semitones):
+def pitch(x: Any, semitones: Any) -> Any:
     import librosa
 
     return librosa.effects.pitch_shift(x, sr=SR, n_steps=semitones) if abs(semitones) > 0.05 else x
 
 
-def noise_like(kind, n, rng):
+def noise_like(kind: str, n: int, rng: Any) -> Any:
     w = rng.standard_normal(n).astype(np.float32)
     if kind == "white":
         return w
@@ -63,7 +64,7 @@ def noise_like(kind, n, rng):
     return signal.lfilter(b, a, w).astype(np.float32)  # "room": low rumble
 
 
-def augment(x, rng):
+def augment(x: Any, rng: Any) -> Any:
     x = pitch(x, rng.uniform(-2.5, 2.5))
     if rng.random() < 0.5:  # small room: exponentially decaying noise impulse response
         rt = rng.uniform(0.08, 0.45)
@@ -90,12 +91,12 @@ def augment(x, rng):
     return np.clip(y, -1, 1)
 
 
-def save(path, y) -> None:
+def save(path: Any, y: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     sf.write(path, (np.clip(y, -1, 1) * 32767).astype(np.int16), SR, subtype="PCM_16")
 
 
-def kokoro_clips(pipe, text, voice, speed):
+def kokoro_clips(pipe: Any, text: str, voice: Any, speed: Any) -> Any:
     parts = [
         np.asarray(a.detach().cpu() if hasattr(a, "detach") else a, dtype=np.float32)
         for _, _, a in pipe(text, voice=voice, speed=speed)
@@ -103,7 +104,7 @@ def kokoro_clips(pipe, text, voice, speed):
     return resample(np.concatenate(parts), 24000) if parts else None
 
 
-def julius_voice_clips(lines):
+def julius_voice_clips(lines: Any) -> Any:
     """Julius's live voice: the isolated MLX Qwen worker with his reference prompts (read-only use; the voice itself is not changed)."""
     exe = ROOT / ".venv-mlx-tts" / "bin" / "python"
     proc = subprocess.Popen(
@@ -136,7 +137,7 @@ def julius_voice_clips(lines):
     return out
 
 
-def user_positives(rng, per_clip=24):
+def user_positives(rng: Any, per_clip: int = 24) -> Any:
     """Your recorded wake utterances (sessions wake, wake2 and quick) with many augmentations; never the final eval sets wake3, wake4 or talk3."""
     out = []
     files = [
@@ -213,7 +214,7 @@ def main() -> None:
         flush=True,
     )
 
-    def pos_text():
+    def pos_text() -> Any:
         return (
             random.choice(P.BARE)
             if random.random() < 0.5

@@ -6,6 +6,7 @@ import json
 import os
 import signal
 from pathlib import Path
+from typing import Any
 
 import sounddevice as sd
 
@@ -154,7 +155,7 @@ def setup_talkover(s: Session) -> None:
     s.talkover = TalkOver()
     recorder_tap = getattr(s.speech_player, "tap", None)
 
-    def tap_both(audio, rate) -> None:
+    def tap_both(audio: Any, rate: int) -> None:
         s.talkover.out(audio, rate)
         if recorder_tap is not None:
             recorder_tap(audio, rate)
@@ -196,7 +197,7 @@ def setup_events_feed(s: Session) -> None:
             s.ui_level_tap = events.LevelTap()
             previous = getattr(s.speech_player, "tap", None)
 
-            def tap_level(audio, rate) -> None:
+            def tap_level(audio: Any, rate: int) -> None:
                 s.ui_level_tap.out(audio, rate)
                 if previous is not None:
                     previous(audio, rate)
@@ -261,7 +262,7 @@ def setup_cloud_brain(s: Session) -> None:
     )
 
 
-def import_old_facts(memory_store) -> None:
+def import_old_facts(memory_store: Any) -> None:
     """One-time import of the old facts.json; the file is kept as facts.migrated.json."""
     try:
         old = jm.MEM / "facts.json"

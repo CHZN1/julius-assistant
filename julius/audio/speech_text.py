@@ -312,7 +312,7 @@ def _forecast(out: str, args: dict[str, str | int]) -> str:
         return None
     place = head.group(1)
 
-    def one(d, lead) -> str:
+    def one(d: Any, lead: Any) -> str:
         day, hi, lo, cond, rain = d
         chance = "no rain expected" if int(rain) == 0 else f"{rain} percent chance of rain"
         return f"{lead}: high of {hi}, low of {lo}, {cond}, {chance}."

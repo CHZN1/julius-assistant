@@ -128,7 +128,7 @@ class SpeechPlayer:
             started, sentence_underflows, written, seconds_written = self.clock(), 0, 0, 0.0
             try:
 
-                def put(audio, sample_rate, index) -> None:
+                def put(audio: Any, sample_rate: Any, index: Any) -> None:
                     nonlocal sentence_underflows, written, seconds_written
                     if sample_rate != rate:
                         raise RuntimeError("Speech sample rate changed")

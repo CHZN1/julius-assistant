@@ -3,6 +3,7 @@ run_julius.sh's `cloud` profile sets the same values; test_julius_default_profil
 
 import os
 import re
+from typing import Any
 
 CLOUD_DEFAULTS = {
     "JULIUS_BACKEND": "cloud",
@@ -33,7 +34,7 @@ def _profile() -> dict[str, str | list[str]]:
     return cfg.load_config().get("profile", {})
 
 
-def user_name():
+def user_name() -> Any:
     """The configured name, or "the user" when none is set."""
     return (_profile().get("name") or "").strip() or "the user"
 

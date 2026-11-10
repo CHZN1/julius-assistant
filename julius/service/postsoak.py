@@ -64,7 +64,7 @@ def feed_check(
     return False, last
 
 
-def sh(args, timeout=900):
+def sh(args: list[str], timeout: int = 900) -> Any:
     try:
         r = subprocess.run(args, capture_output=True, text=True, timeout=timeout, cwd=ROOT)
         return r.returncode == 0, (
@@ -113,7 +113,7 @@ def run(
     now: datetime.datetime | None = None,
     step_list: list[tuple[str, Callable]] | None = None,
     results_path: Path = RESULTS,
-):
+) -> Any:
     now = now or datetime.datetime.now()
     if not force and now.strftime("%Y-%m-%dT%H:%M:%S") < SOAK_END:
         return False, "the soak has not ended yet"
@@ -152,7 +152,7 @@ def plist_dict() -> dict[str, Any]:
     }
 
 
-def main(argv):
+def main(argv: list[str]) -> Any:
     cmd = (argv[1:2] or ["run"])[0]
     dom = f"gui/{os.getuid()}"
     if cmd == "schedule":

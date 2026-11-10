@@ -25,7 +25,9 @@ import socket
 import ssl
 import time
 import urllib.parse
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import julius.brain.cloud as jc
 import julius.costs as costs
@@ -109,14 +111,14 @@ class Blocked(Exception):
 # ---- safe fetching ---------------------------------------------------------------------------------------------------------------
 
 
-def _public(ip):
+def _public(ip: Any) -> Any:
     a = ipaddress.ip_address(ip.split("%")[0])
     if getattr(a, "ipv4_mapped", None):
         a = a.ipv4_mapped
     return a.is_global and not a.is_multicast
 
 
-def check_url(url, resolve=socket.getaddrinfo):
+def check_url(url: str, resolve: Any = socket.getaddrinfo) -> Any:
     """Policy check for one URL. Returns (parsed, checked_ip) or raises Blocked."""
     try:
         p = urllib.parse.urlsplit(url.strip())
@@ -148,7 +150,7 @@ def check_url(url, resolve=socket.getaddrinfo):
 
 
 class _PinnedHTTP(http.client.HTTPConnection):
-    def __init__(self, host, ip, port, timeout) -> None:
+    def __init__(self, host: Any, ip: Any, port: int, timeout: Any) -> None:
         super().__init__(host, port, timeout=timeout)
         self._ip = ip
 
@@ -157,7 +159,7 @@ class _PinnedHTTP(http.client.HTTPConnection):
 
 
 class _PinnedHTTPS(http.client.HTTPSConnection):
-    def __init__(self, host, ip, port, timeout) -> None:
+    def __init__(self, host: Any, ip: Any, port: int, timeout: Any) -> None:
         super().__init__(host, port, timeout=timeout, context=ssl.create_default_context())
         self._ip = ip
 
@@ -166,7 +168,7 @@ class _PinnedHTTPS(http.client.HTTPSConnection):
         self.sock = self._context.wrap_socket(sock, server_hostname=self.host)
 
 
-def network_get(parsed, ip, max_bytes, timeout=10):
+def network_get(parsed: Any, ip: Any, max_bytes: Any, timeout: int = 10) -> Any:
     """The only network verb in the agent. GET, pinned to the checked address, no cookies, bounded read. -> (status, headers, body)"""
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
     conn = (_PinnedHTTPS if parsed.scheme == "https" else _PinnedHTTP)(
@@ -191,11 +193,14 @@ def network_get(parsed, ip, max_bytes, timeout=10):
 
 class Fetcher:
     def __init__(
-        self, max_bytes=500_000, resolve=socket.getaddrinfo, transport=network_get
+        self,
+        max_bytes: int = 500_000,
+        resolve: Any = socket.getaddrinfo,
+        transport: Any = network_get,
     ) -> None:
         self.max_bytes, self.resolve, self.transport = max_bytes, resolve, transport
 
-    def fetch(self, url):
+    def fetch(self, url: str) -> Any:
         """-> (final_url, html_or_text). Raises Blocked for policy refusals, OSError for network trouble."""
         for _ in range(MAX_REDIRECTS + 1):
             parsed, ip = check_url(url, self.resolve)
@@ -220,12 +225,12 @@ class Fetcher:
 class _Extract(html.parser.HTMLParser):
     SKIP = {"script", "style", "noscript", "svg", "form", "iframe", "template", "head"}
 
-    def __init__(self, base) -> None:
+    def __init__(self, base: Any) -> None:
         super().__init__(convert_charrefs=True)
         self.base, self.title, self.parts, self.images, self.login = base, "", [], [], False
         self._skip, self._in_title = 0, False
 
-    def handle_starttag(self, tag, attrs) -> None:
+    def handle_starttag(self, tag: Any, attrs: Any) -> None:
         a = dict(attrs)
         if tag == "title":
             self._in_title = True
@@ -238,19 +243,19 @@ class _Extract(html.parser.HTMLParser):
         if tag in self.SKIP and tag != "head":
             self._skip += 1
 
-    def handle_endtag(self, tag) -> None:
+    def handle_endtag(self, tag: Any) -> None:
         if tag == "title":
             self._in_title = False
         if tag in self.SKIP and tag != "head" and self._skip:
             self._skip -= 1
 
-    def handle_data(self, data) -> None:
+    def handle_data(self, data: Any) -> None:
         if self._in_title:
             self.title += data
         elif not self._skip and data.strip():
             self.parts.append(data.strip())
 
-    def _img(self, src, alt) -> None:
+    def _img(self, src: Any, alt: Any) -> None:
         u = urllib.parse.urljoin(self.base, src.strip())
         if (
             u.startswith(("http://", "https://"))
@@ -261,7 +266,7 @@ class _Extract(html.parser.HTMLParser):
             self.images.append({"url": u, "alt": " ".join(alt.split())[:120]})
 
 
-def extract(base_url, body):
+def extract(base_url: Any, body: Any) -> Any:
     """-> dict(title, text, images, login). Plain text pages pass through."""
     if "<" not in body[:2000]:
         return {"title": "", "text": " ".join(body.split()), "images": [], "login": False}
@@ -279,14 +284,14 @@ def extract(base_url, body):
     }
 
 
-def _norm(s):
+def _norm(s: str) -> Any:
     return re.sub(r"\W+", " ", s.lower()).strip()
 
 
 # ---- the agent -------------------------------------------------------------------------------------------------------------------
 
 
-def default_search(query, n=5):
+def default_search(query: str, n: int = 5) -> Any:
     from ddgs import DDGS
 
     with DDGS(timeout=10) as d:
@@ -303,7 +308,7 @@ def default_search(query, n=5):
 class _CostLoop:
     """Haiku tool loop with per-task step and dollar limits. The call that would begin past the cap is not made."""
 
-    def __init__(self, brain, system, tools, max_usd) -> None:
+    def __init__(self, brain: Any, system: Any, tools: Any, max_usd: Any) -> None:
         self.brain, self.max_usd, self.spent, self.calls = brain, max_usd, 0.0, 0
         settings = jc.TIERS["haiku"]
         self.kwargs = {
@@ -315,10 +320,10 @@ class _CostLoop:
             **{k: v for k, v in settings.items() if k != "max_tokens"},
         }
 
-    def over(self):
+    def over(self) -> bool:
         return self.spent >= self.max_usd
 
-    def call(self, messages, **extra):
+    def call(self, messages: Any, **extra) -> Any:
         r = self.brain.slow_client().messages.create(messages=messages, **self.kwargs, **extra)
         self.brain.tracker.record("haiku", r.usage, note="research")
         self.spent += costs.cost_of("haiku", r.usage)
@@ -327,7 +332,14 @@ class _CostLoop:
 
 
 class ResearchAgent:
-    def __init__(self, brain, fetcher=None, search=None, directory=None, clock=time.time) -> None:
+    def __init__(
+        self,
+        brain: Any,
+        fetcher: Any | None = None,
+        search: Any | None = None,
+        directory: Any | None = None,
+        clock: Callable[[], float] = time.time,
+    ) -> None:
         c = brain.config.get("research", {})
         self.brain, self.search_fn = brain, search or default_search
         self.max_steps, self.max_pages, self.max_usd = (
@@ -342,7 +354,7 @@ class ResearchAgent:
         self.clock = clock
 
     # tools
-    def _search(self, args):
+    def _search(self, args: list[str]) -> Any:
         q = str(args.get("query", "")).strip()[:200]
         if not q:
             return "research_search needs a query."
@@ -360,7 +372,7 @@ class ResearchAgent:
             or "No results."
         )
 
-    def _open(self, args) -> str:
+    def _open(self, args: list[str]) -> str:
         url = str(args.get("url", "")).strip()
         if url in self.pages:
             return "Already read that page."
@@ -381,7 +393,7 @@ class ResearchAgent:
         self.page_order.append(url)
         return f'<page url="{final}" title="{page["title"]}">\n{page["text"][: self.page_chars]}\n</page>'
 
-    def _verify(self, findings):
+    def _verify(self, findings: Any) -> Any:
         out, dropped = [], 0
         for f in findings if isinstance(findings, list) else []:
             if not isinstance(f, dict):
@@ -405,7 +417,7 @@ class ResearchAgent:
         return out, dropped
 
     # run
-    def run(self, question):
+    def run(self, question: Any) -> Any:
         """-> result dict. Always returns one, including on limits and failures (stopped says which)."""
         self.pages, self.page_order, self.seen_search = {}, [], set()
         question = " ".join(str(question).split())[:600]
@@ -437,7 +449,7 @@ class ResearchAgent:
             final = self._forced_wrap_up(loop, messages)
         return self._result(question, final, stopped, loop)
 
-    def _run_tools(self, uses, final):
+    def _run_tools(self, uses: Any, final: Any) -> Any:
         """Run the model's tool calls; returns (tool_result blocks, the finish arguments if given)."""
         results = []
         for b in uses:
@@ -456,7 +468,7 @@ class ResearchAgent:
         return results, final
 
     @staticmethod
-    def _forced_wrap_up(loop, messages):
+    def _forced_wrap_up(loop: Any, messages: Any) -> Any:
         """One last call asking for research_finish while budget remains."""
         messages[-1]["content"].append(
             {
@@ -474,7 +486,7 @@ class ResearchAgent:
             pass
         return final
 
-    def _result(self, question, final, stopped, loop):
+    def _result(self, question: Any, final: Any, stopped: Any, loop: Any) -> Any:
         findings, dropped = self._verify((final or {}).get("findings"))
         summary = " ".join(
             str((final or {}).get("summary") or "").replace("*", "").replace("#", "").split()
@@ -518,7 +530,7 @@ class ResearchAgent:
             result["saved"] = self._save(result)
         return result
 
-    def _save(self, result):
+    def _save(self, result: Any) -> Any:
         try:
             self.dir.mkdir(parents=True, exist_ok=True)
             os.chmod(self.dir, 0o700)
@@ -534,7 +546,7 @@ class ResearchAgent:
             return ""
 
 
-def research_task(args, brain=None):
+def research_task(args: list[str], brain: Any | None = None) -> Any:
     """Planner tool body: returns text for the planner (the planner then speaks)."""
     import anthropic
 

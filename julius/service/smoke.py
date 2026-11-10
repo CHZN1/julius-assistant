@@ -43,7 +43,7 @@ def check(
     Returns (ok, [(name, ok, detail)])."""
     results = []
 
-    def add(name, ok, detail=""):
+    def add(name: str, ok: Any, detail: str = "") -> Any:
         return results.append((name, bool(ok), detail))
 
     st = state()

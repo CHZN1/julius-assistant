@@ -3,6 +3,7 @@
 import json
 import threading
 from pathlib import Path
+from typing import Any
 
 from julius import config
 from julius.agents import dropstage, files
@@ -39,7 +40,7 @@ def start_terminal(s: Session) -> None:
     threading.Thread(target=read_terminal, args=(s,), daemon=True).start()
 
 
-def ui_drop(s: Session, paths) -> dict:
+def ui_drop(s: Session, paths: Any) -> dict:
     """Files dropped on the orb: validated and staged, then Julius says what he got and asks what to
     do. Nothing is opened or changed."""
     result = s.drop_stage.stage(paths)

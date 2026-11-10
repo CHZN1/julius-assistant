@@ -179,7 +179,7 @@ class Learner:
             self.spawn(self.store)
 
 
-def spawn_retrain(store) -> None:
+def spawn_retrain(store: Any) -> None:
     """Start `retrain` as a detached, low-priority process. Failure to start is silent: the next positive tries again."""
     with contextlib.suppress(OSError):
         subprocess.Popen(
@@ -209,7 +209,7 @@ def decide(
     recall_gain: float = 0.05,
     extra_false: float = 0.15,
     false_ceiling: float = 0.30,
-):
+) -> Any:
     """Keep the candidate only if it finds clearly more of the user's recent wakes (a miss costs a repeated "Julius"; an extra false fire only costs one Whisper check),
     without a big rise in false fires on their recent rejected clips; or the same wakes with fewer false fires.
     current/candidate: {"recall": 0..1, "false_rate": 0..1} measured at the stage-1 threshold."""
@@ -223,7 +223,7 @@ def decide(
     return False, "does not beat the current model on your recent clips"
 
 
-def _augment(x, rng):
+def _augment(x: Any, rng: Any) -> Any:
     """Light, dependency-free variety: gain (quiet and far takes), a small room, noise, and a little speed change."""
     from scipy import signal
 
@@ -243,7 +243,7 @@ def _augment(x, rng):
     return np.clip(np.concatenate([lead, x, np.zeros(int(0.5 * SR), np.float32)]), -1, 1)
 
 
-def stream_windows(model, name, audio, lead=0.5, tail=0.8):
+def stream_windows(model: Any, name: str, audio: Any, lead: float = 0.5, tail: float = 0.8) -> Any:
     """The 16 x 96 feature windows the live detector sees while this clip streams past it (one per 80 ms frame once 16 frames exist). Shape (n, 16, 96)."""
     model.reset()
     x = np.concatenate(
@@ -268,7 +268,7 @@ def stream_windows(model, name, audio, lead=0.5, tail=0.8):
     return np.stack(out) if out else np.zeros((0, 16, 96), np.float32)
 
 
-def _read(path):
+def _read(path: Any) -> Any:
     import soundfile as sf
 
     x, sr = sf.read(path, dtype="float32")
@@ -283,7 +283,7 @@ def _read(path):
     return x
 
 
-def _noise_clips(rng, count=150):
+def _noise_clips(rng: Any, count: int = 150) -> Any:
     """White and pink-ish noise at random levels: hard negatives for the head."""
     noise = []
     for i in range(count):
@@ -296,7 +296,7 @@ def _noise_clips(rng, count=150):
     return noise
 
 
-def _training_data(train_pos, train_neg, rng, emb):
+def _training_data(train_pos: Any, train_neg: Any, rng: Any, emb: Any) -> Any:
     """(embedding windows, label, weight) rows: augmented positives, rejected clips, noise."""
     tp = [_read(p) for p in train_pos]
     aug = [_augment(x, rng) for x in tp for _ in range(24)] + [x for x in tp]
@@ -311,7 +311,7 @@ def _training_data(train_pos, train_neg, rng, emb):
     )
 
 
-def _fit(model, data, epochs, seed) -> None:
+def _fit(model: Any, data: Any, epochs: Any, seed: Any) -> None:
     """Fine-tune the head with a clip-level (max over windows) weighted BCE loss."""
     import torch
     import torch.nn as nn
@@ -340,20 +340,20 @@ def _fit(model, data, epochs, seed) -> None:
     model.eval()
 
 
-def _clip_scores(model, wins):
+def _clip_scores(model: Any, wins: Any) -> Any:
     import torch
 
     with torch.no_grad():
         return np.array([float(model(torch.from_numpy(w)).max()) if len(w) else 0.0 for w in wins])
 
 
-def _judge(model, val_pos_windows, val_neg_windows, threshold):
+def _judge(model: Any, val_pos_windows: Any, val_neg_windows: Any, threshold: Any) -> Any:
     recall = (_clip_scores(model, val_pos_windows) >= threshold).mean()
     false = (_clip_scores(model, val_neg_windows) >= threshold).mean() if val_neg_windows else 0.0
     return {"recall": float(recall), "false_rate": float(false)}
 
 
-def _current_head(store, starter_head, Head):
+def _current_head(store: Any, starter_head: Any, Head: Any) -> Any:
     """The personal head if there is one, otherwise the starter."""
     import torch
 
@@ -365,7 +365,7 @@ def _current_head(store, starter_head, Head):
     return head
 
 
-def _export(model, store) -> None:
+def _export(model: Any, store: Any) -> None:
     """Write the kept head as ONNX (model.onnx) plus its weights (head.pt)."""
     import torch
 
@@ -384,14 +384,24 @@ def _export(model, store) -> None:
     os.replace(tmp, store.model)
 
 
-def _split_clips(pos, neg):
+def _split_clips(pos: Any, neg: Any) -> Any:
     """Hold out the newest quarter of the positives (and of the negatives) to judge the result."""
     n_val = min(max(MIN_VALIDATION, len(pos) // 4), len(pos) // 2)
     nv = max(0, min(len(neg) // 4, len(neg) - 1)) if len(neg) >= 4 else 0
     return pos[:-n_val], pos[-n_val:], neg[: len(neg) - nv], (neg[-nv:] if nv else [])
 
 
-def _train_and_judge(store, pos, neg, epochs, seed, starter, starter_head, threshold, Head):
+def _train_and_judge(
+    store: Any,
+    pos: Any,
+    neg: Any,
+    epochs: Any,
+    seed: Any,
+    starter: Any,
+    starter_head: Any,
+    threshold: Any,
+    Head: Any,
+) -> Any:
     """Train a candidate head and compare it with the current one; returns (result, candidate)."""
     import torch
     from openwakeword.model import Model
@@ -402,7 +412,7 @@ def _train_and_judge(store, pos, neg, epochs, seed, starter, starter_head, thres
     feat = Model(wakeword_models=[str(starter)], inference_framework="onnx")
     fname = list(feat.models)[0]
 
-    def emb(clips):
+    def emb(clips: Any) -> Any:
         # features exactly as the live detector computes them (clip-at-once embedding differs)
         return [stream_windows(feat, fname, c) for c in clips]
 
@@ -479,7 +489,7 @@ def retrain(
 # ---------------- optional quick setup ----------------
 
 
-def record_clip(seconds=2.5, device=None):
+def record_clip(seconds: float = 2.5, device: Any | None = None) -> Any:
     import sounddevice as sd
 
     x = sd.rec(int(seconds * SR), samplerate=SR, channels=1, dtype="float32", device=device)
@@ -515,7 +525,7 @@ def setup(
     return done
 
 
-def main(argv=None) -> None:
+def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("cmd", choices=["setup", "status", "retrain", "forget"])
     ap.add_argument("--dir")

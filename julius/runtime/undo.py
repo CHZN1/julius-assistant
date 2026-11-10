@@ -1,6 +1,7 @@
 """Cross-agent undo: a bare "undo" goes to the agent that acted most recently, and says which one."""
 
 import re
+from typing import Any
 
 import julius.agents.files as jf
 import julius.brain.tools as jt
@@ -8,11 +9,11 @@ import julius.brain.undo as undo
 from julius.runtime.session import Session
 
 
-def _clean(message) -> str:
+def _clean(message: str) -> str:
     return re.sub(r"^(?:Undone\.|Okay,)\s*", "", str(message or "")).strip()
 
 
-def _file_mark():
+def _file_mark() -> Any:
     """The latest live file batch and its status, or None."""
     agent = jf.agent()
     with agent._locked():
@@ -24,18 +25,18 @@ def _file_mark():
 def build_undo_coordinator(s: Session) -> undo.UndoCoordinator:
     """Wire the file, coding and memory agents into one coordinator."""
 
-    def file_undo():
+    def file_undo() -> Any:
         out = jt.dispatcher().human_file(s.file_session, "undo", s.turn)
         return _clean(out["message"]) if out else None
 
-    def code_task():
+    def code_task() -> Any:
         return s.code_session.latest("merged")
 
-    def code_mark():
+    def code_mark() -> Any:
         task = code_task()
         return (task.id, bool(task.merged)) if task else None
 
-    def code_undo():
+    def code_undo() -> Any:
         out = s.code_session.handle("undo the merge", s.turn)
         return _clean(out["message"]) if out else None
 

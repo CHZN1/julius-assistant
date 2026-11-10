@@ -3,6 +3,7 @@
 import os
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from numpy import ndarray
@@ -233,7 +234,7 @@ class SpeechEngine:
             audio, sr = self._generate_qwen(text)
         yield audio, sr
 
-    def _load_qwen(self, dtype) -> None:
+    def _load_qwen(self, dtype: Any) -> None:
         import torch
         from qwen_tts import Qwen3TTSModel
 
@@ -282,7 +283,7 @@ class SpeechEngine:
         self.generation_chunks = 0
         self.allocation_retries = 0
 
-        def generate_span(chunk):
+        def generate_span(chunk: Any) -> Any:
             words = chunk.split()
             try:
                 with torch.inference_mode():

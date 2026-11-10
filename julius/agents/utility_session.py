@@ -2,6 +2,7 @@
 
 import re
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from julius.brain.conversions import local_datetime
@@ -19,13 +20,22 @@ _COMMAND_START = r"(?:remind me|(?:set|start) (?:a )?timer|add (?:a )?task|cance
 
 
 class UtilitySession:
-    def __init__(self, planner, timezone_name="America/Los_Angeles", provider=None) -> None:
+    def __init__(
+        self, planner: Any, timezone_name: str = "America/Los_Angeles", provider: Any | None = None
+    ) -> None:
         self.planner = planner
         self.timezone_name = timezone_name
         self.pending = None
         self.provider = provider
 
-    def _add(self, kind, title, due=None, end=None, zone=None):
+    def _add(
+        self,
+        kind: str,
+        title: str,
+        due: Any | None = None,
+        end: Any | None = None,
+        zone: Any | None = None,
+    ) -> Any:
         out = self.planner.add(kind, title, due, end)
         if out["ok"] and due is not None:
             utc = datetime.fromtimestamp(due, UTC).isoformat()
@@ -67,7 +77,7 @@ class UtilitySession:
             out["data"]["speech_message"] = spoken
         return out
 
-    def handle(self, text: str, turn: int):
+    def handle(self, text: str, turn: int) -> Any:
         """Run an explicit reminder/task/calendar command, or return None for anything else."""
         t = text.strip().rstrip(".!?")
         low = t.lower()
@@ -100,7 +110,7 @@ class UtilitySession:
             return output(False, "invalid_request", str(exc))
         return None
 
-    def _answer_preview(self, pending: dict, low: str, turn: int):
+    def _answer_preview(self, pending: dict, low: str, turn: int) -> Any:
         """A yes or no to the calendar preview shown last turn."""
         from julius.brain import confirm
 
@@ -120,7 +130,7 @@ class UtilitySession:
             "event", pending["title"], pending["due"], pending["end"], pending.get("zone")
         )
 
-    def _timer(self, t, _low, _turn):
+    def _timer(self, t: Any, _low: Any, _turn: Any) -> Any:
         """ "remind me in 10 minutes to X" and "set a timer for 5 minutes"."""
         match = re.fullmatch(
             r"remind me in (\d+(?:\.\d+)?) (seconds?|minutes?|hours?|days?) to (.+)", t, re.I
@@ -137,7 +147,7 @@ class UtilitySession:
             raise ValueError("Choose a duration greater than zero and no more than a year.")
         return self._add("reminder", title or "Timer finished", self.planner.clock() + seconds)
 
-    def _relative_reminder(self, t, _low, _turn):
+    def _relative_reminder(self, t: Any, _low: Any, _turn: Any) -> Any:
         """ "remind me tomorrow at 9 am to X"."""
         relative = re.fullmatch(
             r"remind me (today|tomorrow) at (\d{1,2})(?::(\d{2}))?\s*(am|pm)? to (.+)", t, re.I
@@ -160,7 +170,7 @@ class UtilitySession:
         due = local_datetime(target.isoformat(), self.timezone_name).timestamp()
         return self._add("reminder", title, due)
 
-    def _dated_reminder(self, t, _low, _turn):
+    def _dated_reminder(self, t: Any, _low: Any, _turn: Any) -> Any:
         dated = re.fullmatch(r"remind me at (\S+)(?: in (\S+))? to (.+)", t, re.I)
         if not dated:
             return None
@@ -168,17 +178,17 @@ class UtilitySession:
         due = local_datetime(stamp, zone or self.timezone_name).timestamp()
         return self._add("reminder", title, due, zone=zone or self.timezone_name)
 
-    def _task(self, t, _low, _turn):
+    def _task(self, t: Any, _low: Any, _turn: Any) -> Any:
         task = re.fullmatch(r"(?:add (?:a )?task(?: to)?|add to (?:my )?task list) (.+)", t, re.I)
         return self.planner.add("task", task.group(1)) if task else None
 
-    def _listing(self, _t, low, _turn):
+    def _listing(self, _t: Any, low: Any, _turn: Any) -> Any:
         listed = re.fullmatch(
             r"(?:list|show)(?: my)? (tasks|reminders|timers|calendar|events)", low
         )
         return self.planner.list(_LIST_KINDS[listed.group(1)]) if listed else None
 
-    def _finish(self, t, _low, _turn):
+    def _finish(self, t: Any, _low: Any, _turn: Any) -> Any:
         """Complete or cancel a task, reminder, timer or event by name."""
         finish = re.fullmatch(
             r"(complete task|mark task|complete reminder|mark reminder|cancel task|cancel reminder|cancel timer|cancel event) (.+?)(?: done)?",
@@ -197,7 +207,7 @@ class UtilitySession:
                 return remote
         return self.planner.finish_named(kind, name, status)
 
-    def _finish_remote(self, kind: str, status: str, name: str):
+    def _finish_remote(self, kind: str, status: str, name: str) -> Any:
         """Mirror the completion into Apple when exactly one local item matches the name."""
         with self.planner.db() as con:
             rows = con.execute(
@@ -213,7 +223,7 @@ class UtilitySession:
         act = self.provider.complete if status == "done" else self.provider.cancel
         return act(matches[0]["id"])
 
-    def _event_preview(self, t, _low, turn):
+    def _event_preview(self, t: Any, _low: Any, turn: int) -> Any:
         """ "schedule event "X" from A to B": a preview that waits for a yes."""
         event = re.fullmatch(
             r'(?:schedule|create) (?:a )?(?:calendar )?event "([^"\n]+)" from (\S+) to (\S+)(?: in (\S+))?',
@@ -250,7 +260,7 @@ class UtilitySession:
             preview=self.pending.copy(),
         )
 
-    def deliver_due(self, speak):
+    def deliver_due(self, speak: Any) -> Any:
         delivered = []
         for _ in range(3):
             claimed = self.planner.claim_due(limit=1)

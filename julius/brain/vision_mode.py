@@ -1,10 +1,11 @@
 """Optional perception: disabled mode imports and loads no vision dependencies."""
 
 import os
+from typing import Any
 
 
 class VisionMode:
-    def __init__(self, enabled=False, **options) -> None:
+    def __init__(self, enabled: bool = False, **options) -> None:
         self.enabled = enabled
         self._perception = None
         self._describe = None
@@ -14,22 +15,22 @@ class VisionMode:
             self._perception = Perception(**options)
             self._describe = describe
 
-    def start(self):
+    def start(self) -> Any:
         if self._perception is not None:
             self._perception.start()
         return self
 
-    def snapshot(self):
+    def snapshot(self) -> Any:
         if self._perception is not None:
             return self._perception.snapshot()
         return dict(
             person=None, id_conf=0.0, emotion=None, conf=0.0, held=0.0, present=0.0, seen=False
         )
 
-    def describe(self, state):
+    def describe(self, state: Any) -> Any:
         return self._describe(state) if self._describe is not None else ""
 
-    def check_nudge(self):
+    def check_nudge(self) -> Any:
         return self._perception.check_nudge() if self._perception is not None else None
 
     def stop(self) -> None:
@@ -37,7 +38,7 @@ class VisionMode:
             self._perception.stop()
 
 
-def create_vision(**options):
+def create_vision(**options) -> Any:
     return VisionMode(
         enabled=os.environ.get("JULIUS_VISION", "0").lower() in {"1", "true", "on"}, **options
     )

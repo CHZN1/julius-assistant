@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 from types import MethodType
+from typing import Any
 
 
 def normalize_speech(text: str) -> str:
@@ -12,7 +13,7 @@ def normalize_speech(text: str) -> str:
     return re.sub(r"^Reminder:\s*", "Here is your reminder. ", text, flags=re.I)
 
 
-def load_reference_prompts(model):
+def load_reference_prompts(model: Any) -> Any:
     import mlx.core as mx
     import numpy as np
     from mlx_audio.utils import load_audio
@@ -53,13 +54,13 @@ def load_voice_model(decoder_only: bool = False) -> object:
         import copy
 
         class CachedReferenceTokenizer(original_tokenizer):
-            def __init__(self, config) -> None:
+            def __init__(self, config: dict[str, Any]) -> None:
                 config = copy.copy(config)
                 config.encoder_config = None
                 super().__init__(config)
 
             @staticmethod
-            def sanitize(weights):
+            def sanitize(weights: Any) -> Any:
                 return {
                     key: value
                     for key, value in original_tokenizer.sanitize(weights).items()
@@ -71,7 +72,7 @@ def load_voice_model(decoder_only: bool = False) -> object:
 
     # MLX Audio 0.5.7 replaces this module with a callable, losing streaming
     # methods (and its parameter tree). Keep the loaded decoder module intact.
-    def compile_preserving_decoder(fn, *args, **kwargs):
+    def compile_preserving_decoder(fn: Any, *args, **kwargs) -> Any:
         if isinstance(fn, Qwen3TTSSpeechTokenizerDecoder):
             return fn
         return compile_original(fn, *args, **kwargs)
@@ -86,10 +87,10 @@ def load_voice_model(decoder_only: bool = False) -> object:
     return model
 
 
-def bound_decoder(model) -> None:
+def bound_decoder(model: Any) -> None:
     import mlx.core as mx
 
-    def decode(decoder, codes, chunk_size=96, left_context_size=25):
+    def decode(decoder: Any, codes: Any, chunk_size: int = 96, left_context_size: int = 25) -> Any:
         parts = []
         for start in range(0, codes.shape[-1], chunk_size):
             context = min(start, left_context_size)

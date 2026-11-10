@@ -18,6 +18,7 @@ import statistics
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -36,7 +37,7 @@ def _domain() -> str:
     return f"gui/{os.getuid()}"
 
 
-def service_state(runner=subprocess.run):
+def service_state(runner: Callable = subprocess.run) -> Any:
     r = runner(["launchctl", "print", f"{_domain()}/{SERVICE}"], capture_output=True, text=True)
     out = {"loaded": r.returncode == 0}
     for line in (r.stdout or "").splitlines():
@@ -48,7 +49,7 @@ def service_state(runner=subprocess.run):
 
 
 class Sampler:
-    def __init__(self, psutil_module=None) -> None:
+    def __init__(self, psutil_module: Any | None = None) -> None:
         import psutil
 
         self.ps = psutil_module or psutil
@@ -95,7 +96,7 @@ class Sampler:
         return row
 
 
-def run(interval=60, path=SAMPLES, limit_hours=None) -> None:
+def run(interval: int = 60, path: Any = SAMPLES, limit_hours: Any | None = None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     s = Sampler()
     started = time.time()
@@ -108,7 +109,7 @@ def run(interval=60, path=SAMPLES, limit_hours=None) -> None:
         time.sleep(interval)
 
 
-def load(path=SAMPLES, since=None):
+def load(path: Any = SAMPLES, since: Any | None = None) -> Any:
     rows = []
     if Path(path).exists():
         for line in Path(path).read_text().splitlines():
@@ -212,7 +213,7 @@ def summarize(
     }
 
 
-def report(since=None):
+def report(since: Any | None = None) -> Any:
     from julius.service import logscan
 
     s = summarize(load(since=since))
@@ -235,7 +236,7 @@ def report(since=None):
     return "\n".join(lines)
 
 
-def install(runner=subprocess.run):
+def install(runner: Callable = subprocess.run) -> Any:
     d = {
         "Label": LABEL,
         "ProgramArguments": [PY, "-m", "julius.service.soak", "run"],
@@ -255,14 +256,14 @@ def install(runner=subprocess.run):
     return r.returncode == 0, (r.stderr or r.stdout).strip()
 
 
-def uninstall(runner=subprocess.run):
+def uninstall(runner: Callable = subprocess.run) -> Any:
     runner(["launchctl", "bootout", f"{_domain()}/{LABEL}"], capture_output=True, text=True)
     if PLIST.exists():
         PLIST.unlink()
     return True, "sampler stopped and removed"
 
 
-def status(runner=subprocess.run):
+def status(runner: Callable = subprocess.run) -> Any:
     r = runner(["launchctl", "print", f"{_domain()}/{LABEL}"], capture_output=True, text=True)
     rows = load()
     return {
@@ -273,7 +274,7 @@ def status(runner=subprocess.run):
     }
 
 
-def main(argv=None) -> int:
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("cmd", choices=["install", "uninstall", "status", "report", "run"])
     ap.add_argument("--since", default="")

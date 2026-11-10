@@ -6,6 +6,8 @@ check the result, and return a short spoken summary. File changes can only be *p
 the human FileSession and runs only after the user says yes. There is no coding agent yet.
 """
 
+from typing import Any
+
 import julius.brain.cloud as jc
 
 MAX_RESULT_CHARS = 6000
@@ -148,7 +150,12 @@ RESEARCH_TASK_SCHEMA = {
 _STATE = {"file_session": None, "turn": lambda: 0, "user_text": "", "code_session": None}
 
 
-def configure(file_session=None, turn=None, user_text=None, code_session=None) -> None:
+def configure(
+    file_session: Any | None = None,
+    turn: int | None = None,
+    user_text: Any | None = None,
+    code_session: Any | None = None,
+) -> None:
     """The runtime supplies the human FileSession that owns confirmations, the turn number, and each turn's exact words."""
     if user_text is not None:
         _STATE["user_text"] = user_text
@@ -160,12 +167,12 @@ def configure(file_session=None, turn=None, user_text=None, code_session=None) -
         _STATE["code_session"] = code_session
 
 
-def _clip(text):
+def _clip(text: str) -> Any:
     text = str(text)
     return text if len(text) <= MAX_RESULT_CHARS else text[:MAX_RESULT_CHARS] + " …[truncated]"
 
 
-def utility_tools(names=None):
+def utility_tools(names: Any | None = None) -> Any:
     """Messages API tool definitions for Julius's utilities (stable order)."""
     import julius.brain.tools as jt
 
@@ -176,7 +183,7 @@ def utility_tools(names=None):
     )
 
 
-def files_propose(args):
+def files_propose(args: list[str]) -> Any:
     """Stage a proposal in the human FileSession; never executes."""
     session = _STATE["file_session"]
     if session is None:
@@ -224,7 +231,7 @@ def files_propose(args):
     )
 
 
-def code_task(args):
+def code_task(args: list[str]) -> Any:
     """Stage a coding task in the human CodeSession; never runs it."""
     session = _STATE["code_session"]
     if session is None:
@@ -246,7 +253,16 @@ def code_task(args):
 class Loop:
     """A bounded Messages API tool loop for one tier."""
 
-    def __init__(self, brain, tier, system, tools, execute, max_steps, note) -> None:
+    def __init__(
+        self,
+        brain: Any,
+        tier: Any,
+        system: Any,
+        tools: Any,
+        execute: Any,
+        max_steps: Any,
+        note: Any,
+    ) -> None:
         self.brain, self.tier, self.execute, self.max_steps, self.note = (
             brain,
             tier,
@@ -268,7 +284,7 @@ class Loop:
             ]
         self.steps = 0
 
-    def _call(self, messages, **extra):
+    def _call(self, messages: Any, **extra) -> Any:
         if self.tier == "sonnet" and self.brain.tracker.cap_reached():
             raise SpendCap()
         response = self.brain.slow_client().messages.create(
@@ -278,14 +294,14 @@ class Loop:
         return response
 
     @staticmethod
-    def text_of(response):
+    def text_of(response: Any) -> Any:
         return " ".join(
             b.text.strip()
             for b in response.content
             if getattr(b, "type", "") == "text" and b.text.strip()
         )
 
-    def run(self, task):
+    def run(self, task: Any) -> Any:
         messages = [{"role": "user", "content": task}]
         for _ in range(self.max_steps):
             self.steps += 1
@@ -330,12 +346,12 @@ class SpendCap(Exception):
 
 
 class Planner:
-    def __init__(self, brain, dispatcher=None) -> None:
+    def __init__(self, brain: Any, dispatcher: Any | None = None) -> None:
         self.brain, self.dispatcher = brain, dispatcher
         self.config = brain.config
         self.subagent_runs = []
 
-    def tools(self):
+    def tools(self) -> Any:
         return utility_tools() + [
             DELEGATE_SCHEMA,
             FILES_PROPOSE_SCHEMA,
@@ -343,7 +359,7 @@ class Planner:
             RESEARCH_TASK_SCHEMA,
         ]
 
-    def execute(self, name, args):
+    def execute(self, name: str, args: list[str]) -> Any:
         import julius.brain.tools as jt
 
         if name == "delegate":
@@ -358,7 +374,7 @@ class Planner:
             return research.research_task(args, self.brain)
         return jt.call(name, args)
 
-    def delegate(self, args) -> str:
+    def delegate(self, args: list[str]) -> str:
         import julius.brain.tools as jt
 
         names = [n for n in args.get("tools", []) if n in SUBAGENT_TOOLS]
@@ -385,7 +401,7 @@ class Planner:
         )
         return f"[sub-agent finished in {loop.steps} step(s), {why}] {text}"
 
-    def run(self, task):
+    def run(self, task: Any) -> Any:
         loop = Loop(
             self.brain,
             "sonnet",
@@ -400,12 +416,12 @@ class Planner:
         return text
 
 
-def spoken(text):
+def spoken(text: str) -> Any:
     text = " ".join(str(text).replace("*", "").replace("#", "").split())
     return text if len(text) <= SPOKEN_LIMIT else text[:SPOKEN_LIMIT].rsplit(" ", 1)[0] + "."
 
 
-def run_escalation(args, dispatcher, brain=None):
+def run_escalation(args: list[str], dispatcher: Any, brain: Any | None = None) -> Any:
     """escalate_to_planner(task) -> short spoken summary for Haiku to say. Failures return a spoken explanation."""
     import anthropic
 

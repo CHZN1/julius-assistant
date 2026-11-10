@@ -17,13 +17,14 @@ import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 ALLOWED = (("api.anthropic.com", 443),)
 HEADER_LIMIT = 8192
 IDLE_SECONDS = 120
 
 
-def _public(ip):
+def _public(ip: Any) -> Any:
     a = ipaddress.ip_address(ip.split("%")[0])
     if getattr(a, "ipv4_mapped", None):
         a = a.ipv4_mapped
@@ -48,7 +49,7 @@ class EgressProxy:
     def port(self) -> int:
         return self.server.server_address[1] if self.server else None
 
-    def _log(self, line) -> None:
+    def _log(self, line: str) -> None:
         with self._lock:
             self.blocked.append(line)
         if self.log_path:
@@ -62,7 +63,7 @@ class EgressProxy:
         proxy = self
 
         class H(socketserver.BaseRequestHandler):
-            def handle(self):
+            def handle(self) -> Any:
                 s = self.request
                 s.settimeout(10)
                 try:
@@ -106,13 +107,13 @@ class EgressProxy:
                 except OSError:
                     pass
 
-            def _say(self, code, why) -> None:
+            def _say(self, code: Any, why: Any) -> None:
                 with contextlib.suppress(OSError):
                     self.request.sendall(
                         f"HTTP/1.1 {code} {why}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".encode()
                     )
 
-            def _splice(self, a, b) -> None:
+            def _splice(self, a: Any, b: Any) -> None:
                 socks = [a, b]
                 try:
                     while True:

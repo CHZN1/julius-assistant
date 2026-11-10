@@ -73,7 +73,7 @@ def on(runner: Callable = subprocess.run, plist_path: Path = PLIST) -> tuple[boo
     return r.returncode == 0, (r.stderr or r.stdout).strip()
 
 
-def off(runner: Callable = subprocess.run, plist_path: Path = PLIST):
+def off(runner: Callable = subprocess.run, plist_path: Path = PLIST) -> Any:
     run(["launchctl", "bootout", f"{domain()}/{LABEL}"], runner)
     run(["launchctl", "disable", f"{domain()}/{LABEL}"], runner)
     if plist_path.exists():
@@ -98,7 +98,7 @@ def status(runner: Callable = subprocess.run) -> dict[str, str | bool]:
     return out
 
 
-def wake(runner=subprocess.run):
+def wake(runner: Callable = subprocess.run) -> bool:
     return run(["launchctl", "kill", "SIGUSR1", f"{domain()}/{LABEL}"], runner).returncode == 0
 
 
@@ -215,18 +215,18 @@ def doctor(
     return verdict, str(binary)
 
 
-def _cmd_on(_argv) -> int:
+def _cmd_on(_argv: Any) -> int:
     ok, msg = on()
     print("Julius service on" if ok else f"could not start: {msg}")
     return 0 if ok else 1
 
 
-def _cmd_off(_argv) -> int:
+def _cmd_off(_argv: Any) -> int:
     print(off()[1])
     return 0
 
 
-def _cmd_restart(_argv) -> int:
+def _cmd_restart(_argv: Any) -> int:
     from julius.service import logscan
 
     logscan.mark_stderr()
@@ -235,19 +235,19 @@ def _cmd_restart(_argv) -> int:
     return 0
 
 
-def _cmd_wake(_argv) -> int:
+def _cmd_wake(_argv: Any) -> int:
     print("woke" if wake() else "service not running")
     return 0
 
 
-def _cmd_logs(argv) -> int:
+def _cmd_logs(argv: list[str]) -> int:
     n = int(argv[argv.index("-n") + 1]) if "-n" in argv else 60
     with contextlib.suppress(KeyboardInterrupt):
         show_logs(n, "--raw" in argv, "--no-follow" not in argv)
     return 0
 
 
-def _smoke_window(argv, err_path):
+def _smoke_window(argv: list[str], err_path: Any) -> Any:
     """(start timestamp, stderr offset) from which the smoke check looks."""
     import datetime
 
@@ -273,14 +273,14 @@ def _smoke_window(argv, err_path):
     return start, err_path.stat().st_size if err_path.exists() else 0
 
 
-def _cmd_smoke(argv) -> int:
+def _cmd_smoke(argv: list[str]) -> int:
     from julius import config
     from julius.service import smoke
 
     err_path = Path("~/Library/Logs/Julius/launchd.err").expanduser()
     start, size = _smoke_window(argv, err_path)
 
-    def err_tail():
+    def err_tail() -> Any:
         try:
             with err_path.open("rb") as f:
                 f.seek(size)
@@ -288,7 +288,7 @@ def _cmd_smoke(argv) -> int:
         except OSError:
             return ""
 
-    def read_log():
+    def read_log() -> Any:
         try:
             return LOG.read_text(errors="replace").splitlines()[-4000:]
         except OSError:
@@ -300,7 +300,7 @@ def _cmd_smoke(argv) -> int:
     return 0 if ok else 1
 
 
-def _cmd_doctor(_argv) -> int:
+def _cmd_doctor(_argv: Any) -> int:
     verdict, _binary = doctor()
     print(f"hotkey helper under launchd -> {verdict}")
     if verdict.endswith("ready stop wake") and "failed" not in verdict:
@@ -325,7 +325,7 @@ _COMMANDS = {
 }
 
 
-def main(argv):
+def main(argv: list[str]) -> Any:
     """Run one service subcommand (on, off, status, restart, wake, logs, smoke, doctor)."""
     command = _COMMANDS.get((argv[1:2] or ["status"])[0])
     if command is None:

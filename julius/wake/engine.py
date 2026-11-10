@@ -9,7 +9,9 @@ is followed by another within 5 s, and accepted wakes whose verifier score was w
 
 import json
 import time
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -22,13 +24,13 @@ REPEAT_WINDOW = 5.0
 class WakeEngine:
     def __init__(
         self,
-        stream,
-        log_dir,
-        clock=time.time,
-        repeat_window=REPEAT_WINDOW,
-        speaker_margin=0.1,
-        learner=None,
-        reloader=None,
+        stream: Any,
+        log_dir: Any,
+        clock: Callable[[], float] = time.time,
+        repeat_window: Any = REPEAT_WINDOW,
+        speaker_margin: float = 0.1,
+        learner: Any | None = None,
+        reloader: Any | None = None,
     ) -> None:
         self.learner = learner
         self.reloader = reloader  # learner: wake/personal.Learner (passive clips); reloader: () -> new WakeStream when a better model appeared, else None
@@ -40,7 +42,7 @@ class WakeEngine:
         self.buffer = np.zeros(0, np.float32)
         self.previous = None
 
-    def feed(self, chunk):
+    def feed(self, chunk: Any) -> Any:
         """Take any amount of 16 kHz float audio; return the accepted wake events decided on it ({"request": text after the wake word, ...})."""
         self.buffer = np.concatenate([self.buffer, np.asarray(chunk, dtype=np.float32).reshape(-1)])
         accepted = []
@@ -65,18 +67,18 @@ class WakeEngine:
         self.buffer = np.zeros(0, np.float32)
         self.stream.reset()
 
-    def note_spoken_wake(self, text) -> None:
+    def note_spoken_wake(self, text: str) -> None:
         """The main loop heard the wake word while already awake (Julius, again): worth knowing when it follows a recent rejected fire."""
         self._write({"event": "wake_while_awake", "heard": text, **self._repeat_info(self.clock())})
 
-    def _repeat_info(self, now):
+    def _repeat_info(self, now: Any) -> Any:
         gap = None if self.previous is None else now - self.previous["time"]
         return {
             "gap_s": None if gap is None else round(gap, 2),
             "repeat": gap is not None and gap <= self.repeat_window,
         }
 
-    def _log(self, event) -> None:
+    def _log(self, event: Any) -> None:
         if self.learner is not None:
             self.learner.observe(event)
         now = self.clock()
@@ -111,7 +113,7 @@ class WakeEngine:
         self._write(row)
         self.previous = {"time": now, "accepted": event["accepted"], "clip": event.get("clip")}
 
-    def _save(self, clip, why, when):
+    def _save(self, clip: Any, why: Any, when: Any) -> Any:
         import soundfile as sf
 
         folder = self.log_dir / "wake_clips"
@@ -120,14 +122,14 @@ class WakeEngine:
         sf.write(path, np.asarray(clip, dtype=np.float32), 16000, subtype="PCM_16")
         return str(path)
 
-    def _write(self, row) -> None:
+    def _write(self, row: Any) -> None:
         row = {"ts": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.clock())), **row}
         self.log_dir.mkdir(parents=True, exist_ok=True)
         with (self.log_dir / "wake_log.jsonl").open("a") as fh:
             fh.write(json.dumps(row) + "\n")
 
 
-def choose_model(wake, root=None, personal_dir=None):
+def choose_model(wake: Any, root: Any | None = None, personal_dir: Any | None = None) -> Any:
     """(path, threshold, learns). An explicit [wake] model wins (your own private detector: threshold_low, no passive learning). Otherwise your personal model from
     passive learning if there is one, else the shipped starter model; both use starter_threshold, very low because the Whisper stage keeps false wakes at zero."""
     root = Path(root or REPO_ROOT)
@@ -150,7 +152,12 @@ def choose_model(wake, root=None, personal_dir=None):
     )
 
 
-def from_config(verify, log_dir, config=None, say=print):
+def from_config(
+    verify: Any,
+    log_dir: Any,
+    config: dict[str, Any] | None = None,
+    say: Callable[[str], Any] = print,
+) -> Any:
     """The engine described by [wake] in julius.toml, or None for engine = "whisper" or when the detector model is missing (falls back, saying why)."""
     import julius.config as cfg
 
@@ -172,7 +179,7 @@ def from_config(verify, log_dir, config=None, say=print):
             with vpath.open("rb") as fh:
                 speaker = pickle.load(fh)  # your own file, written by wake/verifier.py
 
-        def make(path, thr):
+        def make(path: Any, thr: Any) -> Any:
             return WakeStream(
                 path,
                 thr,
@@ -190,7 +197,7 @@ def from_config(verify, log_dir, config=None, say=print):
             learner = Learner(Store(), learn_after=int(wake.get("learn_after", 20)))
             loaded = [model, model.stat().st_mtime]
 
-            def reloader():
+            def reloader() -> Any:
                 new, thr, _ = choose_model(wake)
                 if new.exists() and (new != loaded[0] or new.stat().st_mtime != loaded[1]):
                     fresh = make(new, thr)

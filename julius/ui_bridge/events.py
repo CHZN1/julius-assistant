@@ -21,6 +21,7 @@ import struct
 import threading
 import time
 from collections.abc import Callable
+from typing import Any
 
 from numpy import ndarray
 
@@ -55,13 +56,13 @@ def frame(payload: str, opcode: int = 0x1) -> bytes:
     return head + b
 
 
-def _local_host(value):
+def _local_host(value: Any) -> bool:
     h = (value or "").strip().lower()
     h = (h[1 : h.find("]")] if "]" in h else h) if h.startswith("[") else h.split(":")[0]
     return h in ("127.0.0.1", "localhost", "::1")
 
 
-def origin_ok(origin):
+def origin_ok(origin: Any) -> Any:
     if not origin:
         return True  # non-browser clients (the test client) send none
     rest = origin.split("://", 1)[-1]
@@ -122,14 +123,14 @@ class EventHub:
         }
 
     # -- clients
-    def add(self, client) -> bool:
+    def add(self, client: Any) -> bool:
         with self._lock:
             if len(self._clients) >= MAX_CLIENTS:
                 return False
             self._clients.add(client)
             return True
 
-    def remove(self, client) -> None:
+    def remove(self, client: Any) -> None:
         with self._lock:
             self._clients.discard(client)
 
@@ -140,7 +141,7 @@ class EventHub:
 
 
 class _Client(threading.Thread):
-    def __init__(self, sock, hub) -> None:
+    def __init__(self, sock: Any, hub: Any) -> None:
         super().__init__(daemon=True)
         self.sock, self.hub = sock, hub
         self.q = queue.Queue(maxsize=300)
@@ -159,7 +160,7 @@ class _Client(threading.Thread):
         with contextlib.suppress(OSError):
             self.sock.shutdown(socket.SHUT_RDWR)
 
-    def _read_exact(self, n):
+    def _read_exact(self, n: int) -> Any:
         buf = b""
         while len(buf) < n:
             chunk = self.sock.recv(n - len(buf))
@@ -329,7 +330,9 @@ class LevelTap:
         return self._rms if self.clock() - self._at < 0.15 else 0.0
 
 
-def start_from_config(cfg: dict[str, bool | int], state_fn: None = None, level_fn: None = None):
+def start_from_config(
+    cfg: dict[str, bool | int], state_fn: None = None, level_fn: None = None
+) -> Any:
     """cfg is the [events] table. Returns (hub, server) or (None, None) when disabled or the port is taken (Julius never fails to start over a UI feed)."""
     if not (cfg or {}).get("enabled", True):
         return None, None

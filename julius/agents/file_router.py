@@ -58,7 +58,7 @@ def norm(text: str) -> str:
     # Quoted names are literal: "Dash Reports" must not become "- Reports".
     quoted = []
 
-    def protect(m) -> str:
+    def protect(m: Any) -> str:
         quoted.append(m.group())
         return f"QUOTEDTOKEN{len(quoted) - 1}"
 
@@ -173,13 +173,13 @@ def _mask_literals(text: str) -> tuple[str, Callable]:
     """Hide quoted names so their words are not parsed; returns (masked, restore function)."""
     literals = []
 
-    def hide(m) -> str:
+    def hide(m: Any) -> str:
         literals.append(m.group())
         return f"PATHLITERAL{len(literals) - 1}"
 
     masked = re.sub(r'"[^"\n]*"|(?<!\w)\'[^\'\n]+\'', hide, text)
 
-    def restore(value):
+    def restore(value: Any) -> Any:
         for i, literal in enumerate(literals):
             value = value.replace(f"PATHLITERAL{i}", literal)
         return value

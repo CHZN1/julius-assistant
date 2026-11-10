@@ -3,6 +3,7 @@
 import contextlib
 import time
 from contextlib import nullcontext
+from typing import Any
 
 import numpy as np
 import sounddevice as sd
@@ -14,7 +15,7 @@ from julius.runtime.controls import stop_now
 from julius.runtime.session import CHUNK, SAMPLE_RATE, Session
 
 
-def microphone_stream(s: Session):
+def microphone_stream(s: Session) -> Any:
     """The context manager that keeps audio flowing into `s.chunks`."""
     if s.duplex is not None:
         return s.duplex.running()
@@ -66,7 +67,7 @@ def keep_duplex_audio(s: Session) -> None:
         s.use_raw_now = True
 
 
-def duplex_block(s: Session, block, raw, ref, cleaned) -> None:
+def duplex_block(s: Session, block: Any, raw: str, ref: Any, cleaned: Any) -> None:
     """One 1024-sample block from the duplex stream (audio thread)."""
     if s.rec is not None:
         s.rec.pair(raw, ref)
@@ -84,7 +85,7 @@ def duplex_fallback(s: Session, why: str) -> None:
         log.event("duplex_fallback", reason=why)
 
 
-def _duplex_talkover(s: Session, samples) -> None:
+def _duplex_talkover(s: Session, samples: Any) -> None:
     """Echo-cancelled stream: his voice over Julius's is detected in the cleaned signal."""
     if s.duplex_monitor.fell_back or not s.cancellation.busy.is_set() or s.microphone_gate.quiet:
         return

@@ -3,6 +3,7 @@
 import json
 import subprocess
 import uuid
+from typing import Any
 from unittest.mock import Mock
 
 from julius.brain.planning import Planner, output
@@ -50,7 +51,7 @@ class AppleProvider:
         except Exception as exc:
             return output(False, "apple_error", f"Apple operation failed: {exc}")
 
-    def inventory(self):
+    def inventory(self) -> Any:
         return self.call({"action": "inventory"})
 
     @property

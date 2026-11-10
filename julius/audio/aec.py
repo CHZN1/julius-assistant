@@ -9,6 +9,8 @@ before it is given to the canceller; `estimate_lag` finds it from a recording by
     cancel(mic, out)                           the same for whole arrays (used by the eval)"""
 
 import collections
+from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 from numpy import ndarray
@@ -16,13 +18,15 @@ from numpy import ndarray
 RATE, FRAME = 16000, 160
 
 
-def estimate_lag(mic, out, max_lag=4.0, step=0.01):
+def estimate_lag(
+    mic: Any, out: Callable[[str], Any], max_lag: float = 4.0, step: float = 0.01
+) -> Any:
     """Seconds by which the echo in `mic` lags `out`, from the correlation of 10 ms loudness envelopes (0.0 when there is no playback to correlate)."""
     n = min(len(mic), len(out)) // FRAME
     if n < 100:
         return 0.0
 
-    def env(x):
+    def env(x: Any) -> Any:
         return np.sqrt(
             np.mean(np.asarray(x[: n * FRAME], dtype=np.float32).reshape(n, FRAME) ** 2, axis=1)
         )
@@ -105,7 +109,7 @@ class EchoCanceller:
         return res.astype(np.float32) / 32767
 
 
-def cancel(mic, out, lag=None, **kw):
+def cancel(mic: Any, out: Callable[[str], Any], lag: Any | None = None, **kw) -> Any:
     """Whole-array version for the eval: returns `mic` with the echo of `out` removed. `lag` defaults to the estimate from the signals themselves."""
     mic = np.asarray(mic, dtype=np.float32)
     out = np.asarray(out, dtype=np.float32)[: len(mic)]

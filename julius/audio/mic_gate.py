@@ -4,6 +4,7 @@ import threading
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from typing import Any
 
 
 class MicrophoneGate:
@@ -32,7 +33,7 @@ class MicrophoneGate:
         with self._lock:
             self._force = True
 
-    def settling(self):
+    def settling(self) -> Any:
         """Playback is over but the room echo has not died down yet: the gate is still shut."""
         with self._lock:
             return (

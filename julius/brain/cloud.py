@@ -9,8 +9,10 @@ import json
 import os
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import julius.config as cfg
 import julius.costs as costs
@@ -79,7 +81,7 @@ ESCALATE_SCHEMA = {
 }
 
 
-def convert_tools(schemas):
+def convert_tools(schemas: Any) -> Any:
     """Ollama/OpenAI function schemas -> Messages API tools; the last tool carries the cache breakpoint."""
     tools = [
         {
@@ -97,11 +99,11 @@ def convert_tools(schemas):
     return tools
 
 
-def convert_messages(messages):
+def convert_messages(messages: Any) -> Any:
     """Julius messages -> (system text, API messages). Tool calls get sequential ids that tool results consume in order."""
     system, out, ids, notes, counter = [], [], [], [], 0
 
-    def add(role, blocks) -> None:
+    def add(role: Any, blocks: Any) -> None:
         if out and out[-1]["role"] == role:
             out[-1]["content"].extend(blocks)
         else:
@@ -146,13 +148,13 @@ def convert_messages(messages):
     return "\n\n".join(s for s in system if s), out
 
 
-def _has_tool_blocks(api_messages):
+def _has_tool_blocks(api_messages: Any) -> Any:
     return any(
         b.get("type") in ("tool_use", "tool_result") for m in api_messages for b in m["content"]
     )
 
 
-def make_client(timeout=20.0, max_retries=1):
+def make_client(timeout: float = 20.0, max_retries: int = 1) -> Any:
     import anthropic
 
     key = cfg.api_key()
@@ -165,11 +167,11 @@ class MissingKey(Exception):
     pass
 
 
-def _personalize_tools(tools):
+def _personalize_tools(tools: Any) -> Any:
     """Tool definitions with the author's name and city replaced by this install's profile in every description."""
     from julius import profile
 
-    def walk(x):
+    def walk(x: Any) -> Any:
         if isinstance(x, dict):
             return {
                 k: (profile.apply(v) if k == "description" and isinstance(v, str) else walk(v))
@@ -185,7 +187,14 @@ def _personalize_tools(tools):
 class CloudBrain:
     """Front-end brain: one instance per process. `offline(messages, tools, stream, options)` is the local fallback."""
 
-    def __init__(self, config, tracker, client=None, offline=None, clock=time.monotonic) -> None:
+    def __init__(
+        self,
+        config: dict[str, Any],
+        tracker: Any,
+        client: Any | None = None,
+        offline: Any | None = None,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
         self.config, self.tracker, self._client, self.offline, self._clock = (
             config,
             tracker,
@@ -205,12 +214,12 @@ class CloudBrain:
         self._last_tools = None
 
     # ---------- client and state ----------
-    def client(self):
+    def client(self) -> Any:
         if self._client is None:
             self._client = make_client()
         return self._client
 
-    def slow_client(self):
+    def slow_client(self) -> Any:
         """Longer timeout for planner and sub-agent calls (non-streaming, adaptive thinking)."""
         if self._slow is None:
             self._slow = make_client(timeout=120.0, max_retries=2)
@@ -219,7 +228,7 @@ class CloudBrain:
     def reset_auth(self) -> None:
         self.auth_bad, self._client, self._slow = False, None, None
 
-    def cap_notice(self):
+    def cap_notice(self) -> Any:
         """The spoken notice for a spend threshold, once per day each: the cap (Haiku only), then twice the cap (offline)."""
         day = time.strftime("%Y-%m-%d")
         for key, reached, message in (
@@ -231,7 +240,7 @@ class CloudBrain:
                 return message
         return None
 
-    def tool_schemas(self, schemas):
+    def tool_schemas(self, schemas: Any) -> Any:
         """The full tool list (plus escalate_to_planner unless the cap is reached) whenever tools are offered.
 
         Trimming schemas was a local-model speed fix. Here one stable list is cached once and shared by every turn
@@ -249,7 +258,9 @@ class CloudBrain:
         return chosen
 
     # ---------- request building ----------
-    def request(self, messages, tools, max_tokens=None, force_tool=False):
+    def request(
+        self, messages: Any, tools: Any, max_tokens: Any | None = None, force_tool: bool = False
+    ) -> Any:
         system, api_messages = convert_messages(messages)
         from julius import profile
 
@@ -290,7 +301,13 @@ class CloudBrain:
         return kwargs
 
     # ---------- public entry ----------
-    def chat(self, messages, tools=None, stream=False, options=None):
+    def chat(
+        self,
+        messages: Any,
+        tools: Any | None = None,
+        stream: bool = False,
+        options: Any | None = None,
+    ) -> Any:
         import anthropic
 
         options = dict(options or {})
@@ -333,7 +350,7 @@ class CloudBrain:
 
     # ---------- responses ----------
     @staticmethod
-    def _shape(response):
+    def _shape(response: Any) -> Any:
         text = "".join(b.text for b in response.content if getattr(b, "type", "") == "text")
         calls = [
             SimpleNamespace(function=SimpleNamespace(name=b.name, arguments=dict(b.input)))
@@ -342,7 +359,7 @@ class CloudBrain:
         ]
         return SimpleNamespace(message=SimpleNamespace(content=text, tool_calls=calls or None))
 
-    def _stream(self, kwargs, messages, tools, options):
+    def _stream(self, kwargs: Any, messages: Any, tools: Any, options: Any) -> Any:
         import anthropic
 
         brain = self
@@ -397,7 +414,7 @@ class CloudBrain:
             flush=True,
         )
 
-    def _say_auth(self, stream):
+    def _say_auth(self, stream: Any) -> Any:
         if not self.auth_bad:
             self.mark_auth_bad()
         if stream:  # a streamed reply is what gets spoken, so this delivers the message
@@ -405,11 +422,11 @@ class CloudBrain:
             return iter([SimpleNamespace(message=SimpleNamespace(content=AUTH_MESSAGE))])
         return SimpleNamespace(message=SimpleNamespace(content=AUTH_MESSAGE, tool_calls=None))
 
-    def _go_offline(self, messages, tools, stream, options):
+    def _go_offline(self, messages: Any, tools: Any, stream: Any, options: Any) -> Any:
         self.offline_until = self._clock() + self.config["offline"]["retry_seconds"]
         return self._offline(messages, tools, stream, options, announce=True)
 
-    def _offline(self, messages, tools, stream, options, announce):
+    def _offline(self, messages: Any, tools: Any, stream: Any, options: Any, announce: Any) -> Any:
         if self.offline is None:
             raise RuntimeError("Claude API unreachable and no offline model configured")
         if announce:
@@ -425,7 +442,7 @@ _TRACKER = None
 _LOCK = threading.RLock()
 
 
-def get_tracker():
+def get_tracker() -> Any:
     global _TRACKER
     with _LOCK:
         if _TRACKER is None:
@@ -441,7 +458,7 @@ def get_tracker():
         return _TRACKER
 
 
-def get_brain(offline=None):
+def get_brain(offline: Any | None = None) -> Any:
     global _BRAIN
     with _LOCK:
         if _BRAIN is None:

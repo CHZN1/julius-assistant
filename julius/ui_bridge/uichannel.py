@@ -79,12 +79,12 @@ class _Limiter:
 
 
 class Refused(Exception):
-    def __init__(self, status, why) -> None:
+    def __init__(self, status: Any, why: Any) -> None:
         super().__init__(why)
         self.status, self.why = status, why
 
 
-def validate_typed(body):
+def validate_typed(body: Any) -> Any:
     text = body.get("text")
     if not isinstance(text, str):
         raise Refused(400, "text must be a string")
@@ -102,7 +102,7 @@ def validate_typed(body):
     return text
 
 
-def validate_paths(body):
+def validate_paths(body: Any) -> Any:
     paths = body.get("paths")
     if not isinstance(paths, list) or not paths:
         raise Refused(400, "paths must be a non-empty list")
@@ -135,7 +135,7 @@ class Channel:
         self.httpd = None
         self._audit_lock = threading.Lock()
 
-    def audit(self, endpoint, status, **fields) -> None:
+    def audit(self, endpoint: Any, status: Any, **fields) -> None:
         row = {"t": round(time.time(), 3), "endpoint": endpoint, "status": status, **fields}
         try:
             with self._audit_lock:
@@ -148,7 +148,7 @@ class Channel:
         except OSError:
             pass
 
-    def handle(self, method, path, headers, body_reader):
+    def handle(self, method: Any, path: Any, headers: Any, body_reader: Any) -> Any:
         """Returns (status, dict). Raises nothing; every refusal is a Refused turned into a response by the caller."""
         self._authenticate(headers)
         if method == "GET" and path == "/v1/ping":
@@ -166,7 +166,7 @@ class Channel:
             self.audit("drop", 200, paths=len(paths))
         return 200, {"ok": True, **(res or {})}
 
-    def _authenticate(self, headers) -> None:
+    def _authenticate(self, headers: Any) -> None:
         """Local host, no browser Origin, under the rate limit, and the right bearer token."""
         host = (headers.get("Host") or "").lower()
         if host not in (f"127.0.0.1:{self.port}", f"localhost:{self.port}"):
@@ -183,7 +183,7 @@ class Channel:
             raise Refused(401, "bad token")
 
     @staticmethod
-    def _read_json(headers, body_reader) -> dict:
+    def _read_json(headers: Any, body_reader: Any) -> dict:
         if (headers.get("Content-Type") or "").split(";")[0].strip().lower() != "application/json":
             raise Refused(415, "Content-Type must be application/json")
         try:
@@ -200,7 +200,7 @@ class Channel:
             raise Refused(400, "body must be an object")
         return body
 
-    def _handler(self, name, unavailable):
+    def _handler(self, name: str, unavailable: Any) -> Any:
         handler = self.handlers.get(name)
         if handler is None:
             raise Refused(503, unavailable)
@@ -217,7 +217,7 @@ class Channel:
             def log_message(self, *a) -> None:
                 pass
 
-            def _go(self, method) -> None:
+            def _go(self, method: Any) -> None:
                 try:
                     status, out = chan.handle(method, self.path, self.headers, self.rfile.read)
                 except Refused as r:
@@ -275,7 +275,7 @@ def start_from_config(
     handlers: dict[Any, Any],
     token_path: Path | None = None,
     audit_path: Path | None = None,
-):
+) -> Any:
     """cfg is the [ui] table. Returns the running Channel, or None when disabled or the port is taken (Julius never fails to start over the UI channel)."""
     if not (cfg or {}).get("enabled", True):
         return None

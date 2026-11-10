@@ -4,6 +4,7 @@ import os
 import threading
 import time
 from pathlib import Path
+from typing import Any
 
 import mlx_whisper
 import numpy as np
@@ -22,7 +23,7 @@ from julius.wake import engine
 NO_SPEECH_LIMIT = 0.6
 
 
-def save_utterance(s: Session, audio) -> None:
+def save_utterance(s: Session, audio: Any) -> None:
     """JULIUS_SAVE_AUDIO_DIR: keep each captured utterance (16 kHz mono) for offline checks."""
     folder = Path(os.environ["JULIUS_SAVE_AUDIO_DIR"])
     folder.mkdir(parents=True, exist_ok=True)
@@ -117,7 +118,7 @@ def transcribe_input(s: Session, audio: list[int], wake: bool = False) -> tuple[
         return "", "?", 1.0
 
 
-def wake_verify(s: Session, clip) -> tuple[bool, str, float]:
+def wake_verify(s: Session, clip: Any) -> tuple[bool, str, float]:
     """Cascade stage 2: one Whisper run on the whole utterance; the wake regex decides and the
     transcript becomes the request."""
     started = time.perf_counter()

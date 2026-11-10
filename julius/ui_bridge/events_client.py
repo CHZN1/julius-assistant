@@ -10,6 +10,7 @@ import os
 import socket
 import struct
 import sys
+from typing import Any
 
 
 def connect(port: int = 8765, host: str = "127.0.0.1") -> tuple[socket.socket, bytes]:
@@ -31,11 +32,11 @@ def connect(port: int = 8765, host: str = "127.0.0.1") -> tuple[socket.socket, b
     return s, rest
 
 
-def events(sock, rest=b""):
+def events(sock: Any, rest: str = b""):
     """Yield decoded JSON events until the server closes."""
     buf = rest
 
-    def need(n):
+    def need(n: int) -> Any:
         nonlocal buf
         while len(buf) < n:
             chunk = sock.recv(4096)
@@ -63,7 +64,7 @@ def events(sock, rest=b""):
             yield json.loads(payload.decode())
 
 
-def main(argv) -> int:
+def main(argv: list[str]) -> int:
     port = next((int(a) for a in argv if a.isdigit()), 8765)
     every_level = "--levels" in argv
     sock, rest = connect(port)

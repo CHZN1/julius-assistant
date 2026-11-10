@@ -218,7 +218,7 @@ def drop_stop_lead(text: str) -> str:
 QUIET_COMMANDS = {"stop listening", "go quiet", "go silent", "mute yourself"}
 
 
-def quiet_command(text):
+def quiet_command(text: str) -> bool:
     """Full microphone-off quiet mode (woken only by the hotkey): only on these words. \"Go to sleep\" is ordinary sleep that wakes on \"Julius\"."""
     return control_core(text) in QUIET_COMMANDS
 

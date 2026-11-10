@@ -9,6 +9,7 @@ import contextlib
 import itertools
 import threading
 from collections.abc import Callable
+from typing import Any
 
 PHRASES = ("On it.", "One moment.", "Working on it.")
 
@@ -48,18 +49,18 @@ class Acknowledger:
             if self._timer:
                 self._timer.cancel()
 
-    def watch(self):
+    def watch(self) -> Any:
         ack = self
 
         class _Watch:
-            def __enter__(self_):
+            def __enter__(self_: Any) -> None:
                 with ack._lock:
                     if not ack._done and ack.enabled:
                         ack._timer = threading.Timer(ack.delay, ack._fire)
                         ack._timer.daemon = True
                         ack._timer.start()
 
-            def __exit__(self_, *exc):
+            def __exit__(self_: Any, *exc) -> bool:
                 with ack._lock:
                     if ack._timer:
                         ack._timer.cancel()

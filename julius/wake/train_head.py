@@ -11,6 +11,7 @@ import argparse
 import json
 import random
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import soundfile as sf
@@ -42,11 +43,11 @@ class Head(nn.Module):
             nn.Sigmoid(),
         )
 
-    def forward(self, x):
+    def forward(self, x: Any) -> Any:
         return self.net(x)
 
 
-def read16k(path):
+def read16k(path: Any) -> Any:
     x, sr = sf.read(path, dtype="float32")
     if x.ndim > 1:
         x = x[:, 0]
@@ -57,7 +58,7 @@ def read16k(path):
     )
 
 
-def embed(files, cache, extractor, max_s=4.0, loader=read16k):
+def embed(files: Any, cache: Any, extractor: Any, max_s: float = 4.0, loader: Any = read16k) -> Any:
     if cache.exists():
         return list(np.load(cache, allow_pickle=True))
     out = []
@@ -74,11 +75,11 @@ def embed(files, cache, extractor, max_s=4.0, loader=read16k):
     return out
 
 
-def windows(emb):  # (frames, 96) -> (n, 16, 96)
+def windows(emb: Any) -> Any:  # (frames, 96) -> (n, 16, 96)
     return np.stack([emb[i : i + WIN] for i in range(len(emb) - WIN + 1)]).astype(np.float32)
 
 
-def clip_scores(model, embs):
+def clip_scores(model: Any, embs: Any) -> Any:
     model.eval()
     out = []
     with torch.no_grad():
@@ -98,7 +99,7 @@ CLASS_WEIGHT = {
 }
 
 
-def _synthetic_sets(args, extractor, tag, rng):
+def _synthetic_sets(args: list[str], extractor: Any, tag: Any, rng: Any) -> Any:
     """The generated classes (pos, hard/general/julius negatives) plus real speech negatives."""
     manifest = {
         m["file"]: m
@@ -123,11 +124,11 @@ def _synthetic_sets(args, extractor, tag, rng):
     return sets
 
 
-def _talk_and_noise_sets(sets, args, extractor) -> None:
+def _talk_and_noise_sets(sets: Any, args: list[str], extractor: Any) -> None:
     """Ordinary talk (talk3 held out for the false-wake eval) and background-noise negatives."""
     noise = np.random.default_rng(0)
 
-    def noise_clip(i):  # background noise negatives
+    def noise_clip(i: Any) -> Any:  # background noise negatives
         n = int(4 * SR)
         w = noise.standard_normal(n).astype(np.float32)
         if i % 3 == 1:
@@ -152,7 +153,7 @@ def _talk_and_noise_sets(sets, args, extractor) -> None:
     ]
 
 
-def _train(model, train, val, sets, epochs, rng) -> None:
+def _train(model: Any, train: Any, val: Any, sets: Any, epochs: Any, rng: Any) -> None:
     """Weighted clip-level BCE training with a held-out report every five epochs."""
     opt = torch.optim.AdamW(model.parameters(), 2e-3, weight_decay=1e-3)
     bce = nn.BCELoss(reduction="none")
@@ -182,7 +183,7 @@ def _train(model, train, val, sets, epochs, rng) -> None:
             _report(model, val, sets, ep, total / (len(train) / 32))
 
 
-def _report(model, val, sets, ep, loss) -> None:
+def _report(model: Any, val: Any, sets: Any, ep: Any, loss: Any) -> None:
     scores = {
         c: clip_scores(model, [e for k, e in val if k == c])
         for c in sets

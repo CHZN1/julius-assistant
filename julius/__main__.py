@@ -11,7 +11,7 @@ import sys
 from julius.profile import apply_cloud_defaults
 
 
-def main(argv=None) -> int:
+def main(argv: list[str] | None = None) -> int:
     """Parse arguments, install service logging, apply the default profile and run the assistant."""
     argparse.ArgumentParser(
         prog="julius",

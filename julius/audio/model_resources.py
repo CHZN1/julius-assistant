@@ -9,6 +9,7 @@ import subprocess
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import Any
 from unittest.mock import Mock
 
 
@@ -16,7 +17,7 @@ class ResourceUnavailable(RuntimeError):
     pass
 
 
-def mac_memory_snapshot():
+def mac_memory_snapshot() -> Any:
     pressure = subprocess.check_output(["/usr/bin/memory_pressure", "-Q"], text=True, timeout=5)
     swap = subprocess.check_output(["/usr/sbin/sysctl", "vm.swapusage"], text=True, timeout=5)
     return {

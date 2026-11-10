@@ -75,7 +75,7 @@ def _play_on_one_stream(s: Session, audio: Iterator[Any]) -> None:
         audio.close()
 
 
-def _play_chunks(s: Session, audio) -> None:
+def _play_chunks(s: Session, audio: Any) -> None:
     """Fallback: play each chunk to completion."""
     for samples, sample_rate in audio:
         _note_audio(s)

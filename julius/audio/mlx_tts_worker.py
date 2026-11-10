@@ -9,6 +9,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from typing import Any
 
 from julius import state
 from julius.paths import REPO_ROOT
@@ -32,7 +33,7 @@ mx.set_cache_limit(256 * 1024**2)
 mx.set_memory_limit(5 * 1024**3)
 
 
-def load_models():
+def load_models() -> Any:
     with contextlib.redirect_stdout(sys.stderr):
         model = load_voice_model(decoder_only=True)
         refs = load_reference_prompts(model)
@@ -45,7 +46,7 @@ def load_models():
 model, refs = load_models()
 
 
-def terminate_worker(signum, frame) -> Never:
+def terminate_worker(signum: Any, frame: Any) -> Never:
     raise SystemExit(0)
 
 

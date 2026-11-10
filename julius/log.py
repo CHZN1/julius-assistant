@@ -14,6 +14,7 @@ import sys
 import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from typing import Any
 
 LOG_DIR = Path(os.environ.get("JULIUS_LOG_DIR", "~/Library/Logs/Julius")).expanduser()
 _KEY = re.compile(r"(sk-[A-Za-z0-9_-]{16,}|[A-Fa-f0-9]{32,})")
@@ -22,7 +23,7 @@ _ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 _NOISE = re.compile(r"%\||Download complete|Reconstruction complete|^\s*$")
 
 
-def make_logger(path=None, max_bytes=5_000_000, backups=5):
+def make_logger(path: Any | None = None, max_bytes: int = 5_000_000, backups: int = 5) -> Any:
     path = Path(path or LOG_DIR / "julius.jsonl")
     path.parent.mkdir(parents=True, exist_ok=True)
     log = logging.getLogger("julius.json")
@@ -36,7 +37,7 @@ def make_logger(path=None, max_bytes=5_000_000, backups=5):
     return log
 
 
-def record(level, event, msg="", log_transcripts=False, **fields):
+def record(level: Any, event: Any, msg: str = "", log_transcripts: bool = False, **fields) -> Any:
     if not log_transcripts and _SPEECH.match(msg):
         msg = "[transcript redacted]"
     return json.dumps(
@@ -54,7 +55,7 @@ def record(level, event, msg="", log_transcripts=False, **fields):
 class Tee(io.TextIOBase):
     """File-like wrapper: passes text through and logs every complete line."""
 
-    def __init__(self, inner, log, level, log_transcripts=False) -> None:
+    def __init__(self, inner: Any, log: Any, level: Any, log_transcripts: bool = False) -> None:
         self.inner, self.log, self.level, self.log_transcripts, self.buf = (
             inner,
             log,
@@ -63,7 +64,7 @@ class Tee(io.TextIOBase):
             "",
         )
 
-    def write(self, s):
+    def write(self, s: str) -> Any:
         with contextlib.suppress(Exception):
             self.inner.write(s)
         self.buf += _ANSI.sub("", s).replace("\r", "\n")
@@ -86,14 +87,14 @@ class Tee(io.TextIOBase):
         with contextlib.suppress(Exception):
             self.inner.flush()
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> Any:
         return getattr(self.inner, name)
 
 
 _logger = None
 
 
-def install(log_transcripts=False, path=None):
+def install(log_transcripts: bool = False, path: Any | None = None) -> Any:
     """Tee stdout/stderr into the JSON log. `log_transcripts` is a bool or a callable asked for every line (so a time-limited diagnostics window ends by itself). Returns the logger."""
     global _logger
     _logger = make_logger(path)
@@ -103,7 +104,7 @@ def install(log_transcripts=False, path=None):
     return _logger
 
 
-def event(name, msg="", **fields) -> None:
+def event(name: str, msg: str = "", **fields) -> None:
     """A structured event (start, quiet, wake, stop, crash ...); a no-op when the JSON log is not installed."""
     if _logger is not None:
         _logger.info(record("info", name, msg, True, **fields))

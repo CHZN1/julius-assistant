@@ -9,6 +9,7 @@ update() takes the microphone level and the recent playback level for a short wi
 import collections
 import time
 from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 from numpy import ndarray
@@ -36,7 +37,7 @@ class TalkOver:
         self._run = 0.0
         self.triggered = False
 
-    def out(self, audio, sample_rate=16000) -> None:
+    def out(self, audio: Any, sample_rate: int = 16000) -> None:
         """Playback tap: called as each chunk is written to the output device."""
         a = np.asarray(audio, dtype=np.float32)
         if a.size:
