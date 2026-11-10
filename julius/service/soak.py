@@ -122,10 +122,8 @@ def load(path=SAMPLES, since=None):
     return rows
 
 
-def summarize(rows, interval=60):
-    """Restarts, gaps, CPU and memory statistics, and the memory trend (MB per hour, least squares over samples with a stable pid)."""
-    if not rows:
-        return {"samples": 0}
+def _restarts_and_down(rows):
+    """(pid changes seen, samples taken while the service was down)."""
     restarts, down, prev_pid = 0, 0, None
     for r in rows:
         if r["pid"] and prev_pid and r["pid"] != prev_pid:
@@ -134,25 +132,57 @@ def summarize(rows, interval=60):
             prev_pid = r["pid"]
         if not r["pid"] or r.get("gone"):
             down += 1
+    return restarts, down
+
+
+def _memory_slope(rows, rss):
+    """MB per hour within the longest run of one pid, so a restart does not look like a leak."""
+    if len(rss) <= 5:
+        return None
+    by_pid = {}
+    for r in rows:
+        if r.get("rss_mb") and r["pid"]:
+            by_pid.setdefault(r["pid"], []).append((r["t"], r["rss_mb"]))
+    longest = max(by_pid.values(), key=len)
+    if len(longest) <= 5:
+        return None
+    xs = [(t - longest[0][0]) / 3600 for t, _ in longest]
+    ys = [m for _, m in longest]
+    mx, my = statistics.mean(xs), statistics.mean(ys)
+    den = sum((x - mx) ** 2 for x in xs)
+    return round(sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / den, 2) if den else 0.0
+
+
+def _cpu_stats(cpu):
+    if not cpu:
+        return None
+    return {
+        "mean": round(statistics.mean(cpu), 1),
+        "p95": round(sorted(cpu)[int(0.95 * (len(cpu) - 1))], 1),
+        "max": max(cpu),
+    }
+
+
+def _rss_stats(rows, rss):
+    if not rss:
+        return None
+    return {
+        "min": min(m for _, m in rss),
+        "max": max(m for _, m in rss),
+        "last": rss[-1][1],
+        "trend_mb_per_hour": _memory_slope(rows, rss),
+    }
+
+
+def summarize(rows, interval=60):
+    """Restarts, gaps, CPU and memory statistics, and the memory trend (MB per hour, least squares over samples with a stable pid)."""
+    if not rows:
+        return {"samples": 0}
+    restarts, down = _restarts_and_down(rows)
     runs = [int(r["runs"]) for r in rows if r.get("runs") and str(r["runs"]).isdigit()]
     gaps = [b["t"] - a["t"] for a, b in zip(rows, rows[1:])]
     cpu = [r["cpu_pct"] for r in rows if r.get("cpu_pct") is not None]
     rss = [(r["t"], r["rss_mb"]) for r in rows if r.get("rss_mb")]
-    slope = None
-    if (
-        len(rss) > 5
-    ):  # trend within the longest run of one pid, so a restart does not look like a leak
-        by_pid = {}
-        for r in rows:
-            if r.get("rss_mb") and r["pid"]:
-                by_pid.setdefault(r["pid"], []).append((r["t"], r["rss_mb"]))
-        longest = max(by_pid.values(), key=len)
-        if len(longest) > 5:
-            xs = [(t - longest[0][0]) / 3600 for t, _ in longest]
-            ys = [m for _, m in longest]
-            mx, my = statistics.mean(xs), statistics.mean(ys)
-            den = sum((x - mx) ** 2 for x in xs)
-            slope = round(sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / den, 2) if den else 0.0
     return {
         "samples": len(rows),
         "from": rows[0]["ts"],
@@ -162,21 +192,8 @@ def summarize(rows, interval=60):
         "run_counter_delta": (max(runs) - min(runs)) if runs else None,
         "samples_without_service": down,
         "longest_sampler_gap_s": round(max(gaps), 0) if gaps else 0,
-        "cpu_pct": {
-            "mean": round(statistics.mean(cpu), 1),
-            "p95": round(sorted(cpu)[int(0.95 * (len(cpu) - 1))], 1),
-            "max": max(cpu),
-        }
-        if cpu
-        else None,
-        "rss_mb": {
-            "min": min(m for _, m in rss),
-            "max": max(m for _, m in rss),
-            "last": rss[-1][1],
-            "trend_mb_per_hour": slope,
-        }
-        if rss
-        else None,
+        "cpu_pct": _cpu_stats(cpu),
+        "rss_mb": _rss_stats(rows, rss),
         "threads_max": max((r.get("threads") or 0) for r in rows),
         "open_files_max": max((r.get("open_files") or 0) for r in rows),
         "disk_free_gb_min": min(

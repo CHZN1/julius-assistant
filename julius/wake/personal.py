@@ -270,6 +270,154 @@ def _read(path):
     return x
 
 
+def _noise_clips(rng, count=150):
+    """White and pink-ish noise at random levels: hard negatives for the head."""
+    noise = []
+    for i in range(count):
+        w = rng.standard_normal(4 * SR).astype(np.float32)
+        if i % 3 == 1:
+            f = np.fft.rfft(w)
+            f /= np.sqrt(np.maximum(np.arange(len(f)), 1))
+            w = np.fft.irfft(f, 4 * SR).astype(np.float32)
+        noise.append(w / np.abs(w).max() * rng.uniform(0.02, 0.5))
+    return noise
+
+
+def _training_data(train_pos, train_neg, rng, emb):
+    """(embedding windows, label, weight) rows: augmented positives, rejected clips, noise."""
+    tp = [_read(p) for p in train_pos]
+    aug = [_augment(x, rng) for x in tp for _ in range(24)] + [x for x in tp]
+    tn = [_read(p) for p in train_neg]
+    aug_neg = [_augment(x, rng) for x in tn for _ in range(6)] + tn
+    noise = _noise_clips(rng)
+    e_pos, e_neg, e_noise = emb(aug), emb(aug_neg) if aug_neg else [], emb(noise)
+    return (
+        [(e, 1.0, 1.0) for e in e_pos]
+        + [(e, 0.0, 2.0) for e in e_neg]
+        + [(e, 0.0, 1.0) for e in e_noise]
+    )
+
+
+def _fit(model, data, epochs, seed):
+    """Fine-tune the head with a clip-level (max over windows) weighted BCE loss."""
+    import torch
+    import torch.nn as nn
+
+    opt = torch.optim.AdamW(model.parameters(), 3e-4, weight_decay=1e-3)
+    bce = nn.BCELoss(reduction="none")
+    order = np.random.default_rng(seed)
+    for _ in range(epochs):
+        model.train()
+        order.shuffle(data)
+        for i in range(0, len(data), 32):
+            batch = data[i : i + 32]
+            xs, ids, y, w = [], [], [], []
+            for k, (e, label, weight) in enumerate(batch):
+                xs.append(torch.from_numpy(e))
+                ids += [k] * len(e)
+                y.append(label)
+                w.append(weight)
+            s = model(torch.cat(xs)).squeeze(1)
+            ids_t = torch.tensor(ids)
+            clip = torch.stack([s[ids_t == k].max() for k in range(len(batch))])
+            loss = (bce(clip, torch.tensor(y)) * torch.tensor(w)).mean()
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+    model.eval()
+
+
+def _clip_scores(model, wins):
+    import torch
+
+    with torch.no_grad():
+        return np.array([float(model(torch.from_numpy(w)).max()) if len(w) else 0.0 for w in wins])
+
+
+def _judge(model, val_pos_windows, val_neg_windows, threshold):
+    recall = (_clip_scores(model, val_pos_windows) >= threshold).mean()
+    false = (
+        (_clip_scores(model, val_neg_windows) >= threshold).mean() if val_neg_windows else 0.0
+    )
+    return {"recall": float(recall), "false_rate": float(false)}
+
+
+def _current_head(store, starter_head, Head):
+    """The personal head if there is one, otherwise the starter."""
+    import torch
+
+    head = Head()
+    personal = store.dir / "head.pt"
+    source = personal if store.model.exists() and personal.exists() else starter_head
+    head.load_state_dict(torch.load(source, map_location="cpu"))
+    head.eval()
+    return head
+
+
+def _export(model, store):
+    """Write the kept head as ONNX (model.onnx) plus its weights (head.pt)."""
+    import torch
+
+    tmp = store.dir / "model.tmp.onnx"
+    torch.onnx.export(
+        model,
+        torch.zeros(1, 16, 96),
+        tmp,
+        input_names=["input"],
+        output_names=["output"],
+        dynamic_axes={"input": {0: "batch"}, "output": {0: "batch"}},
+        opset_version=17,
+        dynamo=False,
+    )
+    torch.save(model.state_dict(), store.dir / "head.pt")
+    os.replace(tmp, store.model)
+
+
+def _split_clips(pos, neg):
+    """Hold out the newest quarter of the positives (and of the negatives) to judge the result."""
+    n_val = min(max(MIN_VALIDATION, len(pos) // 4), len(pos) // 2)
+    nv = max(0, min(len(neg) // 4, len(neg) - 1)) if len(neg) >= 4 else 0
+    return pos[:-n_val], pos[-n_val:], neg[: len(neg) - nv], (neg[-nv:] if nv else [])
+
+
+def _train_and_judge(store, pos, neg, epochs, seed, starter, starter_head, threshold, Head):
+    """Train a candidate head and compare it with the current one; returns (result, candidate)."""
+    import torch
+    from openwakeword.model import Model
+
+    rng = np.random.default_rng(seed)
+    torch.manual_seed(seed)
+    train_pos, val_pos, train_neg, val_neg = _split_clips(pos, neg)  # the NEWEST clips judge it
+    feat = Model(wakeword_models=[str(starter)], inference_framework="onnx")
+    fname = list(feat.models)[0]
+
+    def emb(clips):
+        # features exactly as the live detector computes them (clip-at-once embedding differs)
+        return [stream_windows(feat, fname, c) for c in clips]
+
+    data = _training_data(train_pos, train_neg, rng, emb)
+    model = Head()
+    model.load_state_dict(torch.load(starter_head, map_location="cpu"))
+    _fit(model, data, epochs, seed)
+    # judged on the held-out recent clips only
+    vp = emb([_read(p) for p in val_pos])
+    vn = emb([_read(p) for p in val_neg]) if val_neg else []
+    cur = _judge(_current_head(store, starter_head, Head), vp, vn, threshold)
+    cand = _judge(model, vp, vn, threshold)
+    kept, why = decide(cur, cand)
+    result = {
+        "kept": kept,
+        "reason": why,
+        "current": cur,
+        "candidate": cand,
+        "validation_positives": len(val_pos),
+        "validation_negatives": len(val_neg),
+        "trained_on": len(train_pos),
+        "when": time.strftime("%Y-%m-%d %H:%M"),
+    }
+    return result, model
+
+
 def retrain(
     store=None,
     force=False,
@@ -286,9 +434,8 @@ def retrain(
     starter_head = Path(starter_head or STARTER_HEAD)
     lock = store.dir / "training.lock"
     try:
-        import torch
-        import torch.nn as nn
-        from openwakeword.model import Model
+        import torch  # noqa: F401
+        from openwakeword.model import Model  # noqa: F401
 
         sys.path.insert(0, str(ROOT))
         from julius.wake.train_head import Head
@@ -305,116 +452,11 @@ def retrain(
         return {"kept": False, "reason": "already training"}
     lock.write_text(str(os.getpid()))
     try:
-        rng = np.random.default_rng(seed)
-        torch.manual_seed(seed)
-        n_val = max(MIN_VALIDATION, len(pos) // 4)
-        n_val = min(n_val, len(pos) // 2)
-        val_pos, train_pos = pos[-n_val:], pos[:-n_val]  # the NEWEST clips judge the result
-        nv = max(0, min(len(neg) // 4, len(neg) - 1)) if len(neg) >= 4 else 0
-        val_neg, train_neg = (neg[-nv:] if nv else []), neg[: len(neg) - nv]
-        feat = Model(wakeword_models=[str(starter)], inference_framework="onnx")
-        fname = list(feat.models)[0]
-
-        def emb(clips):
-            return [
-                stream_windows(feat, fname, c) for c in clips
-            ]  # features exactly as the live detector computes them (clip-at-once embedding differs)
-
-        def clip_scores(m, wins):
-            with torch.no_grad():
-                return np.array(
-                    [float(m(torch.from_numpy(w)).max()) if len(w) else 0.0 for w in wins]
-                )
-
-        def windows(w):
-            return w
-
-        tp = [_read(p) for p in train_pos]
-        aug = [_augment(x, rng) for x in tp for _ in range(24)] + [x for x in tp]
-        tn = [_read(p) for p in train_neg]
-        aug_neg = [_augment(x, rng) for x in tn for _ in range(6)] + tn
-        noise = []
-        for i in range(150):
-            w = rng.standard_normal(4 * SR).astype(np.float32)
-            if i % 3 == 1:
-                f = np.fft.rfft(w)
-                f /= np.sqrt(np.maximum(np.arange(len(f)), 1))
-                w = np.fft.irfft(f, 4 * SR).astype(np.float32)
-            noise.append(w / np.abs(w).max() * rng.uniform(0.02, 0.5))
-        e_pos, e_neg, e_noise = emb(aug), emb(aug_neg) if aug_neg else [], emb(noise)
-        model = Head()
-        model.load_state_dict(torch.load(starter_head, map_location="cpu"))
-        opt = torch.optim.AdamW(model.parameters(), 3e-4, weight_decay=1e-3)
-        bce = nn.BCELoss(reduction="none")
-        data = (
-            [(e, 1.0, 1.0) for e in e_pos]
-            + [(e, 0.0, 2.0) for e in e_neg]
-            + [(e, 0.0, 1.0) for e in e_noise]
+        result, model = _train_and_judge(
+            store, pos, neg, epochs, seed, starter, starter_head, threshold, Head
         )
-        order = np.random.default_rng(seed)
-        for ep in range(epochs):
-            model.train()
-            order.shuffle(data)
-            for i in range(0, len(data), 32):
-                batch = data[i : i + 32]
-                xs, ids, y, w = [], [], [], []
-                for k, (e, label, weight) in enumerate(batch):
-                    wi = windows(e)
-                    xs.append(torch.from_numpy(wi))
-                    ids += [k] * len(wi)
-                    y.append(label)
-                    w.append(weight)
-                s = model(torch.cat(xs)).squeeze(1)
-                ids_t = torch.tensor(ids)
-                clip = torch.stack([s[ids_t == k].max() for k in range(len(batch))])
-                loss = (bce(clip, torch.tensor(y)) * torch.tensor(w)).mean()
-                opt.zero_grad()
-                loss.backward()
-                opt.step()
-        model.eval()
-        # the current model is the personal one if there is one, otherwise the starter; judged on the held-out recent clips only
-        cur_head = Head()
-        if store.model.exists() and (store.dir / "head.pt").exists():
-            cur_head.load_state_dict(torch.load(store.dir / "head.pt", map_location="cpu"))
-        else:
-            cur_head.load_state_dict(torch.load(starter_head, map_location="cpu"))
-        cur_head.eval()
-        vp, vn = (
-            emb([_read(p) for p in val_pos]),
-            (emb([_read(p) for p in val_neg]) if val_neg else []),
-        )
-
-        def judge(m):
-            r = (clip_scores(m, vp) >= threshold).mean()
-            f = (clip_scores(m, vn) >= threshold).mean() if vn else 0.0
-            return {"recall": float(r), "false_rate": float(f)}
-
-        cur, cand = judge(cur_head), judge(model)
-        kept, why = decide(cur, cand)
-        result = {
-            "kept": kept,
-            "reason": why,
-            "current": cur,
-            "candidate": cand,
-            "validation_positives": len(val_pos),
-            "validation_negatives": len(val_neg),
-            "trained_on": len(train_pos),
-            "when": time.strftime("%Y-%m-%d %H:%M"),
-        }
-        if kept:
-            tmp = store.dir / "model.tmp.onnx"
-            torch.onnx.export(
-                model,
-                torch.zeros(1, 16, 96),
-                tmp,
-                input_names=["input"],
-                output_names=["output"],
-                dynamic_axes={"input": {0: "batch"}, "output": {0: "batch"}},
-                opset_version=17,
-                dynamo=False,
-            )
-            torch.save(model.state_dict(), store.dir / "head.pt")
-            os.replace(tmp, store.model)
+        if result["kept"]:
+            _export(model, store)
         store.save_state(positives_at_last_train=len(pos), last_result=result)
         log(json.dumps(result))
         return result

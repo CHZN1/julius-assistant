@@ -206,94 +206,125 @@ def doctor(
     return verdict, str(binary)
 
 
-def main(argv):
-    cmd = (argv[1:2] or ["status"])[0]
-    if cmd == "on":
-        ok, msg = on()
-        print("Julius service on" if ok else f"could not start: {msg}")
-        return 0 if ok else 1
-    if cmd == "off":
-        print(off()[1])
-        return 0
-    if cmd == "restart":
+def _cmd_on(_argv):
+    ok, msg = on()
+    print("Julius service on" if ok else f"could not start: {msg}")
+    return 0 if ok else 1
+
+
+def _cmd_off(_argv):
+    print(off()[1])
+    return 0
+
+
+def _cmd_restart(_argv):
+    from julius.service import logscan
+
+    logscan.mark_stderr()
+    run(["launchctl", "kickstart", "-k", f"{domain()}/{LABEL}"])
+    print("restarting")
+    return 0
+
+
+def _cmd_wake(_argv):
+    print("woke" if wake() else "service not running")
+    return 0
+
+
+def _cmd_logs(argv):
+    n = int(argv[argv.index("-n") + 1]) if "-n" in argv else 60
+    try:
+        show_logs(n, "--raw" in argv, "--no-follow" not in argv)
+    except KeyboardInterrupt:
+        pass
+    return 0
+
+
+def _smoke_window(argv, err_path):
+    """(start timestamp, stderr offset) from which the smoke check looks."""
+    import datetime
+
+    stamp = "%Y-%m-%dT%H:%M:%S"
+    if "--restart" in argv:
         from julius.service import logscan
 
-        logscan.mark_stderr()
-        run(["launchctl", "kickstart", "-k", f"{domain()}/{LABEL}"])
-        print("restarting")
-        return 0
-    if cmd == "wake":
-        print("woke" if wake() else "service not running")
-        return 0
-    if cmd == "logs":
-        n = int(argv[argv.index("-n") + 1]) if "-n" in argv else 60
-        try:
-            show_logs(n, "--raw" in argv, "--no-follow" not in argv)
-        except KeyboardInterrupt:
-            pass
-        return 0
-    if cmd == "smoke":
-        import datetime
-
-        from julius import config
-        from julius.service import smoke
-
-        err_path = Path("~/Library/Logs/Julius/launchd.err").expanduser()
         size = err_path.stat().st_size if err_path.exists() else 0
-        if "--restart" in argv:
-            from julius.service import logscan
+        logscan.mark_stderr()
+        start = datetime.datetime.now().strftime(stamp)
+        run(["launchctl", "kickstart", "-k", f"{domain()}/{LABEL}"])
+        time.sleep(2)
+        return start, size
+    import psutil
 
-            logscan.mark_stderr()
-            start = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-            run(["launchctl", "kickstart", "-k", f"{domain()}/{LABEL}"])
-            time.sleep(2)
-        else:
-            import psutil
+    pid = int(status().get("pid") or 0)
+    start = (
+        datetime.datetime.fromtimestamp(psutil.Process(pid).create_time()).strftime(stamp)
+        if pid
+        else "9999"
+    )
+    # no restart: stderr has no timestamps, so only what arrives from now on is checked (use --restart to check the whole startup)
+    return start, err_path.stat().st_size if err_path.exists() else 0
 
-            pid = int(status().get("pid") or 0)
-            start = (
-                datetime.datetime.fromtimestamp(psutil.Process(pid).create_time()).strftime(
-                    "%Y-%m-%dT%H:%M:%S"
-                )
-                if pid
-                else "9999"
-            )
-            size = (
-                err_path.stat().st_size if err_path.exists() else 0
-            )  # no restart: stderr has no timestamps, so only what arrives from now on is checked (use --restart to check the whole startup)
 
-        def err_tail():
-            try:
-                with err_path.open("rb") as f:
-                    f.seek(size)
-                    return f.read().decode("utf-8", "replace")
-            except OSError:
-                return ""
+def _cmd_smoke(argv):
+    from julius import config
+    from julius.service import smoke
 
-        def read_log():
-            try:
-                return LOG.read_text(errors="replace").splitlines()[-4000:]
-            except OSError:
-                return []
+    err_path = Path("~/Library/Logs/Julius/launchd.err").expanduser()
+    start, size = _smoke_window(argv, err_path)
 
-        duplex = bool((config.load_config().get("audio") or {}).get("duplex", True))
-        ok, results = smoke.check(status, read_log, err_tail, start, duplex=duplex)
-        print(smoke.render(ok, results))
-        return 0 if ok else 1
-    if cmd == "doctor":
-        verdict, binary = doctor()
-        print(f"hotkey helper under launchd -> {verdict}")
-        if verdict.endswith("ready stop wake") and "failed" not in verdict:
-            print(
-                "Both hotkeys register (no Accessibility or Input Monitoring needed): Ctrl+Option+S stops, Ctrl+Option+J wakes."
-            )
-        else:
-            print(
-                "A hotkey did not register (another app may already own that key combination, or the helper could not start). Details above; no hotkey needed meanwhile: `python -m julius.service.service wake` does the same as the wake key."
-            )
-        return 0
-    print(status())
+    def err_tail():
+        try:
+            with err_path.open("rb") as f:
+                f.seek(size)
+                return f.read().decode("utf-8", "replace")
+        except OSError:
+            return ""
+
+    def read_log():
+        try:
+            return LOG.read_text(errors="replace").splitlines()[-4000:]
+        except OSError:
+            return []
+
+    duplex = bool((config.load_config().get("audio") or {}).get("duplex", True))
+    ok, results = smoke.check(status, read_log, err_tail, start, duplex=duplex)
+    print(smoke.render(ok, results))
+    return 0 if ok else 1
+
+
+def _cmd_doctor(_argv):
+    verdict, _binary = doctor()
+    print(f"hotkey helper under launchd -> {verdict}")
+    if verdict.endswith("ready stop wake") and "failed" not in verdict:
+        print(
+            "Both hotkeys register (no Accessibility or Input Monitoring needed): Ctrl+Option+S stops, Ctrl+Option+J wakes."
+        )
+    else:
+        print(
+            "A hotkey did not register (another app may already own that key combination, or the helper could not start). Details above; no hotkey needed meanwhile: `python -m julius.service.service wake` does the same as the wake key."
+        )
     return 0
+
+
+_COMMANDS = {
+    "on": _cmd_on,
+    "off": _cmd_off,
+    "restart": _cmd_restart,
+    "wake": _cmd_wake,
+    "logs": _cmd_logs,
+    "smoke": _cmd_smoke,
+    "doctor": _cmd_doctor,
+}
+
+
+def main(argv):
+    """Run one service subcommand (on, off, status, restart, wake, logs, smoke, doctor)."""
+    command = _COMMANDS.get((argv[1:2] or ["status"])[0])
+    if command is None:
+        print(status())
+        return 0
+    return command(argv)
 
 
 if __name__ == "__main__":
