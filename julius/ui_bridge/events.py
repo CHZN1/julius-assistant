@@ -5,6 +5,7 @@ Messages (JSON text frames, server -> client only; anything a client sends is ig
   {"type":"state","state":"idle|listening|thinking|speaking|asleep|quiet","prev":"...","t":...}  on every change
   {"type":"level","level":0.0-1.0,"t":...}        Julius's own voice as it leaves the speakers (RMS x4, clipped), about 30 times a second while he is speaking, then one 0
   {"type":"transcript","who":"you|julius","text":"...","turn":N,"t":...}   a line the user said, or a sentence Julius is saying
+  {"type":"panel.research|panel.update|panel.clear",...}   side-panel data (see ui_bridge/panel.py and docs/EVENT_FEED.md)
 
 Safety: binds 127.0.0.1 only (the host is not configurable); a request whose Host or Origin is not localhost/127.0.0.1 is refused (DNS rebinding, other web pages);
 clients cannot send commands; frames from clients larger than 64 kB close the connection; a client that falls 300 messages behind is dropped; at most 8 clients.
@@ -77,6 +78,7 @@ class EventHub:
         self.transcript = collections.deque(maxlen=transcript_lines)
         self._clients = set()
         self._lock = threading.Lock()
+        self.panel: Any = None  # a ui_bridge.panel.PanelHub, when the side panel is on
 
     # -- publishing (called from Julius; never raises, never blocks)
     def _send(self, msg: dict[str, str | float | int]) -> None:
@@ -113,14 +115,17 @@ class EventHub:
         self.transcript.append(line)
         self._send(line)
 
-    def hello(self) -> dict[str, str | float]:
-        return {
+    def hello(self) -> dict[str, Any]:
+        msg = {
             "type": "hello",
             "state": self.state,
             "level": round(self.level, 3),
             "transcript": list(self.transcript),
             "t": round(self.clock(), 3),
         }
+        if self.panel is not None:
+            msg["panel"] = self.panel.snapshot()
+        return msg
 
     # -- clients
     def add(self, client: Any) -> bool:

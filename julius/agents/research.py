@@ -168,7 +168,13 @@ class _PinnedHTTPS(http.client.HTTPSConnection):
         self.sock = self._context.wrap_socket(sock, server_hostname=self.host)
 
 
-def network_get(parsed: Any, ip: Any, max_bytes: Any, timeout: int = 10) -> Any:
+def network_get(
+    parsed: Any,
+    ip: Any,
+    max_bytes: Any,
+    timeout: int = 10,
+    accept: str = "text/html,text/plain;q=0.9",
+) -> Any:
     """The only network verb in the agent. GET, pinned to the checked address, no cookies, bounded read. -> (status, headers, body)"""
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
     conn = (_PinnedHTTPS if parsed.scheme == "https" else _PinnedHTTP)(
@@ -181,7 +187,7 @@ def network_get(parsed: Any, ip: Any, max_bytes: Any, timeout: int = 10) -> Any:
             path,
             headers={
                 "User-Agent": USER_AGENT,
-                "Accept": "text/html,text/plain;q=0.9",
+                "Accept": accept,
                 "Accept-Encoding": "identity",
             },
         )
@@ -219,6 +225,27 @@ class Fetcher:
             if len(body) > self.max_bytes:
                 raise Blocked("page is too large")
             return url, body.decode("utf-8", "replace")
+        raise Blocked("too many redirects")
+
+    def fetch_image(self, url: str, max_bytes: int = 5_000_000) -> Any:
+        """-> (final_url, content_type, bytes) for an image under the same rules as pages (GET, checked address every hop, bounded read).
+        Raises Blocked / OSError. The caller must still decode and re-encode it; the content type is only a hint."""
+        for _ in range(MAX_REDIRECTS + 1):
+            parsed, ip = check_url(url, self.resolve)
+            status, headers, body = self.transport(
+                parsed, ip, max_bytes, accept="image/png,image/jpeg,image/webp,image/gif"
+            )
+            if status in (301, 302, 303, 307, 308):
+                loc = headers.get("location")
+                if not loc:
+                    raise Blocked("redirect without a location")
+                url = urllib.parse.urljoin(url, loc)
+                continue
+            if status != 200:
+                raise OSError(f"image returned status {status}")
+            if len(body) > max_bytes:
+                raise Blocked("image is too large")
+            return url, (headers.get("content-type") or "").split(";")[0].strip().lower(), body
         raise Blocked("too many redirects")
 
 
