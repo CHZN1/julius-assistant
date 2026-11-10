@@ -4,6 +4,7 @@ Like the file session, a task is only ever STAGED by a command or by the planner
 and merging into the real project takes another yes after the diff summary has been read out. Nothing here edits a real project except merge().
 """
 
+import contextlib
 import difflib
 import os
 import re
@@ -222,7 +223,10 @@ class CodeSession:
             and not text.endswith("?")
             and not (START.match(lowered) or CANCEL.match(lowered))
         ):
-            return True, None  # garbled / stray speech (his own preview heard back) must not lose the question; merge and discard stay strict
+            return (
+                True,
+                None,
+            )  # garbled / stray speech (his own preview heard back) must not lose the question; merge and discard stay strict
         self.pending = None  # an unrelated request cancels the question, as with files
         return False, None
 
@@ -306,10 +310,8 @@ class CodeSession:
 
     def _decline(self, kind, task_id):
         if kind == "start":
-            try:
+            with contextlib.suppress(ca.CodeProblem):
                 ca.discard(ca.load(task_id))
-            except ca.CodeProblem:
-                pass
             self.task = None
             return self._out(True, "cancelled", "Okay, I won't start it.")
         return self._out(True, "cancelled", "Okay, nothing was changed.")

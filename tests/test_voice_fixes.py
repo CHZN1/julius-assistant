@@ -1,13 +1,9 @@
-import inspect
-from julius.paths import REPO_ROOT
-
 """Regression tests for what the first voice recording showed (2026-11-07)."""
-import re
-import sys
+
+import inspect
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 import numpy as np
 
 from julius.agents.file_router import clean_asr, route

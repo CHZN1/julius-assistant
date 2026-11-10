@@ -89,7 +89,11 @@ def write_csv(rows, stamp):
 
 def summarize(rows, previous):
     """The summary dict; previous is the earlier run's csv path or None."""
-    was = {r["id"]: r["ok"] == "True" for r in csv.DictReader(open(previous))} if previous else {}
+    was = (
+        {r["id"]: r["ok"] == "True" for r in csv.DictReader(previous.read_text().splitlines())}
+        if previous
+        else {}
+    )
     fail = [r["id"] for r in rows if not r["ok"]]
     nm = [r for r in rows if not r["must_wake"]]
     wk = [r for r in rows if r["must_wake"]]

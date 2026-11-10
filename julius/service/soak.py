@@ -10,6 +10,7 @@ Samples: pid, launchd state and run counter (a changed pid or a higher run count
 resident memory, threads, open files, free disk. Problems come from julius.service.logscan (log categories, tracebacks in launchd stderr)."""
 
 import argparse
+import contextlib
 import json
 import os
 import plistlib
@@ -88,10 +89,8 @@ class Sampler:
                 self.last = None
         else:
             self.last = None
-        try:
+        with contextlib.suppress(Exception):
             row["disk_free_gb"] = round(self.ps.disk_usage("/").free / 1e9, 1)
-        except Exception:
-            pass
         return row
 
 
@@ -150,7 +149,11 @@ def _memory_slope(rows, rss):
     ys = [m for _, m in longest]
     mx, my = statistics.mean(xs), statistics.mean(ys)
     den = sum((x - mx) ** 2 for x in xs)
-    return round(sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / den, 2) if den else 0.0
+    return (
+        round(sum((x - mx) * (y - my) for x, y in zip(xs, ys, strict=False)) / den, 2)
+        if den
+        else 0.0
+    )
 
 
 def _cpu_stats(cpu):
@@ -180,7 +183,7 @@ def summarize(rows, interval=60):
         return {"samples": 0}
     restarts, down = _restarts_and_down(rows)
     runs = [int(r["runs"]) for r in rows if r.get("runs") and str(r["runs"]).isdigit()]
-    gaps = [b["t"] - a["t"] for a, b in zip(rows, rows[1:])]
+    gaps = [b["t"] - a["t"] for a, b in zip(rows, rows[1:], strict=False)]
     cpu = [r["cpu_pct"] for r in rows if r.get("cpu_pct") is not None]
     rss = [(r["t"], r["rss_mb"]) for r in rows if r.get("rss_mb")]
     return {

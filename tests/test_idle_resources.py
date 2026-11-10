@@ -47,7 +47,9 @@ class IdleReleaseTests(unittest.TestCase):
         self.assertIn("idle model weights released", message)
 
     def test_cloud_profile_message_only_claims_speech_recognition_was_released(self):
-        _, _, message = self.release("cloud", {"JULIUS_KEEP_VOICE": "1", "JULIUS_ASR_RESIDENT": "0"})
+        _, _, message = self.release(
+            "cloud", {"JULIUS_KEEP_VOICE": "1", "JULIUS_ASR_RESIDENT": "0"}
+        )
         self.assertIn("speech recognition released", message)
         self.assertIn("voice stays loaded", message)
         self.assertNotIn("model weights released", message)

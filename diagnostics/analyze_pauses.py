@@ -22,7 +22,9 @@ for path in sorted(folder.glob("*.wav")):
     ]
     idx = [i for i, v in enumerate(voiced) if v]
     gap = longest = 0
-    for a, b in zip(idx, idx[1:]):  # silence between the first and last voiced chunk only
+    for a, b in zip(
+        idx, idx[1:], strict=False
+    ):  # silence between the first and last voiced chunk only
         longest = max(longest, (b - a - 1) * CHUNK / SR)
     rows.append((path.name, len(audio) / SR, longest))
     print(

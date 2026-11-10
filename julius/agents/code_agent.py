@@ -13,6 +13,7 @@ Layers, outermost first (any one of them stops the dangerous cases on its own):
   5. `claude --bare` with an allow-list of tools and a deny-list that includes git push, remotes, curl, ssh, rm and package installs
 """
 
+import contextlib
 import fnmatch
 import hashlib
 import json
@@ -755,10 +756,8 @@ def _execute(run, api_key, tracker, cfg, claude, sandbox, on_done):
         _finish(run, result, cost, rc, tracker)
         run.done.set()
         if on_done is not None:
-            try:
+            with contextlib.suppress(Exception):
                 on_done(task)
-            except Exception:
-                pass
 
 
 def _finish(run, result, cost, rc, tracker):

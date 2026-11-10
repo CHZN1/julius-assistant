@@ -10,6 +10,7 @@
   python -m julius.service.service doctor    check, the way launchd starts Julius, whether the stop and wake hotkeys register
 No API key is written into the plist: Julius reads ANTHROPIC_API_KEY from the repo's .env like a normal run."""
 
+import contextlib
 import json
 import os
 import plistlib
@@ -135,10 +136,10 @@ def show_logs(
         err = Path(path).parent / "launchd.err"
         if err.exists():
             out("launchd.err says:")
-            [out("  " + l) for l in err.read_text(errors="replace").splitlines()[-8:]]
+            [out("  " + line) for line in err.read_text(errors="replace").splitlines()[-8:]]
         return
-    for l in lines:
-        out(l if raw else format_line(l))
+    for line in lines:
+        out(line if raw else format_line(line))
     if not follow:
         return
     pos = Path(path).stat().st_size
@@ -155,8 +156,8 @@ def show_logs(
                 f.seek(pos)
                 chunk = f.read()
                 pos = f.tell()
-            for l in chunk.splitlines():
-                out(l if raw else format_line(l))
+            for line in chunk.splitlines():
+                out(line if raw else format_line(line))
 
 
 def doctor(
@@ -233,10 +234,8 @@ def _cmd_wake(_argv):
 
 def _cmd_logs(argv):
     n = int(argv[argv.index("-n") + 1]) if "-n" in argv else 60
-    try:
+    with contextlib.suppress(KeyboardInterrupt):
         show_logs(n, "--raw" in argv, "--no-follow" not in argv)
-    except KeyboardInterrupt:
-        pass
     return 0
 
 

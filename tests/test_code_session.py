@@ -165,7 +165,7 @@ class MergeTests(FlowBase):
         original = (self.proj / "app.py").read_text()
         show = self.s.handle("show the changes")
         self.assertEqual(show["code"], "changes")
-        self.assertTrue(any("app.py" in l for l in show["data"]["lines"]))
+        self.assertTrue(any("app.py" in line for line in show["data"]["lines"]))
         self.assertEqual((self.proj / "app.py").read_text(), original)
         pre = self.s.handle("merge it")
         self.assertEqual(pre["code"], "preview")

@@ -272,7 +272,9 @@ class ForcedFreshCalls(unittest.TestCase):
         src = inspect.getsource(brain_turn.BrainTurn.model_tool_message)
         self.assertIn("jt.live_tool_required(self.user_text)", src)
         self.assertIn("livedata.tool_result_this_turn", src)
-        self.assertIn('options["force_tool"] = True', inspect.getsource(brain_turn.BrainTurn.stream))
+        self.assertIn(
+            'options["force_tool"] = True', inspect.getsource(brain_turn.BrainTurn.stream)
+        )
 
     def test_prompt_tells_him_earlier_answers_are_stale(self):
         self.assertIn(

@@ -2,7 +2,6 @@ import unittest
 
 from julius.audio.mic_gate import MicrophoneGate
 from julius.audio.selfecho import SelfEcho, overlap
-from julius.paths import REPO_ROOT
 
 
 class SelfEchoTests(unittest.TestCase):

@@ -39,7 +39,7 @@ def lines(kind):
     for s in ("talk1", "talk2", "talk3", "talk4"):
         out += [
             t
-            for t, _ in json.load(open(REAL / s / "prompts.json"))
+            for t, _ in json.loads((REAL / s / "prompts.json").read_text())
             if re.search(r"\b(julia|julian|julie|jules)\b", t, re.I)
         ]
     return out[:12]

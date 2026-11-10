@@ -1,4 +1,5 @@
 """Streaming protocol recovery, buffered IPC, and continuous output contracts."""
+
 import io
 import json
 import tempfile

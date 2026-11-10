@@ -92,7 +92,7 @@ for gap in GAPS:
     print(f"      {gap:>4.1f} s      |" + "|".join(f"  {c}/{len(clips)} cut " for c in row))
 print()
 for s in SETTINGS:
-    safe = [g for g, c in zip(GAPS, result[s]) if c == 0]
+    safe = [g for g, c in zip(GAPS, result[s], strict=False) if c == 0]
     print(
         f"wait {s:.1f} s: keeps sentences whole up to a {max(safe):.1f} s pause; adds {s:.1f} s after you stop; saves {1.2 - s:.1f} s vs the current 1.2 s"
     )

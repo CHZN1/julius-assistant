@@ -157,7 +157,7 @@ def haiku_tool(kind, text, want, check):
 
 for kind, text, want, check in TOOLS:
     haiku_tool(kind, text, want, check)
-for kind, text, expected in ESCALATE:
+for kind, text, _expected in ESCALATE:
     haiku_tool(
         "escalate_" + kind,
         text,
@@ -215,8 +215,8 @@ for kind, text, expected in ESCALATE:
     planner_holder = {}
     orig_run = orch.Planner.run
 
-    def run(self, task, _orig=orig_run):
-        planner_holder["p"] = self
+    def run(self, task, _orig=orig_run, _holder=planner_holder):
+        _holder["p"] = self
         return _orig(self, task)
 
     orch.Planner.run = run
@@ -255,7 +255,12 @@ with open(out, "w", newline="") as f:
     w = csv.DictWriter(f, fieldnames=["tier", "kind", "ttft_s", "total_s", "ok", "usd", "detail"])
     w.writeheader()
     w.writerows(rows)
-m = lambda xs: round(sum(xs) / len(xs), 2) if xs else None
+
+
+def m(xs):
+    return round(sum(xs) / len(xs), 2) if xs else None
+
+
 h_chat = [r for r in rows if r["kind"].startswith("chat_")]
 h_tool = [r for r in rows if r["kind"].startswith("tool_")]
 h_esc = [r for r in rows if r["kind"].startswith("tool_escalate_")]

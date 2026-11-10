@@ -369,9 +369,7 @@ def main():
         else [run_pipeline([i["transcript"] for i in items]) for _ in range(max(1, a.repeats))]
     )
     turns, code, seconds, work = runs[-1] if runs else ([], None, 0, None)
-    rows = [
-        grade_item(item, turns[k] if k < len(turns) else None) for k, item in enumerate(items)
-    ]
+    rows = [grade_item(item, turns[k] if k < len(turns) else None) for k, item in enumerate(items)]
     summary = summarize_rows(rows, turns, code, seconds)
     summary.update(repeat_stats(runs, items, rows))
     path, previous = common.write_results("audio", rows, summary)

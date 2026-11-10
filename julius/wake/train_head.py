@@ -101,7 +101,9 @@ CLASS_WEIGHT = {
 def _synthetic_sets(args, extractor, tag, rng):
     """The generated classes (pos, hard/general/julius negatives) plus real speech negatives."""
     manifest = {
-        m["file"]: m for f in sorted(DATA.glob("manifest_*.json")) for m in json.load(open(f))
+        m["file"]: m
+        for f in sorted(DATA.glob("manifest_*.json"))
+        for m in json.loads(f.read_text())
     }
     sets = {}
     for cls in ("pos", "neg_hard", "neg_general", "neg_julius"):
@@ -111,7 +113,7 @@ def _synthetic_sets(args, extractor, tag, rng):
             if f.startswith(cls + "/") and not (args.public and Path(f).name.startswith("user_"))
         )
         embs = embed([DATA / f for f in files], DATA / f"emb_{cls}{tag}.npy", extractor)
-        sets[cls] = [(manifest[f]["voice"], e) for f, e in zip(files, embs)]
+        sets[cls] = [(manifest[f]["voice"], e) for f, e in zip(files, embs, strict=False)]
     real = sorted((Path.home() / "datasets" / "CREMA_D" / "AudioWAV").glob("*.wav")) + sorted(
         (Path.home() / "datasets" / "RAVDESS").rglob("*.wav")
     )

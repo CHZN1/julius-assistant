@@ -2,6 +2,7 @@
 
 A tiny helper (hotkeyd/hotkeyd.c, built on first use into ~/.julius/bin) registers the key and prints "fire <name>" on each press; it exits when this process closes its stdin."""
 
+import contextlib
 import os
 import queue
 import subprocess
@@ -37,14 +38,10 @@ class Hotkey:
         self.proc = proc
 
     def stop(self):
-        try:
+        with contextlib.suppress(Exception):
             self.proc.stdin.close()
-        except Exception:
-            pass
-        try:
+        with contextlib.suppress(Exception):
             self.proc.terminate()
-        except Exception:
-            pass
 
 
 def start(
@@ -80,7 +77,7 @@ def start(
             try:
                 line = first.get(timeout=timeout)
             except queue.Empty:
-                raise TimeoutError("helper did not answer")
+                raise TimeoutError("helper did not answer") from None
             if line.startswith("failed"):
                 failure = line
             elif line.startswith("ready"):
@@ -92,9 +89,7 @@ def start(
         say(f"  [hotkey {combo} active]")
         return Hotkey(proc)
     except Exception as e:
-        try:
+        with contextlib.suppress(Exception):
             proc.terminate()
-        except Exception:
-            pass
         say(f"  [hotkey {combo} unavailable: {e}]")
         return None

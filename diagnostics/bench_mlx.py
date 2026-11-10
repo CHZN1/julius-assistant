@@ -13,8 +13,8 @@ import julius_tools as jt
 from julius_conversation import conversation_messages
 
 sys.path.insert(0, os.path.dirname(__file__))
-from bench_brain import PROMPTS, HIST, FOLLOW, free_pct
 import mlx.core as mx
+from bench_brain import FOLLOW, HIST, PROMPTS, free_pct
 
 rows = []
 for i, (kind, text) in enumerate(PROMPTS):

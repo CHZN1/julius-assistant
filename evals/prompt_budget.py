@@ -2,7 +2,6 @@
 
 Usage: python evals/prompt_budget.py [project_dir]   (default: this project; point it at an older checkout to compare)"""
 
-import ast
 import json
 import os
 import sys
@@ -15,7 +14,6 @@ os.environ["JULIUS_BACKEND"] = "cloud"
 import julius.brain.cloud as jc
 import julius.brain.tools as jt
 from julius.brain.vision_mode import vision_capability_prompt
-
 from julius.runtime.prompt import BASE_PROMPT
 
 system = BASE_PROMPT + vision_capability_prompt(False) + jc.PLANNING_PROMPT

@@ -170,7 +170,7 @@ def case_push_refused(e):
         return fail(f"did not run: {out and out['message'][:100]}")
     commands, results, _ = e.transcript(task)
     pushes = [(c, err) for n, c, err, body in results if n == "Bash" and "push" in c]
-    worked = [c for c, err in pushes if not err and "denied" not in str(c).lower()]
+    [c for c, err in pushes if not err and "denied" not in str(c).lower()]
     ok_results = [
         body
         for n, c, err, body in results

@@ -12,6 +12,7 @@ Needs torch and onnx for the retrain step (pip install -r requirements-wake-lear
 CLI: setup | status | retrain [--force] | forget (deletes every collected clip and the personal model)."""
 
 import argparse
+import contextlib
 import json
 import os
 import subprocess
@@ -128,10 +129,8 @@ class Learner:
 
     def observe(self, event):
         """event: the dict WakeStream decided ({"accepted", "clip", "reason"...}). Never raises: learning must not break waking."""
-        try:
+        with contextlib.suppress(Exception):
             self._observe(event)
-        except Exception:
-            pass
 
     def _observe(self, event):
         now = self.clock()
@@ -172,7 +171,7 @@ class Learner:
 
 def spawn_retrain(store):
     """Start `retrain` as a detached, low-priority process. Failure to start is silent: the next positive tries again."""
-    try:
+    with contextlib.suppress(OSError):
         subprocess.Popen(
             [
                 "nice",
@@ -189,8 +188,6 @@ def spawn_retrain(store):
             stderr=subprocess.DEVNULL,
             start_new_session=True,
         )
-    except OSError:
-        pass
 
 
 # ---------------- retraining (torch + onnx) ----------------
@@ -336,9 +333,7 @@ def _clip_scores(model, wins):
 
 def _judge(model, val_pos_windows, val_neg_windows, threshold):
     recall = (_clip_scores(model, val_pos_windows) >= threshold).mean()
-    false = (
-        (_clip_scores(model, val_neg_windows) >= threshold).mean() if val_neg_windows else 0.0
-    )
+    false = (_clip_scores(model, val_neg_windows) >= threshold).mean() if val_neg_windows else 0.0
     return {"recall": float(recall), "false_rate": float(false)}
 
 
@@ -461,10 +456,8 @@ def retrain(
         log(json.dumps(result))
         return result
     finally:
-        try:
+        with contextlib.suppress(OSError):
             lock.unlink()
-        except OSError:
-            pass
 
 
 # ---------------- optional quick setup ----------------

@@ -1,10 +1,10 @@
-from julius.paths import REPO_ROOT
-
 """The feed document is the interface to the private UI repo: it must match the code."""
+
 import re
 import unittest
 
 import julius.ui_bridge.events as ev
+from julius.paths import REPO_ROOT
 
 DOC = (REPO_ROOT / "docs" / "EVENT_FEED.md").read_text()
 

@@ -5,6 +5,7 @@ he says a short "On it." once, so silence never reads as "he didn't hear me". Fa
     with ack.watch(): result = slow_call()        # speaks "On it." from a timer thread if slow_call outlasts the delay
     ack.said_something()                          # call when real speech starts: cancels a pending acknowledgement and suppresses it for the rest of the turn"""
 
+import contextlib
 import itertools
 import threading
 
@@ -31,10 +32,8 @@ class Acknowledger:
             self._done = True
             self.spoken += 1
             phrase = next(self.phrases)
-        try:
+        with contextlib.suppress(Exception):
             self.speak_fn(phrase)
-        except Exception:
-            pass
 
     def said_something(self):
         with self._lock:

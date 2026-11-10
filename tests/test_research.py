@@ -284,9 +284,7 @@ class Agent(unittest.TestCase):
             resp([use("b", "research_open", url="http://meta/latest")], "tool_use"),
             finish("c", "ok", []),
         )
-        r = agent(brain, {"https://example.com/e": (200, {"content-type": "text/html"}, evil)}).run(
-            "q"
-        )
+        agent(brain, {"https://example.com/e": (200, {"content-type": "text/html"}, evil)}).run("q")
         shown = api.calls[1]["messages"][-1]["content"][0]["content"]
         self.assertTrue(shown.startswith("<page ") and shown.rstrip().endswith("</page>"))
         self.assertIn("untrusted", api.calls[0]["system"][0]["text"])

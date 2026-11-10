@@ -214,7 +214,12 @@ with open(fn, "w", newline="") as f:
     w.writerows(rows)
 chat = [r for r in rows if not r["kind"].startswith("tool_")]
 tl = [r for r in rows if r["kind"].startswith("tool_")]
-m = lambda xs: round(sum(xs) / len(xs), 2) if xs else None
+
+
+def m(xs):
+    return round(sum(xs) / len(xs), 2) if xs else None
+
+
 print(
     f"SUMMARY {a.label} {a.model}: chat TTFT mean {m([r['ttft_s'] for r in chat])}s (turn1 cold {chat[0]['ttft_s']}s, "
     f"turns2+ {m([r['ttft_s'] for r in chat[1:]])}s); tool-select latency mean {m([r['ttft_s'] for r in tl])}s; "

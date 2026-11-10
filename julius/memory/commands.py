@@ -4,6 +4,7 @@
   "forget that" / "forget my sister"    hard delete       "undo that" / "bring that back"    restore the last forget
 Only the user's own utterances can write memory. Remembered text is handed to the model as notes, never as instructions."""
 
+import contextlib
 import json
 import re
 
@@ -191,10 +192,8 @@ class MemoryAssistant:
         return None
 
     def _export(self):
-        try:
+        with contextlib.suppress(Exception):
             self.store.export_markdown(self.store.path.parent / "MEMORY.md")
-        except Exception:
-            pass
 
     def _remember(self, fact, utterance):
         row, status = self.store.add(fact, "fact", "said", utterance)

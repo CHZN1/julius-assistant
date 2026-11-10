@@ -1,7 +1,6 @@
 import unittest
 
 from julius.brain.undo import UndoAgent, UndoCoordinator
-from julius.paths import REPO_ROOT
 
 
 def make():
@@ -58,7 +57,10 @@ class UndoTests(unittest.TestCase):
 
     def test_old_state_falls_back_to_fixed_order(self):
         s = {"files": 1, "memory": 1, "code": 0}
-        mk = lambda n, l: UndoAgent(l, lambda: s[n], lambda: s[n] > 0, lambda: "ok")
+
+        def mk(n, line):
+            return UndoAgent(line, lambda: s[n], lambda: s[n] > 0, lambda: "ok")
+
         c = UndoCoordinator(
             {"memory": mk("memory", "m"), "files": mk("files", "f"), "code": mk("code", "c")}
         )

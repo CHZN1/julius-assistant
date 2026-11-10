@@ -167,7 +167,7 @@ def main(argv=None):
         print("no duplex recordings yet: python evals/voice_record.py record --duplex d1 d2 d3")
         return 1
     total = {"self_heard_turns": 0, "false": 0, "barge_ok": 0, "barge_n": 0, "fallbacks": 0}
-    for sid, ts in takes.items():
+    for _sid, ts in takes.items():
         for t in ts:
             print_take(report_take(t), total)
     print(

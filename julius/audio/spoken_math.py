@@ -27,12 +27,14 @@ SMALL = dict(
             "nineteen",
         ],
         range(20),
+        strict=False,
     )
 )
 TENS = dict(
     zip(
         ["twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"],
         range(20, 100, 10),
+        strict=False,
     )
 )
 OPERATORS = {

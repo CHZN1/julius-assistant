@@ -5,7 +5,6 @@ from pathlib import Path
 
 import julius.memory.commands as mc
 from julius.memory.store import MemoryStore
-from julius.paths import REPO_ROOT
 
 
 def make():
@@ -367,7 +366,9 @@ class RetrievalTests(unittest.TestCase):
     def test_memory_tools_are_offered_for_memory_requests_and_registered(self):
         import julius.brain.tools as jt
 
-        names = lambda t: {x["function"]["name"] for x in jt.select_schemas(t)}
+        def names(t):
+            return {x["function"]["name"] for x in jt.select_schemas(t)}
+
         self.assertTrue(
             {"forget_fact", "remember_fact", "list_memories"}
             <= names("please forget the note about the Sharks")

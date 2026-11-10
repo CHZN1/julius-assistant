@@ -11,6 +11,7 @@ the audio callback hands to the device, in the same callback as the matching `in
     CleanTalkOver                            speech detector on the cleaned signal: the user talking over Julius (energy, not echo-correlated)"""
 
 import collections
+import contextlib
 import math
 import threading
 import time
@@ -236,10 +237,8 @@ class AecMonitor:
             f"  [echo cancellation not working: {self.reason}; microphone gate back on]", flush=True
         )
         if self.on_fallback:
-            try:
+            with contextlib.suppress(Exception):
                 self.on_fallback(self.reason)
-            except Exception:
-                pass
 
 
 class CleanTalkOver:
@@ -303,7 +302,7 @@ class CleanTalkOver:
                 self._hits.append(1 if (active and rms > self.threshold()) else 0)
                 self._times.append(self._t)
                 if sum(self._hits) >= self.bursts:
-                    first = min(t for h, t in zip(self._hits, self._times) if h)
+                    first = min(t for h, t in zip(self._hits, self._times, strict=False) if h)
                     self.onset_ago = self._t - first + self.WINDOW
                     self.triggered = True
                     self._hits.clear()

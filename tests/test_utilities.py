@@ -8,7 +8,6 @@ from unittest.mock import Mock
 from julius.agents.utility_session import UtilitySession
 from julius.brain.conversions import convert_units, date_calculate, local_datetime
 from julius.brain.planning import Planner
-from julius.paths import REPO_ROOT
 
 
 class PlanningTests(unittest.TestCase):
@@ -363,7 +362,9 @@ class CandidateUtilityIntegrationTests(unittest.TestCase):
             del h.mocks[name]  # the real controllers run
         model = Mock(side_effect=AssertionError("model not needed"))
 
-        def ask(session, *args, **kwargs):  # the real brain turn, with a model that must stay unused
+        def ask(
+            session, *args, **kwargs
+        ):  # the real brain turn, with a model that must stay unused
             with patched(**{"brain_turn.llm_chat": model}):
                 return brain_turn.ask_streaming(session, *args, **kwargs)
 

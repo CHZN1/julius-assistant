@@ -38,7 +38,7 @@ proc = subprocess.run(
 turns = json.loads((work / "turns.json").read_text()) if (work / "turns.json").exists() else []
 print(f"label={label} exit={proc.returncode} turns={len(turns)} log={work / 'out.log'}")
 with open(ROOT / "diagnostics" / "typed_policy_benchmarks.jsonl", "a") as f:
-    for (name, text), t in zip(TURNS, turns):
+    for (name, text), t in zip(TURNS, turns, strict=False):
         cost = t.get("cost_by_tier_usd") or {}
         row = dict(
             label=label,

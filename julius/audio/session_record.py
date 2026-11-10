@@ -9,6 +9,7 @@ These contain the user's voice and conversation text. They live under voice_data
 
 Time base: all event times are unix seconds; sample N of mic.wav is at t0 + N / rate."""
 
+import contextlib
 import json
 import os
 import threading
@@ -43,8 +44,8 @@ class SessionRecorder:
         self._out = []
         self._cursor = 0.0
         self._closed = False
-        self._mic = open(self.dir / "mic.raw", "wb")
-        self._events = open(self.dir / "events.jsonl", "a", buffering=1)
+        self._mic = open(self.dir / "mic.raw", "wb")  # noqa: SIM115 - held for the whole session, closed in close()
+        self._events = open(self.dir / "events.jsonl", "a", buffering=1)  # noqa: SIM115 - closed in close()
         self.event("session_start", rate=rate, t0=self.t0, **(meta or {}))
 
     # ---- inputs ----
@@ -170,8 +171,6 @@ def read_events(folder):
     p = Path(folder) / "events.jsonl"
     if p.exists():
         for line in p.read_text().splitlines():
-            try:
+            with contextlib.suppress(ValueError):
                 out.append(json.loads(line))
-            except ValueError:
-                pass
     return out

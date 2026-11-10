@@ -40,7 +40,10 @@ def check(
     """state() -> dict(state, pid, runs); read_log() -> raw jsonl lines; read_err_tail() -> text written to launchd stderr since the restart; start_ts -> ISO timestamp string.
     Returns (ok, [(name, ok, detail)])."""
     results = []
-    add = lambda name, ok, detail="": results.append((name, bool(ok), detail))
+
+    def add(name, ok, detail=""):
+        return results.append((name, bool(ok), detail))
+
     st = state()
     add(
         "service running",

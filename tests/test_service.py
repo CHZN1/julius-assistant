@@ -172,7 +172,7 @@ class LogTests(unittest.TestCase):
         tee.write(
             "  YOU [en]: my secret question\n  [heard 'hello' lang=en]\n  key sk-ant-TEST-NOT-A-KEY\n  [asleep]\nFetching 4 files: 100%|█| 4/4\n"
         )
-        rows = [json.loads(l) for l in (d / "j.jsonl").read_text().splitlines()]
+        rows = [json.loads(line) for line in (d / "j.jsonl").read_text().splitlines()]
         msgs = [r["msg"] for r in rows]
         self.assertEqual(msgs[0], "[transcript redacted]")
         self.assertEqual(msgs[1], "[transcript redacted]")
@@ -208,7 +208,8 @@ class LiveIssueTests(unittest.TestCase):
 
     def test_cloud_profile_keeps_whisper_resident(self):
         self.assertIn(
-            'JULIUS_ASR_RESIDENT="${JULIUS_ASR_RESIDENT:-1}"', (REPO_ROOT / "run_julius.sh").read_text()
+            'JULIUS_ASR_RESIDENT="${JULIUS_ASR_RESIDENT:-1}"',
+            (REPO_ROOT / "run_julius.sh").read_text(),
         )
         from julius.runtime import handlers
 

@@ -57,7 +57,7 @@ def recent_turns(n=6):
 
 # ---------- context injection ----------
 def build_context():
-    facts = _load("facts.json")["facts"]
+    _load("facts.json")["facts"]
     projs = _load("projects.json")["projects"]
     last = _load("last_session.json")
     out = []

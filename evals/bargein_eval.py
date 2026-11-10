@@ -320,14 +320,14 @@ def window(sig, j, back=0.3, fwd=1.5):
 def dry_pool():
     stops = [f for f in sorted((REAL / "stop").glob("*.wav"))]
     quick = sorted((REAL / "quick").glob("*.wav"))[:20]
-    qp = json.load(open(REAL / "quick" / "prompts.json"))
-    sp = json.load(open(REAL / "stop" / "prompts.json"))
+    qp = json.loads((REAL / "quick" / "prompts.json").read_text())
+    sp = json.loads((REAL / "stop" / "prompts.json").read_text())
     cmds = [(f, sp[int(f.stem.split("_")[1]) - 1][0]) for f in stops] + [
         (f, qp[int(f.stem.split("_")[1]) - 1][0]) for f in quick
     ]
     rest = []
     for s in ("talk1", "talk2", "talk3", "talk4"):
-        tp = json.load(open(REAL / s / "prompts.json"))
+        tp = json.loads((REAL / s / "prompts.json").read_text())
         for i, (t, _) in enumerate(tp):
             if re.search(r"\b(julia|julian|julie|jules)\b", t, re.I):
                 rest.append((REAL / s / f"{s}_{i + 1:02d}.wav", t))
@@ -538,7 +538,9 @@ def stage1_fires(clean, onset_f, thr_list=(0.05, 0.2, 0.5)):
     """Highest stage-1 'Julius' score in the 2 s after the duck and the time it is first above each threshold (the detector alone, no Whisper)."""
     from julius.wake.stream import WakeStream
 
-    st = WakeStream(str(ROOT / "julius" / "wake" / "models" / "julius.onnx"), 2.0, verify=None, gate=False)
+    st = WakeStream(
+        str(ROOT / "julius" / "wake" / "models" / "julius.onnx"), 2.0, verify=None, gate=False
+    )
     best, first = 0.0, {str(t): None for t in thr_list}
     seg = clean[max(0, onset_f * HOP - int(1.5 * SR)) : onset_f * HOP + int(2.5 * SR)]
     x = (np.clip(seg, -1, 1) * 32767).astype(np.int16)
@@ -561,7 +563,7 @@ def real():
     rows = []
     cancellers = {c: persistent(c) for c in ("webrtc", "speex")}
     for (
-        c,
+        _c,
         go,
     ) in cancellers.items():  # production-like: the canceller has already heard earlier answers
         for n, m, r in warm:
@@ -569,7 +571,7 @@ def real():
     for n, meta, mic, ref in takes:
         lag = lag_ms(mic[: 6 * SR], ref[: 6 * SR])
         floor = max(float(np.median(env(mic[: int(0.4 * SR)]))), 1e-4)
-        spoken = spoken_text("long_%d" % meta["long"])
+        spoken = spoken_text(f"long_{meta['long']}")
         res = {c: go(mic, ref, lag) for c, go in cancellers.items()}
         onset = annotate_onset(res["webrtc"])
         onset2 = annotate_onset(res["speex"])
@@ -587,7 +589,7 @@ def real():
         onset = min(onset, onset2)
         e_mic = env(mic)
         n_f = len(e_mic)
-        r_env = ref_env_delayed(ref, lag, len(mic))[:n_f]
+        ref_env_delayed(ref, lag, len(mic))[:n_f]
         cal = (
             Cal(
                 warm_echoes := {k: load(k) for k in names("long_")},
@@ -653,6 +655,6 @@ def summarize_real(rows):
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "aec"
     if cmd == "summary":
-        summarize(json.load(open(RESULTS / "bargein_isolated.json")))
+        summarize(json.loads((RESULTS / "bargein_isolated.json").read_text()))
     else:
         {"aec": aec_report, "run": run, "real": real}[cmd]()

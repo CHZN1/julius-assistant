@@ -12,6 +12,7 @@ No third-party packages: the WebSocket framing (RFC 6455) is implemented here.""
 
 import base64
 import collections
+import contextlib
 import hashlib
 import json
 import queue
@@ -53,10 +54,7 @@ def frame(payload, opcode=0x1):
 
 def _local_host(value):
     h = (value or "").strip().lower()
-    if h.startswith("["):
-        h = h[1 : h.find("]")] if "]" in h else h
-    else:
-        h = h.split(":")[0]
+    h = (h[1 : h.find("]")] if "]" in h else h) if h.startswith("[") else h.split(":")[0]
     return h in ("127.0.0.1", "localhost", "::1")
 
 
@@ -153,14 +151,10 @@ class _Client(threading.Thread):
 
     def close(self):
         self.alive = False
-        try:
+        with contextlib.suppress(queue.Full):
             self.q.put_nowait(None)
-        except queue.Full:
-            pass
-        try:
+        with contextlib.suppress(OSError):
             self.sock.shutdown(socket.SHUT_RDWR)
-        except OSError:
-            pass
 
     def _read_exact(self, n):
         buf = b""
@@ -209,7 +203,7 @@ class _Client(threading.Thread):
             first = lines[0].split(" ")
             hdr = {
                 k.strip().lower(): v.strip()
-                for k, v in (l.split(":", 1) for l in lines[1:] if ":" in l)
+                for k, v in (line.split(":", 1) for line in lines[1:] if ":" in line)
             }
             if (
                 len(first) < 2
@@ -251,10 +245,8 @@ class _Client(threading.Thread):
         finally:
             self.alive = False
             self.hub.remove(self)
-            try:
+            with contextlib.suppress(OSError):
                 self.sock.close()
-            except OSError:
-                pass
 
 
 class EventServer:
@@ -303,10 +295,8 @@ class EventServer:
 
     def stop(self):
         self._stop.set()
-        try:
+        with contextlib.suppress(OSError, AttributeError):
             self._sock.close()
-        except (OSError, AttributeError):
-            pass
 
 
 class LevelTap:

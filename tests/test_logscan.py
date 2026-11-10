@@ -115,12 +115,12 @@ class LatencyTests(unittest.TestCase):
                 "msg": "[timing: first_audio=none speech_end_to_audio=na asr=na asr_logprob=-1.50 no_speech=na total=0.50 input=typed routed=shortcut error=yes]"
             }
         )
-        l = ls.latency(rows)
-        self.assertEqual(l["turns"], 11)
-        self.assertEqual(l["errors"], 1)
-        self.assertEqual(l["low_confidence_turns"], 1)
-        self.assertEqual(l["speech_end_to_audio"]["n"], 10)
-        self.assertAlmostEqual(l["speech_end_to_audio"]["p50"], 2.5, delta=0.11)
+        line = ls.latency(rows)
+        self.assertEqual(line["turns"], 11)
+        self.assertEqual(line["errors"], 1)
+        self.assertEqual(line["low_confidence_turns"], 1)
+        self.assertEqual(line["speech_end_to_audio"]["n"], 10)
+        self.assertAlmostEqual(line["speech_end_to_audio"]["p50"], 2.5, delta=0.11)
 
 
 class SoakTests(unittest.TestCase):

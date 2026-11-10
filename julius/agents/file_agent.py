@@ -283,7 +283,10 @@ class FileAgent:
     def _extra_folder(self, p):
         """A configured folder outside Documents/Desktop/Downloads named anywhere in a relative path ("sandbox", "sand box/a.txt", "Documents/dev/Sandbox") -> that folder plus the rest."""
         standard = {self.root / n for n in ("Documents", "Desktop", "Downloads")}
-        key = lambda x: re.sub(r"[^a-z0-9]", "", str(x).casefold())
+
+        def key(x):
+            return re.sub(r"[^a-z0-9]", "", str(x).casefold())
+
         extras = {
             key(f.name): f
             for f, mode in self.modes.items()
@@ -540,7 +543,9 @@ class FileAgent:
                         if visited > self.MAX_ENTRIES:
                             stopped = True
                             break
-                        self._scan_entry(entry, p, patterns, recursive, include_hidden, stack, hits, issues)
+                        self._scan_entry(
+                            entry, p, patterns, recursive, include_hidden, stack, hits, issues
+                        )
                         if len(hits) > cap:
                             stopped = True
                             break
@@ -681,7 +686,9 @@ class FileAgent:
             try:
                 text = codecs.getincrementaldecoder("utf-8-sig")().decode(raw, final=False)
             except UnicodeDecodeError:
-                raise FileProblem("unsupported_encoding", f"{p.name} is not readable UTF-8 text.")
+                raise FileProblem(
+                    "unsupported_encoding", f"{p.name} is not readable UTF-8 text."
+                ) from None
         truncated = len(text) > cap or p.stat().st_size > len(raw)
         return result(
             True,
@@ -832,7 +839,10 @@ class FileAgent:
     def _preview_message(action, ops, src, dst) -> str:
         if action in {"move", "copy"}:
             detail = " It covers " + summarize_ops(ops) + "."
-            return f"I found {len(ops)} file(s) in {src.name}. I can {action} them to {dst.name}." + detail
+            return (
+                f"I found {len(ops)} file(s) in {src.name}. I can {action} them to {dst.name}."
+                + detail
+            )
         if action == "rename":
             return f"I can rename {src.name} to {dst.name}."
         return f"I can create {dst.name} with the supplied text."
@@ -980,10 +990,8 @@ class FileAgent:
         if self.trash_dir.exists():
             for root, _dirs, files in os.walk(self.trash_dir):
                 for f in files:
-                    try:
+                    with contextlib.suppress(OSError):
                         total += os.lstat(os.path.join(root, f)).st_size
-                    except OSError:
-                        pass
         return total
 
     def trash_notice(self):
@@ -1099,10 +1107,8 @@ class FileAgent:
             key=lambda x: len(x.parts),
             reverse=True,
         ):
-            try:
+            with contextlib.suppress(OSError):
                 d.rmdir()
-            except OSError:
-                pass
         plan["status"] = "completed"
         self._save(state)
         return result(
@@ -1425,7 +1431,9 @@ class FileAgent:
             op["status"] = "undone"
             self._save(state)
             return False
-        expected = op.get("result_fingerprint", op.get("publication_fingerprint", op["fingerprint"]))
+        expected = op.get(
+            "result_fingerprint", op.get("publication_fingerprint", op["fingerprint"])
+        )
         if not dst.exists() or not self._matches(dst, expected, identity=True):
             issues.append(
                 {

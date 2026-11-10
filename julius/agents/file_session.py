@@ -124,7 +124,7 @@ class FileSession:
         )
 
     def _pending_question(self, text: str):
-        """"Did you do it?" while a plan waits: answered with the plan, which stays pending."""
+        """ "Did you do it?" while a plan waits: answered with the plan, which stays pending."""
         if not (self.pending and ABOUT_PENDING.match(text.strip())):
             return None
         base = (
@@ -261,9 +261,9 @@ class FileSession:
         hits = [
             f
             for f in homes
-            if self.agent.find(pattern=args["pattern"], source=str(f), recursive=False)[
-                "data"
-            ].get("items")
+            if self.agent.find(pattern=args["pattern"], source=str(f), recursive=False)["data"].get(
+                "items"
+            )
         ]
         if len(hits) == 1:
             return self.agent.propose(

@@ -20,9 +20,12 @@ def estimate_lag(mic, out, max_lag=4.0, step=0.01):
     n = min(len(mic), len(out)) // FRAME
     if n < 100:
         return 0.0
-    env = lambda x: np.sqrt(
-        np.mean(np.asarray(x[: n * FRAME], dtype=np.float32).reshape(n, FRAME) ** 2, axis=1)
-    )
+
+    def env(x):
+        return np.sqrt(
+            np.mean(np.asarray(x[: n * FRAME], dtype=np.float32).reshape(n, FRAME) ** 2, axis=1)
+        )
+
     m, o = env(mic), env(out)
     if o.std() < 1e-5:
         return 0.0

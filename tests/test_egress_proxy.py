@@ -149,14 +149,18 @@ class WiringTests(unittest.TestCase):
     def test_profile_allows_only_the_proxy_port_and_nothing_else_on_the_network(self):
         t = self.b.task()
         text = ca.seatbelt_profile(t, home=self.b.home, proxy_port=54321)
-        net = [l for l in text.splitlines() if "network" in l]
+        net = [line for line in text.splitlines() if "network" in line]
         self.assertEqual(
             net, ["(deny network*)", '(allow network-outbound (remote ip "localhost:54321"))']
         )
         for old in ('"*:443"', "*:53", "mDNSResponder", "localhost:*"):
             self.assertNotIn(old, text)
         self.assertEqual(
-            [l for l in ca.seatbelt_profile(t, home=self.b.home).splitlines() if "network" in l],
+            [
+                line
+                for line in ca.seatbelt_profile(t, home=self.b.home).splitlines()
+                if "network" in line
+            ],
             ["(deny network*)"],
         )  # no proxy, no network
 

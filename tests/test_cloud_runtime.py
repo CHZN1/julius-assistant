@@ -1,12 +1,11 @@
 """Runtime wiring for the cloud brain: voice stays loaded, escalation hints reach tool turns."""
+
 import os
 import unittest
-from pathlib import Path
 from unittest.mock import Mock, patch
 
-from julius.paths import REPO_ROOT
-
 from julius.audio.tts import SpeechEngine
+from julius.paths import REPO_ROOT
 from julius.runtime import boot
 from julius.runtime.text import ESCALATE_HINT
 
@@ -52,7 +51,9 @@ class VoiceStaysLoadedTests(unittest.TestCase):
         self.assertIn("JULIUS_KEEP_VOICE", torch)
         import subprocess
 
-        self.assertEqual(subprocess.run(["zsh", "-n", str(REPO_ROOT / "run_julius.sh")]).returncode, 0)
+        self.assertEqual(
+            subprocess.run(["zsh", "-n", str(REPO_ROOT / "run_julius.sh")]).returncode, 0
+        )
 
 
 class EscalationHintTests(unittest.TestCase):

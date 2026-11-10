@@ -19,6 +19,7 @@ it reports how much of the user's speech was recovered and how many segments wer
 
 import argparse
 import collections
+import contextlib
 import json
 import re
 import statistics
@@ -62,10 +63,8 @@ def read_jsonl(path):
     out = []
     if Path(path).exists():
         for line in Path(path).read_text().splitlines():
-            try:
+            with contextlib.suppress(ValueError):
                 out.append(json.loads(line))
-            except ValueError:
-                pass
     return out
 
 
@@ -112,9 +111,9 @@ def tool_text(take):
     if not p.exists():
         return ""
     return "\n".join(
-        l
-        for l in p.read_text(errors="replace").splitlines()
-        if not l.lstrip().startswith("JULIUS:")
+        line
+        for line in p.read_text(errors="replace").splitlines()
+        if not line.lstrip().startswith("JULIUS:")
     )
 
 
@@ -225,7 +224,10 @@ def score_take(take):
 def summarize(rows):
     graded = [r for r in rows if r["wer"] is not None]
     lat = sorted(r["latency_s"] for r in rows if r["latency_s"] is not None)
-    pct = lambda xs, q: round(xs[min(len(xs) - 1, int(q * len(xs)))], 2) if xs else None
+
+    def pct(xs, q):
+        return round(xs[min(len(xs) - 1, int(q * len(xs)))], 2) if xs else None
+
     return {
         "turns": len(rows),
         "handled_ok": sum(r["handled_ok"] for r in rows),
@@ -277,7 +279,7 @@ def score_main(a):
         print("no recordings in voice_data/ (python evals/voice_record.py record)")
         return 1
     rows = []
-    for sid, ts in takes.items():
+    for _sid, ts in takes.items():
         for t in ts:
             rows += score_take(t)
     summary = summarize(rows)

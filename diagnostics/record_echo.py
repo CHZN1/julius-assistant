@@ -33,7 +33,7 @@ def render():
     if p.exists():
         return
     print("rendering Julius's voice for the long answers (one time) ...", flush=True)
-    for i, (text, x) in enumerate(bd.julius_voice_clips(LONG)):
+    for i, (_text, x) in enumerate(bd.julius_voice_clips(LONG)):
         sf.write(
             OUT / f"long_{i}_src.wav", (x / (np.abs(x).max() + 1e-6) * 0.7).astype(np.float32), SR
         )

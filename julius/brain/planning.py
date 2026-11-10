@@ -78,9 +78,10 @@ class Planner:
         if not isinstance(title, str) or not 1 <= len(title.strip()) <= 240:
             raise ValueError("Please use a title of 1–240 characters.")
         title = title.strip()
-        if kind in {"reminder", "event"}:
-            if due is None or not self.clock() < due <= self.clock() + 10 * 366 * 86400:
-                raise ValueError("Choose a future time within ten years.")
+        if kind in {"reminder", "event"} and (
+            due is None or not self.clock() < due <= self.clock() + 10 * 366 * 86400
+        ):
+            raise ValueError("Choose a future time within ten years.")
         if kind == "event" and (end is None or not due < end <= due + 31 * 86400):
             raise ValueError("An event needs an end after its start, within 31 days.")
         with self.db() as con:

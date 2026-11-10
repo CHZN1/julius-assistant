@@ -41,12 +41,12 @@ proc = subprocess.run(
 )
 (work / "out.log").write_text(proc.stdout + proc.stderr)
 turns = json.loads((work / "turns.json").read_text()) if (work / "turns.json").exists() else []
-ready = next((l for l in (proc.stdout).splitlines() if "julius ready" in l), "")
+ready = next((line for line in (proc.stdout).splitlines() if "julius ready" in line), "")
 print(
     f"profile={profile} exit={proc.returncode} total={time.time() - t0:.0f}s turns={len(turns)} log={work / 'out.log'}"
 )
 rows = []
-for (name, text), t in zip(TURNS, turns):
+for (name, _text), t in zip(TURNS, turns, strict=False):
     row = dict(
         profile=profile,
         turn=name,

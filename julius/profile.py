@@ -2,6 +2,7 @@
 run_julius.sh's `cloud` profile sets the same values; test_julius_default_profile.py keeps them in sync."""
 
 import os
+import re
 
 CLOUD_DEFAULTS = {
     "JULIUS_BACKEND": "cloud",
@@ -26,9 +27,6 @@ def apply_cloud_defaults(environ=None):
 
 
 # ---- who the assistant is talking to ([profile] in julius.toml / julius.local.toml; neutral defaults) ----
-import re as _re
-
-
 def _profile():
     import julius.config as cfg
 
@@ -50,7 +48,7 @@ def apply(text, profile=None):
     p = profile if profile is not None else _profile()
     name = (p.get("name") or "").strip() or "the user"
     city = (p.get("home_city") or "").strip() or "the user's home city"
-    text = _re.sub(
+    text = re.sub(
         r"\bRoy(?:'s)?\b", lambda m: name + ("'s" if m.group(0).endswith("'s") else ""), text
     )
     return text.replace("Springfield, Illinois", city)

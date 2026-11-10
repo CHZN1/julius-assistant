@@ -69,7 +69,7 @@ def train(out, holdout=None, min_score=0.05, seed=0, sessions="wake,wake2,quick"
         for p in sorted((REAL / s).glob(f"{s}_*.wav")):
             neg += windows(m, name, load(p), min_score, every=6)
     count["negatives: your talk"] = len(neg)
-    n0 = len(neg)
+    len(neg)
 
     def sample(sub, n, label, every=None):
         files = sorted((DATA / sub).glob("*.wav"))
@@ -93,7 +93,7 @@ def train(out, holdout=None, min_score=0.05, seed=0, sessions="wake,wake2,quick"
     pipe.fit(X, y)
     out = Path(out).expanduser()
     out.parent.mkdir(parents=True, exist_ok=True)
-    pickle.dump(pipe, open(out, "wb"))
+    out.write_bytes(pickle.dumps(pipe))
     p = pipe.predict_proba(X)[:, 1]
     print(count)
     print(

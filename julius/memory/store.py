@@ -254,7 +254,7 @@ class MemoryStore:
         toks = []
         for w in words(query):
             stem = w[: max(4, len(w) - 2)] if len(w) > 5 else w
-            toks.append('"%s"*' % stem.replace('"', ""))
+            toks.append('"{}"*'.format(stem.replace('"', "")))
         if not toks:
             return []
         with self._db() as c:

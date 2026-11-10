@@ -210,9 +210,7 @@ def replay_take(take, mode):
     t0 += off
     sig = front_end(mic, out, mode, duplex=duplex)
     segs = transcribe_segments(sig, noise_threshold(mic))
-    said = " ".join(
-        e["text"] for e in events if e["kind"] == "reply" and e.get("text")
-    )
+    said = " ".join(e["text"] for e in events if e["kind"] == "reply" and e.get("text"))
     rows = [
         grade_turn(scenario, lab, segs, (a - t0, b - t0), said)
         for lab, a, b in ve.turn_windows(labels, events[-1]["t"] + 1)

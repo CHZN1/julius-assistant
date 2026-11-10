@@ -347,7 +347,6 @@ def llm_factory():
     from julius.brain import cloud
 
     brain = cloud.get_brain()
-    cost = [0.0]
 
     def llm(prompt):
         r = brain.chat(

@@ -9,6 +9,7 @@ example. Tracebacks in launchd.err are grouped by their last line. Used by the s
 
 import argparse
 import collections
+import contextlib
 import json
 import re
 import sys
@@ -98,15 +99,14 @@ def latency(rows):
             "asr_logprob",
             "no_speech",
         ):
-            try:
+            with contextlib.suppress(KeyError, ValueError):
                 vals[key].append(float(f[key]))
-            except (KeyError, ValueError):
-                pass
-        try:
+        with contextlib.suppress(KeyError, ValueError):
             low_conf += float(f["asr_logprob"]) < -1.0
-        except (KeyError, ValueError):
-            pass
-    pct = lambda xs, q: round(sorted(xs)[min(len(xs) - 1, int(q * len(xs)))], 2)
+
+    def pct(xs, q):
+        return round(sorted(xs)[min(len(xs) - 1, int(q * len(xs)))], 2)
+
     return {
         "turns": turns,
         "errors": errors,
@@ -210,7 +210,6 @@ def scan(log_dir=LOG_DIR, since=None, wake_log=WAKE_LOG):
     cats = collections.defaultdict(
         lambda: {"count": 0, "severity": "", "first": "", "last": "", "example": ""}
     )
-    underflow_bursts = 0
     for r in rows:
         msg = r.get("msg", "")
         name, sev = classify(msg, r.get("level", "info"))

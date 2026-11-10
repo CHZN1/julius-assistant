@@ -8,6 +8,7 @@ The proxy accepts CONNECT to an exact (host, port) in the allowlist and refuses 
 It resolves the name itself and refuses non-public addresses, then splices bytes without looking inside (TLS stays end to end).
 Every refusal is appended to a log file (host and port only, never payloads) so a blocked run can be explained."""
 
+import contextlib
 import ipaddress
 import select
 import socket
@@ -98,12 +99,10 @@ class EgressProxy:
                     pass
 
             def _say(self, code, why):
-                try:
+                with contextlib.suppress(OSError):
                     self.request.sendall(
                         f"HTTP/1.1 {code} {why}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".encode()
                     )
-                except OSError:
-                    pass
 
             def _splice(self, a, b):
                 socks = [a, b]

@@ -12,7 +12,6 @@ Usage: python evals/routing_eval.py [--no-brain] [--only r001,r002] [--workers 6
 """
 
 import argparse
-import ast
 import json
 import os
 import sys
@@ -29,9 +28,9 @@ import common
 
 def load_cases(only=None):
     cases = [
-        json.loads(l)
-        for l in (Path(__file__).parent / "routing_cases.jsonl").read_text().splitlines()
-        if l.strip()
+        json.loads(line)
+        for line in (Path(__file__).parent / "routing_cases.jsonl").read_text().splitlines()
+        if line.strip()
     ]
     return [c for c in cases if not only or c["id"] in only]
 
@@ -247,7 +246,7 @@ def run_brain(pending, runs, workers):
     by_case = {}
     with ThreadPoolExecutor(workers) as ex:
         for (case, _k), got in zip(
-            jobs, ex.map(lambda j: brain_turn(j[0], brain, tracker, system), jobs)
+            jobs, ex.map(lambda j: brain_turn(j[0], brain, tracker, system), jobs), strict=False
         ):
             by_case.setdefault(case["id"], []).append(got)
     rows = {}
@@ -260,7 +259,7 @@ def run_brain(pending, runs, workers):
 
         majority_ok = sum(verdicts) * 2 > len(rs)
         # a run on the majority side represents the case
-        pick = next((r for r, v in zip(rs, verdicts) if v == majority_ok), rs[0])
+        pick = next((r for r, v in zip(rs, verdicts, strict=False) if v == majority_ok), rs[0])
         rows[case["id"]] = dict(
             pick,
             seconds=sum(r["seconds"] for r in rs) / len(rs),

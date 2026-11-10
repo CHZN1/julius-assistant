@@ -17,7 +17,6 @@ from julius.wake.stream import WakeStream, run_clip, whisper_verify
 
 def main(gains, floors=(0.0045, 0.0015)):
     base = whisper_verify()
-    calls = []
 
     def verify(clip):
         if not has_voice_activity(clip, 16000, 0.0015):

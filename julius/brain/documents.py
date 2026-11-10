@@ -74,8 +74,7 @@ def read_document(path, query=None, file_agent=None):
             [document_python(), "-m", "julius.brain.document_worker", resolved.suffix.lower()],
             cwd=str(REPO_ROOT),
             input=raw,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             timeout=12,
         )
         if process.returncode != 0:

@@ -8,7 +8,6 @@ import numpy as np
 from julius.audio.tts import SpeechEngine
 from julius.audio.voice_identity import (
     REF_TEXT,
-    TTS_LIFT_HINT,
     configure_qwen_decoder,
     delivery_mode,
     numerical_failure,

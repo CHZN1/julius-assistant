@@ -8,7 +8,6 @@ from pathlib import Path
 import julius.agents.dropstage as ds
 import julius.ui_bridge.uichannel as uc
 from julius.agents.file_agent import FileAgent
-from julius.paths import REPO_ROOT
 
 
 class Clock:

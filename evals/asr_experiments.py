@@ -80,7 +80,7 @@ def main():
         print(
             f"{name:20} {100 * np.mean(wers):8.1f}% {sum(1 for m in miss if m):>24} {sum(len(m) for m in miss):>13} {np.mean(times):7.3f} {max(times):8.3f}"
         )
-        for n, m in zip([c[0] for c in clips], miss):
+        for n, m in zip([c[0] for c in clips], miss, strict=False):
             if m:
                 print(f"      #{n} missed {m}: heard {heard[n][:90]!r}")
 

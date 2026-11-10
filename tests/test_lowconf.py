@@ -1,7 +1,6 @@
 import unittest
 
 from julius.audio.lowconf import LowConfidenceGate, is_risky, is_shaky
-from julius.paths import REPO_ROOT
 
 SURE = {"segment_log_probabilities": [-0.2], "no_speech_probability": 0.01}
 SHAKY = {"segment_log_probabilities": [-1.4], "no_speech_probability": 0.05}

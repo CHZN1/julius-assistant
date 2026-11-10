@@ -19,9 +19,9 @@ import soundfile as sf
 from scipy import signal
 
 from julius.paths import REPO_ROOT
+from julius.wake import phrases as P
 
 ROOT = REPO_ROOT
-import phrases as P
 
 DATA = ROOT / "wake" / "data"
 SR = 16000
@@ -179,7 +179,7 @@ def main():
         print("done", len(m))
         return
     if args.eval_julius:
-        for k, (text, x) in enumerate(julius_voice_clips(P.JULIUS_OWN_EVAL)):
+        for k, (_text, x) in enumerate(julius_voice_clips(P.JULIUS_OWN_EVAL)):
             save(
                 DATA / "eval_julius" / f"qwen_{k:02d}.wav",
                 np.concatenate(
@@ -253,14 +253,14 @@ def main():
     for text in P.JULIUS_OWN:  # Kokoro am_adam, several speeds
         for speed in (0.9, 1.0, 1.1):
             x = kokoro_clips(pipe, text, "am_adam", speed)
-            for k in range(4):
+            for _ in range(4):
                 name = f"neg_julius/kokoro_{own:04d}.wav"
                 save(DATA / name, augment(x, rng))
                 manifest.append({"file": name, "text": text, "voice": "am_adam", "speed": speed})
                 own += 1
     if args.julius_voice:
         for text, x in julius_voice_clips(P.JULIUS_OWN):
-            for k in range(6):
+            for _ in range(6):
                 name = f"neg_julius/qwen_{own:04d}.wav"
                 save(DATA / name, augment(x, rng))
                 manifest.append({"file": name, "text": text, "voice": "julius-qwen", "speed": 1.0})

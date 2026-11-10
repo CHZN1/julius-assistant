@@ -80,7 +80,7 @@ for variant in ("trimmed", "full"):
     print(
         f"== {variant}: {len(SESSION)} turns, total ${total:.5f}, mean ${total / len(SESSION):.5f} per turn"
     )
-    for text, (n, i, w, rd, o, usd) in zip(SESSION, rows):
+    for text, (n, i, w, rd, o, usd) in zip(SESSION, rows, strict=False):
         print(
             f"   tools={n:2d} fresh_in={i:4d} cache_write={w:5d} cache_read={rd:5d} out={o:3d} ${usd:.5f}  {text}"
         )

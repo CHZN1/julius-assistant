@@ -81,7 +81,7 @@ def main():
         print(
             f"{name:8} {100 * np.mean([r['wer'] for r in rows]):8.1f}% {sum(1 for r in rows if r['hallucinated']):>38}"
         )
-    for a_, b_ in zip(results["no hint"], results["hint"]):
+    for a_, b_ in zip(results["no hint"], results["hint"], strict=False):
         flag = "  <-- hint hallucinated " + str(b_["hallucinated"]) if b_["hallucinated"] else ""
         if a_["heard"] != b_["heard"] or flag:
             print(

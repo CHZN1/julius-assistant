@@ -171,9 +171,7 @@ class DispatcherTests(unittest.TestCase):
         self.registry["get_weather"] = Mock(side_effect=TimeoutError("offline"))
         with patch.object(tools, "_dispatcher", self.d):
             spoken = []
-            reply = h.ask(
-                "Look up Tokyo current temperature", "", speak_fn=spoken.append
-            )
+            reply = h.ask("Look up Tokyo current temperature", "", speak_fn=spoken.append)
         self.assertIn("failed", reply)
         self.assertEqual(spoken, [reply])
         self.assertEqual(model.call_count, 1)
@@ -191,7 +189,10 @@ class DispatcherTests(unittest.TestCase):
             return iter([S(message=S(content="Hello."))])
 
         h.llm_chat = model
-        hook = lambda: order.append("voice_released")
+
+        def hook():
+            return order.append("voice_released")
+
         with patch.object(tools, "_dispatcher", self.d):
             h.ask("Say hello", "", speak_fn=lambda _: None, before_inference=hook)
             self.assertEqual(order, ["voice_released", "model"])

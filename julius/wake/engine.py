@@ -106,9 +106,8 @@ class WakeEngine:
             and event.get("clip") is not None
             and event.get("speaker") is not None
             and self.stream.speaker is not None
-        ):
-            if event["speaker"] - self.stream.speaker_threshold < self.speaker_margin:
-                row["near_miss_clip"] = self._save(event["clip"], "borderline_accept", now)
+        ) and event["speaker"] - self.stream.speaker_threshold < self.speaker_margin:
+            row["near_miss_clip"] = self._save(event["clip"], "borderline_accept", now)
         self._write(row)
         self.previous = {"time": now, "accepted": event["accepted"], "clip": event.get("clip")}
 

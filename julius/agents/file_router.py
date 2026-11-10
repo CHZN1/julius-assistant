@@ -5,6 +5,8 @@ import os
 import re
 from pathlib import Path
 
+from julius.brain import confirm
+
 PLANNING_RE = re.compile(
     r"\b(?:organi[sz]e|sort|tidy|clean(?:\s|-)?up|declutter|categori[sz]e|group|rename (?:all|every|each))\b",
     re.I,
@@ -18,8 +20,6 @@ UNDO = re.compile(
     r"^\s*(?:please\s+)?(?:undo(?:\s+(?:that|the last (?:move|copy|change)|last))?|revert the last (?:move|change)|put (?:them|it) back)\s*[.!]?\s*$",
     re.I,
 )
-from julius.brain import confirm
-
 CANCEL = re.compile(
     r"^\s*(?:no|nope|cancel(?: that| the (?:plan|move|copy))?|never mind|nevermind|stop)\s*[.!]?\s*$",
     re.I,
@@ -356,7 +356,9 @@ def parse_trash(text, root):
         r"\.[a-z0-9]{1,8}\b|\b(?:csvs?|pdfs?|notebooks?|images?|scripts?|docs?)\b", selection, re.I
     )
     if pattern is None or too_broad:
-        return {"clarification": "Please name the exact files, a file type like PDFs, or a quoted name. I will not guess what to throw away."}
+        return {
+            "clarification": "Please name the exact files, a file type like PDFs, or a quoted name. I will not guess what to throw away."
+        }
     return {"source": source, "pattern": pattern}
 
 

@@ -4,7 +4,6 @@ import unittest
 
 import julius.ui_bridge.events as ev
 import julius.ui_bridge.events_client as cl
-from julius.paths import REPO_ROOT
 
 
 def wait(pred, t=3.0):

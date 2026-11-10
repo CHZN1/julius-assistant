@@ -178,13 +178,13 @@ class Channel:
         try:
             length = int(headers.get("Content-Length") or "")
         except ValueError:
-            raise Refused(411, "Content-Length required")
+            raise Refused(411, "Content-Length required") from None
         if length < 0 or length > MAX_BODY:
             raise Refused(413, "body too large")
         try:
             body = json.loads(body_reader(length).decode("utf-8"))
         except (ValueError, UnicodeDecodeError):
-            raise Refused(400, "body is not JSON")
+            raise Refused(400, "body is not JSON") from None
         if not isinstance(body, dict):
             raise Refused(400, "body must be an object")
         return body

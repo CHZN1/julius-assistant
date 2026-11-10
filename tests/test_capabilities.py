@@ -1,6 +1,5 @@
-from julius.paths import REPO_ROOT
-
 """Capability prompt, backup tools (file_request, code_request) and the bare-yes reply: Julius must never decline something he can do or improvise an answer to a stray yes."""
+
 import tempfile
 import unittest
 from pathlib import Path

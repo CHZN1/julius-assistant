@@ -1,10 +1,9 @@
-from unittest.mock import Mock
 import contextlib
 import time
 import unittest
+from unittest.mock import Mock
 
 from julius.audio.ack import Acknowledger
-from julius.paths import REPO_ROOT
 
 
 class AckTests(unittest.TestCase):

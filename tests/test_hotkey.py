@@ -11,7 +11,7 @@ from julius.service import hotkey
 
 def fake_popen(lines):
     """A helper process that prints `lines` then stays open until stdin closes."""
-    code = "import sys,time\nfor l in %r: print(l,flush=True)\nsys.stdin.read()" % (lines,)
+    code = f"import sys,time\nfor l in {lines!r}: print(l,flush=True)\nsys.stdin.read()"
     return lambda cmd, **kw: subprocess.Popen([sys.executable, "-c", code], **kw)
 
 

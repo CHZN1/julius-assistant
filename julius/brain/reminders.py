@@ -61,7 +61,7 @@ def _clock(text):
 
 
 def _relative_time(text, now):
-    """"in 20 minutes", "in half an hour": epoch seconds, or None when it is not relative."""
+    """ "in 20 minutes", "in half an hour": epoch seconds, or None when it is not relative."""
     rel = re.fullmatch(
         r"in (?:about |around )?(\d+(?:\.\d+)?|half an?|an?|one|two|three|four|five|six|seven|eight|nine|ten|fifteen|twenty|thirty|forty[- ]five|sixty) ?(seconds?|secs?|minutes?|mins?|hours?|hrs?|days?|weeks?)(?: and a half)?",
         text,

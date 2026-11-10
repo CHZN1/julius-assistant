@@ -6,6 +6,7 @@ stream open between sentences (no start/stop pop per sentence) and ends each sen
 after an underflow and relaxes it after clean sentences, and (5) records every underflow so live runs show them.
 """
 
+import contextlib
 import threading
 import time
 
@@ -77,10 +78,8 @@ class SpeechPlayer:
         """Silence the speakers now, from any thread (the stop hotkey). Does not take the playback lock: play() may be blocked in write()."""
         stream = self.stream
         if stream is not None:
-            try:
+            with contextlib.suppress(Exception):
                 stream.abort()
-            except Exception:
-                pass
 
     def close(self):
         with self._lock:
@@ -90,6 +89,13 @@ class SpeechPlayer:
             self._close_stream()
 
     # ---- playback ----
+    def _tap_audio(self, audio, sample_rate):
+        """Hand a copy of the audio to the session recorder; it may never disturb playback."""
+        tap = getattr(self, "tap", None)
+        if tap is not None:
+            with contextlib.suppress(Exception):
+                tap(audio, sample_rate)
+
     def play(self, chunks, cancel_check=None, on_start=None):
         """Play (float32 chunk, sample_rate) pairs from a generator. Returns {'chunks', 'underflows', 'prefill_chunks'}."""
         with self._lock:
@@ -115,14 +121,7 @@ class SpeechPlayer:
                     nonlocal sentence_underflows, written, seconds_written
                     if sample_rate != rate:
                         raise RuntimeError("Speech sample rate changed")
-                    tap = getattr(self, "tap", None)
-                    if tap is not None:
-                        try:
-                            tap(
-                                audio, sample_rate
-                            )  # session recorder (voice eval); never allowed to disturb playback
-                        except Exception:
-                            pass
+                    self._tap_audio(audio, sample_rate)
                     flagged = stream.write(
                         np.ascontiguousarray(audio, dtype=np.float32).reshape(-1, 1)
                     )

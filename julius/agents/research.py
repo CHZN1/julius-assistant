@@ -121,7 +121,7 @@ def check_url(url, resolve=socket.getaddrinfo):
     try:
         p = urllib.parse.urlsplit(url.strip())
     except ValueError:
-        raise Blocked("not a valid URL")
+        raise Blocked("not a valid URL") from None
     if p.scheme not in ("http", "https"):
         raise Blocked("only http and https pages can be read")
     if p.username or p.password or "@" in (p.netloc or ""):
@@ -132,13 +132,13 @@ def check_url(url, resolve=socket.getaddrinfo):
     try:
         port = p.port or (443 if p.scheme == "https" else 80)
     except ValueError:
-        raise Blocked("bad port")
+        raise Blocked("bad port") from None
     if port not in (80, 443):
         raise Blocked("only ports 80 and 443 are allowed")
     try:
         ips = [i[4][0] for i in resolve(host, port, type=socket.SOCK_STREAM)]
     except OSError:
-        raise Blocked("host did not resolve")
+        raise Blocked("host did not resolve") from None
     if not ips:
         raise Blocked("host did not resolve")
     for ip in ips:
@@ -409,7 +409,7 @@ class ResearchAgent:
         question = " ".join(str(question).split())[:600]
         loop = _CostLoop(self.brain, SYSTEM, SCHEMAS, self.max_usd)
         messages, final, stopped = [{"role": "user", "content": question}], None, "done"
-        for step in range(self.max_steps):
+        for _step in range(self.max_steps):
             if loop.over():
                 stopped = "cost_cap"
                 break

@@ -66,7 +66,7 @@ def convert_units(value, from_unit, to_unit):
     try:
         n = Decimal(str(value))
     except InvalidOperation:
-        raise ValueError("Please supply a finite number.")
+        raise ValueError("Please supply a finite number.") from None
     if not n.is_finite() or abs(n) > Decimal("1e100"):
         raise ValueError("Value exceeds the supported range.")
     if a in {"c", "f", "k"} and b in {"c", "f", "k"}:
@@ -103,9 +103,9 @@ def local_datetime(value, zone):
     options = []
     for fold in (0, 1):
         aware = parsed.replace(tzinfo=tz, fold=fold)
-        if aware.astimezone(UTC).astimezone(tz).replace(tzinfo=None) == parsed:
-            if not options or aware.utcoffset() != options[0].utcoffset():
-                options.append(aware)
+        round_trips = aware.astimezone(UTC).astimezone(tz).replace(tzinfo=None) == parsed
+        if round_trips and (not options or aware.utcoffset() != options[0].utcoffset()):
+            options.append(aware)
     if not options:
         raise ValueError(
             "That local time does not exist because the clock changes. Choose another time."

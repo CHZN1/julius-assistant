@@ -1,6 +1,5 @@
-from julius.paths import REPO_ROOT
-
 """julius.py run directly (no arguments) must default to the cloud profile of run_julius.sh, never a local brain."""
+
 import os
 import re
 import subprocess
@@ -9,6 +8,7 @@ import unittest
 from pathlib import Path
 
 import julius.profile as prof
+from julius.paths import REPO_ROOT
 
 HERE = Path(__file__).resolve().parent
 
@@ -41,8 +41,9 @@ class DefaultProfileTests(unittest.TestCase):
         for key, val in re.findall(r'export (JULIUS_\w+)="\$\{\1:-([^}]*)\}"', block):
             self.assertEqual(prof.CLOUD_DEFAULTS[key], val, key)
         self.assertIn(
-            'JULIUS_FALLBACK_MODEL="${JULIUS_FALLBACK_MODEL:-%s}"'
-            % prof.CLOUD_DEFAULTS["JULIUS_FALLBACK_MODEL"],
+            'JULIUS_FALLBACK_MODEL="${{JULIUS_FALLBACK_MODEL:-{}}}"'.format(
+                prof.CLOUD_DEFAULTS["JULIUS_FALLBACK_MODEL"]
+            ),
             sh,
         )
 

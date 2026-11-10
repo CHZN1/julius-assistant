@@ -1,6 +1,5 @@
-from julius.paths import REPO_ROOT
-
 """[profile]: neutral defaults, a gitignored local file for personal values, and the prompts/tools that follow it."""
+
 import os
 import tempfile
 import unittest
@@ -11,6 +10,7 @@ import julius.brain.cloud as jc
 import julius.brain.tools as jt
 import julius.config as cfg
 import julius.profile as jp
+from julius.paths import REPO_ROOT
 
 
 def with_local(text):

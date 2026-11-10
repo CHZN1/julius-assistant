@@ -29,7 +29,7 @@ SENT = re.compile(r"[.!?…](\s|$)")
 
 def before():
     t = time.perf_counter()
-    r = brain.chat(MSGS, tools=jt.SCHEMAS)
+    brain.chat(MSGS, tools=jt.SCHEMAS)
     return time.perf_counter() - t  # speech starts when the whole reply is in
 
 

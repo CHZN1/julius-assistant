@@ -71,7 +71,6 @@ class PlayerTests(unittest.TestCase):
         p = player(sd)
         pulled = []
         gen = chunks(4, pulled=pulled)
-        order = []
         # the first write must happen after chunk 1 (the second chunk) was pulled from the generator
         sd.pending_chunks = pulled
         p.play(gen)

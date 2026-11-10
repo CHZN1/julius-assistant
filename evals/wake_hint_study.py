@@ -61,7 +61,7 @@ def load(folder, pattern):
 wake = load(ROOT / "diagnostics/wake_real/wake", "wake_*.wav")
 names = []
 for s in ("talk1", "talk2"):
-    pr = json.load(open(ROOT / f"diagnostics/wake_real/{s}/prompts.json"))
+    pr = json.loads((ROOT / f"diagnostics/wake_real/{s}/prompts.json").read_text())
     cl = load(ROOT / f"diagnostics/wake_real/{s}", f"{s}_*.wav")
     names += [
         (pr[i][0], a)

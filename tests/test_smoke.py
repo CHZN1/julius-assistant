@@ -42,7 +42,10 @@ class SmokeTests(unittest.TestCase):
 
     def test_crash_loop_changes_pid_and_fails(self):
         pids = iter(["10", "10", "11", "11", "11"])
-        state = lambda: {"state": "running", "pid": next(pids), "runs": "2"}
+
+        def state():
+            return {"state": "running", "pid": next(pids), "runs": "2"}
+
         ok, res = run(state, GOOD)
         self.assertFalse(ok)
         self.assertIn("stable", [n for n, r, _ in res if not r][0])

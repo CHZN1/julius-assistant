@@ -162,7 +162,10 @@ class RequestTests(unittest.TestCase):
 
     def test_cloud_always_gets_the_full_tool_list_plus_escalation_whatever_the_turn_selected(self):
         b = brain(FakeMessages())
-        names = lambda kw: [t["name"] for t in kw["tools"]]
+
+        def names(kw):
+            return [t["name"] for t in kw["tools"]]
+
         full = [s["function"]["name"] for s in jt.SCHEMAS] + ["escalate_to_planner"]
         for text in ("weather", "bitcoin", "Do the thing"):
             self.assertEqual(names(b.request(MSGS, jt.select_schemas(text))), full)
@@ -417,7 +420,7 @@ class BackendWiringTests(unittest.TestCase):
             patch("ollama.generate") as gen,
             patch.object(be, "LLM_BACKEND", "cloud"),
         ):
-            be._offline_chat(MSGS, [ESC := jc.ESCALATE_SCHEMA] + jt.SCHEMAS[:1], False, None)
+            be._offline_chat(MSGS, [jc.ESCALATE_SCHEMA] + jt.SCHEMAS[:1], False, None)
             self.assertEqual(chat.call_args.kwargs["model"], "llama3.2:3b")
             self.assertEqual(chat.call_args.kwargs["keep_alive"], "2m")
             self.assertNotIn(
@@ -443,7 +446,9 @@ class AuthDeliveryTests(unittest.TestCase):
         return "".join(p.message.content for p in gen)
 
     def test_tool_phase_auth_error_is_delivered_on_the_following_streamed_reply_then_offline(self):
-        local = lambda m, t, s, o: iter([SimpleNamespace(message=SimpleNamespace(content="local"))])
+        def local(m, t, s, o):
+            return iter([SimpleNamespace(message=SimpleNamespace(content="local"))])
+
         b = brain(FakeMessages(error=auth_error()), offline=local)
         first = b.chat(MSGS, tools=jt.SCHEMAS)
         self.assertIsNone(first.message.tool_calls)

@@ -1,7 +1,6 @@
 import unittest
 
 from julius.audio.listening import CaptureClock
-from julius.paths import REPO_ROOT
 
 
 class CaptureClockTests(unittest.TestCase):

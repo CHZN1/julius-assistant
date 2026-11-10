@@ -19,7 +19,15 @@ max-complexity = 20
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["B", "SIM"]
-"evals/*" = ["C901"]
+# The runnable scripts put the repository root on sys.path before importing the package,
+# so they work from a plain checkout without `pip install -e .`.
+"evals/*" = ["E402"]
+"diagnostics/*" = ["E402"]
+"benchmarks/*" = ["E402"]
+"scripts/*" = ["E402"]
+# The speech workers set environment variables (cache dirs, worker mode) before importing mlx/torch.
+"julius/audio/mlx_tts_worker.py" = ["E402"]
+"julius/audio/tts_worker.py" = ["E402"]
 
 [tool.ruff.format]
 quote-style = "double"

@@ -7,7 +7,6 @@ from zoneinfo import ZoneInfo
 from julius.brain.conversions import local_datetime
 from julius.brain.planning import output
 
-
 _UNIT_SECONDS = {"second": 1, "minute": 60, "hour": 3600, "day": 86400}
 _LIST_KINDS = {
     "tasks": "task",
@@ -122,7 +121,7 @@ class UtilitySession:
         )
 
     def _timer(self, t, _low, _turn):
-        """"remind me in 10 minutes to X" and "set a timer for 5 minutes"."""
+        """ "remind me in 10 minutes to X" and "set a timer for 5 minutes"."""
         match = re.fullmatch(
             r"remind me in (\d+(?:\.\d+)?) (seconds?|minutes?|hours?|days?) to (.+)", t, re.I
         ) or re.fullmatch(
@@ -139,7 +138,7 @@ class UtilitySession:
         return self._add("reminder", title or "Timer finished", self.planner.clock() + seconds)
 
     def _relative_reminder(self, t, _low, _turn):
-        """"remind me tomorrow at 9 am to X"."""
+        """ "remind me tomorrow at 9 am to X"."""
         relative = re.fullmatch(
             r"remind me (today|tomorrow) at (\d{1,2})(?::(\d{2}))?\s*(am|pm)? to (.+)", t, re.I
         )
@@ -174,7 +173,9 @@ class UtilitySession:
         return self.planner.add("task", task.group(1)) if task else None
 
     def _listing(self, _t, low, _turn):
-        listed = re.fullmatch(r"(?:list|show)(?: my)? (tasks|reminders|timers|calendar|events)", low)
+        listed = re.fullmatch(
+            r"(?:list|show)(?: my)? (tasks|reminders|timers|calendar|events)", low
+        )
         return self.planner.list(_LIST_KINDS[listed.group(1)]) if listed else None
 
     def _finish(self, t, _low, _turn):
@@ -204,14 +205,16 @@ class UtilitySession:
                 (kind, status),
             ).fetchall()
         wanted = name.strip('"')
-        matches = [r for r in rows if r["id"] == wanted or r["title"].casefold() == wanted.casefold()]
+        matches = [
+            r for r in rows if r["id"] == wanted or r["title"].casefold() == wanted.casefold()
+        ]
         if len(matches) != 1:
             return None
         act = self.provider.complete if status == "done" else self.provider.cancel
         return act(matches[0]["id"])
 
     def _event_preview(self, t, _low, turn):
-        """"schedule event "X" from A to B": a preview that waits for a yes."""
+        """ "schedule event "X" from A to B": a preview that waits for a yes."""
         event = re.fullmatch(
             r'(?:schedule|create) (?:a )?(?:calendar )?event "([^"\n]+)" from (\S+) to (\S+)(?: in (\S+))?',
             t,

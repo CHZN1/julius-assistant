@@ -4,6 +4,7 @@ Everything Julius prints (stdout and stderr, including tracebacks) is also writt
 ~/Library/Logs/Julius/julius.jsonl, rotated at 5 MB with 5 old files kept. What you say and what he answers is redacted unless
 [service] log_transcripts = true. API keys are always redacted."""
 
+import contextlib
 import io
 import json
 import logging
@@ -63,10 +64,8 @@ class Tee(io.TextIOBase):
         )
 
     def write(self, s):
-        try:
+        with contextlib.suppress(Exception):
             self.inner.write(s)
-        except Exception:
-            pass
         self.buf += _ANSI.sub("", s).replace("\r", "\n")
         while "\n" in self.buf:
             line, self.buf = self.buf.split("\n", 1)
@@ -84,10 +83,8 @@ class Tee(io.TextIOBase):
         return len(s)
 
     def flush(self):
-        try:
+        with contextlib.suppress(Exception):
             self.inner.flush()
-        except Exception:
-            pass
 
     def __getattr__(self, name):
         return getattr(self.inner, name)

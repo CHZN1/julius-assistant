@@ -1,7 +1,5 @@
-from julius.paths import REPO_ROOT
-
 """Text for the ear (symbols to words), ready-to-speak tool sentences, and the one-round-trip tool policy."""
-import ast
+
 import os
 import re
 import unittest
@@ -10,14 +8,15 @@ from unittest.mock import patch
 
 import julius.brain.tools as jt
 from julius.audio.speech_text import (
-    EXACT_REQUEST,
     BREVITY_PROMPT,
+    EXACT_REQUEST,
     SPOKEN_STYLE_PROMPT,
     TOOL_POLICY_PROMPT,
     speakable,
 )
 from julius.audio.speech_text import normalize_for_speech as n
 from tests.harness import TurnHarness
+from tests.test_call_counts import as_parts
 
 
 class NormalizeTests(unittest.TestCase):
@@ -186,7 +185,6 @@ class SpeakableTests(unittest.TestCase):
                 "get_quote", "Acme (ACME): 42.30 USD, up 1.00 (2.42%) versus previous close."
             ),
         )
-        from julius.audio.speech_text import EXACT_REQUEST
 
         for text in [
             "what is the exact price of ETH",
@@ -225,9 +223,6 @@ class SpeakableTests(unittest.TestCase):
             ("calculate", "not an equation"),
         ]:
             self.assertIsNone(speakable(fn, out), fn)
-
-
-from tests.test_call_counts import as_parts
 
 
 class OneRoundTripTests(unittest.TestCase):
@@ -363,7 +358,7 @@ class OneRoundTripTests(unittest.TestCase):
                 )
             )
         )
-        result = h.ask("explain overfitting simply", "", speak_fn=spoken.append)
+        h.ask("explain overfitting simply", "", speak_fn=spoken.append)
         self.assertEqual(len(calls), 1)
         self.assertEqual(
             spoken,

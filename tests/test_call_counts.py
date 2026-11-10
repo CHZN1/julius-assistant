@@ -5,7 +5,6 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import julius.brain.tools as jt
-from julius.audio.speech_text import EXACT_REQUEST, speakable
 from tests.harness import TurnHarness
 
 
@@ -125,9 +124,7 @@ class CallCountTests(unittest.TestCase):
         )
         with patch.object(jt, "call", return_value=eth) as call:
             jt.dispatcher().last_result = {"ok": True}
-            result = h.ask(
-                "And what's the current price of ETH?", "", speak_fn=spoken.append
-            )
+            result = h.ask("And what's the current price of ETH?", "", speak_fn=spoken.append)
         self.assertEqual(call.call_count, 1)
         self.assertEqual(calls, [True])
         self.assertEqual(spoken, [result])
@@ -194,9 +191,7 @@ class CallCountTests(unittest.TestCase):
             return gen()
 
         h.llm_chat = llm
-        h.ask(
-            "explain overfitting simply", "", speak_fn=lambda t: events.append("spoke: " + t)
-        )
+        h.ask("explain overfitting simply", "", speak_fn=lambda t: events.append("spoke: " + t))
         self.assertLess(
             events.index("spoke: Overfitting is memorizing."), events.index("reply finished")
         )

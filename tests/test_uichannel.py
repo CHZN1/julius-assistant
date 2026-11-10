@@ -7,7 +7,6 @@ import unittest
 from pathlib import Path
 
 import julius.ui_bridge.uichannel as uc
-from julius.paths import REPO_ROOT
 
 
 class Base(unittest.TestCase):
@@ -215,7 +214,7 @@ class Channel(Base):
         self.req(body={"text": "my secret sentence"})
         self.req(body={"text": "hi"}, auth=False)
         log = (self.dir / "audit.log").read_text()
-        rows = [json.loads(l) for l in log.splitlines()]
+        rows = [json.loads(line) for line in log.splitlines()]
         self.assertEqual([r["status"] for r in rows], [200, 401])
         self.assertEqual(rows[0]["chars"], 18)
         self.assertNotIn("secret", log)

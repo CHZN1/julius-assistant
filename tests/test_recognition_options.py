@@ -22,11 +22,17 @@ class RecognitionOptionsTests(unittest.TestCase):
 
     def test_english_and_auto_options_reach_recognizer(self):
         recognizer = Mock()
-        recognizer.transcribe.return_value = {"text": "overfitting", "language": "en", "segments": []}
+        recognizer.transcribe.return_value = {
+            "text": "overfitting",
+            "language": "en",
+            "segments": [],
+        }
         s = make_session(asr_model="existing-model", asr_hint="")
         for language, expected in [("en", "en"), ("auto", None)]:
             with patch.dict(os.environ, {"JULIUS_ASR_LANGUAGE": language}):
-                self.assertEqual(self.transcribe(s, recognizer, np.ones(4096) * 0.02)[0], "overfitting")
+                self.assertEqual(
+                    self.transcribe(s, recognizer, np.ones(4096) * 0.02)[0], "overfitting"
+                )
             kwargs = recognizer.transcribe.call_args.kwargs
             self.assertEqual(kwargs["language"], expected)
             self.assertNotIn("initial_prompt", kwargs)

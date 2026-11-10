@@ -1,8 +1,7 @@
-import inspect
-from julius.paths import REPO_ROOT
-
 """Duplex audio: sample alignment of the echo reference, automatic fallback to the microphone gate, barge-in on the cleaned signal, playback abort."""
+
 import collections
+import inspect
 import threading
 import time
 import unittest
@@ -78,7 +77,6 @@ def room(duplex, played, user=None, echo_gain=0.07, delay=0.03, noise=0.0008, se
     duplex.streaming = True
     n = (len(played) // B) * B
     out_all = np.zeros(n + B, np.float32)
-    got = []
     for i in range(0, n, B):
         mic = np.zeros(B, np.float32)
         lo = i - d
@@ -331,7 +329,10 @@ class BargeIn(unittest.TestCase):
         voice = jd.CleanTalkOver(mon, warmup=0.0)
         r = np.random.default_rng(9)
         self.playing(mon, 2.0)
-        loud = lambda: (0.02 * r.standard_normal(1024)).astype(np.float32)
+
+        def loud():
+            return (0.02 * r.standard_normal(1024)).astype(np.float32)
+
         fired = [voice.block(loud()) for _ in range(30)]
         self.assertEqual(sum(fired), 1, "exactly one trigger while the same reply is playing")
         for _ in range(8):

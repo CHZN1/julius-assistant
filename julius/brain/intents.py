@@ -214,7 +214,6 @@ def _calculator_or_bitcoin(low: str):
     return None
 
 
-
 class LiveIntentRouter:
     def __init__(self):
         self.last = None
@@ -316,7 +315,7 @@ class LiveIntentRouter:
 
     @staticmethod
     def _place_swap(fn, args, t, _t_and, _location):
-        """"and in Shelbyville?" / "and for Tokyo?" repeat the last lookup somewhere else."""
+        """ "and in Shelbyville?" / "and for Tokyo?" repeat the last lookup somewhere else."""
         place = re.fullmatch(r"(?:and )?(?:what about |how about )?(?:in|for) (.+)", t, re.I)
         if place and fn in ("get_datetime", "get_weather", "get_forecast"):
             return fn, dict(args, location=place.group(1).strip())
@@ -324,7 +323,7 @@ class LiveIntentRouter:
 
     @staticmethod
     def _other_symbol(fn, _args, _t, t_and, _location):
-        """"and ETH?" / "what about Tesla?" repeats the last price lookup for another symbol."""
+        """ "and ETH?" / "what about Tesla?" repeats the last price lookup for another symbol."""
         other = re.fullmatch(
             r"(?:and |what about |how about )(?:and )?(?:for )?([A-Za-z^.=-]{1,12})", t_and, re.I
         )
@@ -340,7 +339,7 @@ class LiveIntentRouter:
 
     @staticmethod
     def _tomorrow(fn, args, _t, t_and, location):
-        """"and tomorrow" / "tomorrow?" after a weather answer."""
+        """ "and tomorrow" / "tomorrow?" after a weather answer."""
         if fn in ("get_weather", "get_forecast") and re.fullmatch(
             r"(?:and |what about |how about )?tomorrow(?: in .+)?", t_and, re.I
         ):

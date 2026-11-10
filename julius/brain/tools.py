@@ -3,8 +3,11 @@
 import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import requests
+
+import julius.agents.files as jf
 
 SAFE_ROOT = Path.home()
 
@@ -20,9 +23,6 @@ def calculate(expression, **_):
     from julius.brain.calculator import evaluate
 
     return f"{expression} = {evaluate(expression):,.10g}"
-
-
-from zoneinfo import ZoneInfo
 
 
 def get_datetime(location=None, offset_days=0, **_):
@@ -204,9 +204,9 @@ def get_scores(league="mlb", day="today", **_):
             if hs == as_:
                 out.append(f"{state}: {an} and {hn} tied {hs}-{as_}")
                 continue
-            w, l = ((hn, hs), (an, as_)) if hs > as_ else ((an, as_), (hn, hs))
+            won, lost = ((hn, hs), (an, as_)) if hs > as_ else ((an, as_), (hn, hs))
             out.append(
-                f"{state}: {w[0]} {'beat' if state == 'FINAL' else 'leads'} {l[0]} {w[1]}-{l[1]}"
+                f"{state}: {won[0]} {'beat' if state == 'FINAL' else 'leads'} {lost[0]} {won[1]}-{lost[1]}"
             )
     if len(out) > 25:
         out = out[:25] + [f"…and {len(out) - 25} more games."]
@@ -487,8 +487,6 @@ SCHEMAS = [
 
 # Mutations are deliberately absent from model tools. The human-command
 # FileSession handles preview/confirm/execute; a model assertion cannot approve.
-import julius.agents.files as jf
-
 REGISTRY["find_files"] = find_files
 SCHEMAS += [
     {

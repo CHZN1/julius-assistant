@@ -61,7 +61,8 @@ class WakeEngineTests(unittest.TestCase):
 
     def rows(self):
         return [
-            json.loads(l) for l in (Path(self.dir.name) / "wake_log.jsonl").read_text().splitlines()
+            json.loads(line)
+            for line in (Path(self.dir.name) / "wake_log.jsonl").read_text().splitlines()
         ]
 
     def clips(self):

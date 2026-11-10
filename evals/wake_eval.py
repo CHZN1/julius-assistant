@@ -121,7 +121,7 @@ def oww(model_arg):
     name = list(model.models)[0]
     thr = float(sys.argv[3]) if len(sys.argv) > 3 else 0.5
     peaks = [oww_scores(model, a)[name] for _, a in wake]
-    miss = [f for (f, _), p in zip(wake, peaks) if p < thr]
+    miss = [f for (f, _), p in zip(wake, peaks, strict=False) if p < thr]
     print(
         f"miss rate {100 * len(miss) / len(wake):.1f}% ({len(miss)}/{len(wake)}) at threshold {thr}"
     )
@@ -129,7 +129,7 @@ def oww(model_arg):
     def talk(sessions):
         secs = fires = 0
         for sess in sessions:
-            for f, a in load(sess):
+            for _f, a in load(sess):
                 secs += len(a) / SR + 1.5
                 fires += oww_scores(model, a)[name] >= thr
         return secs, fires
@@ -189,7 +189,7 @@ def thresholds():
     tk = [oww_scores(m, a)[n] for s in ("talk1", "talk2") for _, a in load(s)]
     tk = np.array(tk)
     secs = sum(len(a) / SR + 1.5 for s in ("talk1", "talk2") for _, a in load(s))
-    print("wake peaks (train-side): min %.2f median %.2f" % (wk.min(), np.median(wk)))
+    print(f"wake peaks (train-side): min {wk.min():.2f} median {np.median(wk):.2f}")
     for t in (0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9):
         print(
             f"thr {t}: miss {100 * (wk < t).mean():.1f}%  stage-1 fires on talk1+2 {int((tk >= t).sum())} ({(tk >= t).sum() / (secs / 3600):.0f}/h)"
@@ -274,7 +274,7 @@ def compare():
     session = sys.argv[5] if len(sys.argv) > 5 else "wake3"
     vpath = Path(sys.argv[6]).expanduser() if len(sys.argv) > 6 else None
     sthr = float(sys.argv[7]) if len(sys.argv) > 7 else 0.5
-    speaker = pickle.load(open(vpath, "rb")) if vpath and vpath.exists() else None
+    speaker = pickle.loads(vpath.read_bytes()) if vpath and vpath.exists() else None
     engines = _compare_engines(model, t_det, t_low, speaker, sthr)
     wake = [c for x in session.split(",") for c in load(x)]
     talk3 = load("talk3")
@@ -307,7 +307,7 @@ def suite():
     wake_cfg = cfg.load_config()["wake"]
     verify = whisper_verify()
     vpath = Path(str(wake_cfg["verifier"])).expanduser()
-    speaker = pickle.load(open(vpath, "rb")) if vpath.exists() else None
+    speaker = pickle.loads(vpath.read_bytes()) if vpath.exists() else None
     model_file = Path(
         os.environ.get("WAKE_EVAL_MODEL") or ROOT / "julius" / "wake" / "models" / "julius.onnx"
     )  # WAKE_EVAL_MODEL: score another model (e.g. julius_public.onnx) with the same cascade

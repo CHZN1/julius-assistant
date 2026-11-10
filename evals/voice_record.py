@@ -129,7 +129,7 @@ def _launch(sc, take, rec, memory, extra_env):
         "JULIUS_PROFILE": "cloud",
         **(extra_env or {}),
     }
-    log = open(take / "console.log", "w")
+    log = open(take / "console.log", "w")  # noqa: SIM115 - held while Julius runs, closed in _shutdown
     proc = subprocess.Popen(
         ["/bin/zsh", str(ROOT / "run_julius.sh")],
         env=env,
@@ -266,7 +266,7 @@ def record_scenario(sc, take, keys, extra_env=None):
     memory = tempfile.mkdtemp(prefix="julius_voice_mem_")
     proc, log = _launch(sc, take, rec, memory, extra_env)
     events = rec / "events.jsonl"
-    labels = open(take / "labels.jsonl", "a")
+    labels = open(take / "labels.jsonl", "a")  # noqa: SIM115 - closed in _shutdown
     result = "keep"
     try:
         print(
