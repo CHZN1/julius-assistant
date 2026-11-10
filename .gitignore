@@ -80,3 +80,8 @@ julius/wake/models/julius_public.onnx.data
 !julius/wake/models/julius_starter_head.pt
 julius/wake/models/julius_public.onnx
 julius/wake/models/julius_head_public.pt
+
+# Tool caches
+.ruff_cache/
+monkeytype.sqlite3
+monkeytype_config.py

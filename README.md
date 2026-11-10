@@ -13,7 +13,7 @@ A local-first voice assistant for macOS: always-on wake word, streaming speech r
 
 ## Interfaces
 - **Event feed** (read-only, `ws://127.0.0.1:8765`): state, speaker level and transcript lines. See [docs/EVENT_FEED.md](docs/EVENT_FEED.md); `python -m julius.ui_bridge.events_client` prints it.
-- Roadmap and measurements: [JULIUS_ROADMAP.md](JULIUS_ROADMAP.md), `JULIUS_*.md`.
+- Roadmap and measurements: [docs/ROADMAP.md](docs/ROADMAP.md), `docs/`.
 
 ## Tests
 `python -m unittest discover -p "test_*.py"` (offline; evals under `evals/` use paid model calls and say so).

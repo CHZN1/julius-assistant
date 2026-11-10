@@ -5,6 +5,14 @@ description = "A private, voice-first desktop assistant: wake word, streaming sp
 requires-python = ">=3.11"
 readme = "README.md"
 
+[project.optional-dependencies]
+# What the free unit tests import (the CI job installs these).
+test = [
+  "numpy", "scipy", "soundfile", "psutil", "requests", "httpx", "pypdf",
+  "anthropic", "sounddevice", "livekit", "ollama", "ddgs", "pynput",
+  "openwakeword", "mlx-lm", "mlx-whisper",
+]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
