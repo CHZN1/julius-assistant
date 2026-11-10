@@ -167,10 +167,8 @@ def match_dir(phrase, root, cutoff=0.80):
     return "Documents/" + scored[0][1]
 
 
-def parse(text, root):
-    text = norm(text)
-    if re.match(r"^(?:how\b|why\b|what is\b|explain\b|tell me about\b)", text, re.I):
-        return None
+def _mask_literals(text):
+    """Hide quoted names so their words are not parsed; returns (masked, restore function)."""
     literals = []
 
     def hide(m):
@@ -184,6 +182,65 @@ def parse(text, root):
             value = value.replace(f"PATHLITERAL{i}", literal)
         return value
 
+    return masked, restore
+
+
+def _destination(phrase, raw_phrase, source, root):
+    """The destination folder, or a clarification dict when it is not clearly one."""
+    if phrase.casefold() in {"it", "them", "there", "that", "that folder"} or not phrase:
+        return {"clarification": "Please name the destination folder."}
+    destination = match_dir(phrase, root)
+    if destination is not None:
+        return destination
+    # Existing near-matches require clarification; only explicitly requested new folders are created.
+    explicit_new = bool(re.search(r"\b(?:new|create)\b", raw_phrase, re.I))
+    clean = re.sub(
+        r"^(?:new|create)\s+(?:folder\s+(?:(?:named|called)\s+)?)?", "", phrase, flags=re.I
+    )
+    if "/" in phrase:
+        return phrase
+    if explicit_new and clean and not Path(clean).is_absolute():
+        return source + "/" + clean
+    return {
+        "clarification": "I could not uniquely identify that destination. Give its full path, or say “a new folder named …”."
+    }
+
+
+def _file_pattern(selection):
+    """The filename pattern the words select, or a clarification dict."""
+    pattern = _ext_pattern(selection) or "*"
+    names = re.findall(r'"([^"]+)"|\'([^\']+)\'', selection)
+    if names:
+        name = next(a or b for a, b in names)
+        return name if "." in name or any(c in name for c in "*?[") else f"*{name}*"
+    if re.search(
+        r"\b(this|that|these|those|a|an)\s+(?:file|files|script|scripts|pdf|pdfs|csv|csvs|image|images|notebook|notebooks)\b",
+        selection,
+        re.I,
+    ) and not re.search(r"\b(all|every)\b", selection, re.I):
+        return {
+            "clarification": "Please name the exact files. I cannot tell which files you mean from that reference alone."
+        }
+    name = re.search(r"(?<![\w/\'])([\w.-]+\.[a-z0-9]{1,8})\b", selection, re.I)
+    if name:
+        return name.group(1)
+    if pattern == "*":
+        fragment = re.search(r"\b[\w.-]*[_-][\w.-]+\b", selection)
+        if fragment:
+            return "*" + fragment.group() + "*"
+        if not re.search(r"\b(all|everything)\b", selection, re.I):
+            return {
+                "clarification": "Which files should I select? Name a file, file type, or say all files."
+            }
+    return pattern
+
+
+def parse(text, root):
+    """Parse a move or copy request into an action dict, a clarification dict, or None."""
+    text = norm(text)
+    if re.match(r"^(?:how\b|why\b|what is\b|explain\b|tell me about\b)", text, re.I):
+        return None
+    masked, restore = _mask_literals(text)
     if not (
         MOVE_RE.search(text)
         and (FILEWORD.search(text) or re.search(r"\.[a-z0-9]{1,8}\b", text, re.I))
@@ -207,58 +264,12 @@ def parse(text, root):
         return {
             "clarification": "I could not uniquely identify the source folder. Please give its full name or path."
         }
-    if (
-        destination_phrase.casefold() in {"it", "them", "there", "that", "that folder"}
-        or not destination_phrase
-    ):
-        return {"clarification": "Please name the destination folder."}
-    destination = match_dir(destination_phrase, root)
-    if destination is None:
-        # Existing near-matches require clarification; only explicitly requested new folders are created.
-        explicit_new = bool(re.search(r"\b(?:new|create)\b", match.group(1), re.I))
-        clean = re.sub(
-            r"^(?:new|create)\s+(?:folder\s+(?:(?:named|called)\s+)?)?",
-            "",
-            destination_phrase,
-            flags=re.I,
-        )
-        if "/" in destination_phrase:
-            destination = destination_phrase
-        elif explicit_new and clean and not Path(clean).is_absolute():
-            destination = source + "/" + clean
-        else:
-            return {
-                "clarification": "I could not uniquely identify that destination. Give its full path, or say “a new folder named …”."
-            }
-    pattern = "*"
-    for word, patterns in EXT.items():
-        if re.search(rf"\b{word}\b", selection, re.I):
-            pattern = patterns
-            break
-    names = re.findall(r'"([^"]+)"|\'([^\']+)\'', selection)
-    if names:
-        name = next(a or b for a, b in names)
-        pattern = name if "." in name or any(c in name for c in "*?[") else f"*{name}*"
-    else:
-        if re.search(
-            r"\b(this|that|these|those|a|an)\s+(?:file|files|script|scripts|pdf|pdfs|csv|csvs|image|images|notebook|notebooks)\b",
-            selection,
-            re.I,
-        ) and not re.search(r"\b(all|every)\b", selection, re.I):
-            return {
-                "clarification": "Please name the exact files. I cannot tell which files you mean from that reference alone."
-            }
-        name = re.search(r"(?<![\w/\'])([\w.-]+\.[a-z0-9]{1,8})\b", selection, re.I)
-        if name:
-            pattern = name.group(1)
-        elif pattern == "*":
-            fragment = re.search(r"\b[\w.-]*[_-][\w.-]+\b", selection)
-            if fragment:
-                pattern = "*" + fragment.group() + "*"
-            elif not re.search(r"\b(all|everything)\b", selection, re.I):
-                return {
-                    "clarification": "Which files should I select? Name a file, file type, or say all files."
-                }
+    destination = _destination(destination_phrase, match.group(1), source, root)
+    if isinstance(destination, dict):
+        return destination
+    pattern = _file_pattern(selection)
+    if isinstance(pattern, dict):
+        return pattern
     return {
         "action": "copy" if re.search(r"\bcopy\b", selection, re.I) else "move",
         "pattern": pattern,
@@ -284,6 +295,24 @@ TRASH_VERB = re.compile(r"^(?:trash|bin|delete|remove|throw away|get rid of)\s+(
 MOVE_TO_TRASH = re.compile(
     r"^(?:move|put|send)\s+(.+?)\s+(?:to|in|into)\s+(?:the |my )?(?:trash|bin|trash can)$", re.I
 )
+
+
+def _ext_pattern(selection):
+    """The glob for a file type named in the words ("pdfs", "csv"), or None."""
+    for word, patterns in EXT.items():
+        if re.search(rf"\b{word}\b", selection, re.I):
+            return patterns
+    return None
+
+
+def _trash_pattern(selection):
+    """A quoted name, an explicit filename or a file type; None when none of them is given."""
+    names = re.findall(r'"([^"]+)"|\'([^\']+)\'', selection)
+    if names:
+        name = next(a or b for a, b in names)
+        return name if "." in name or any(c in name for c in "*?[") else f"*{name}*"
+    explicit = re.search(r"(?<![\w/\'])([\w.-]+\.[a-z0-9]{1,8})\b", selection, re.I)
+    return explicit.group(1) if explicit else _ext_pattern(selection)
 
 
 def parse_trash(text, root):
@@ -322,30 +351,12 @@ def parse_trash(text, root):
     source = match_dir(folder, root) if folder else "Downloads"
     if folder and not source:
         return {"clarification": "Please give the full folder name or path."}
-    names = re.findall(r'"([^"]+)"|\'([^\']+)\'', selection)
-    pattern = None
-    if names:
-        name = next(a or b for a, b in names)
-        pattern = name if "." in name or any(c in name for c in "*?[") else f"*{name}*"
-    else:
-        explicit = re.search(r"(?<![\w/\'])([\w.-]+\.[a-z0-9]{1,8})\b", selection, re.I)
-        if explicit:
-            pattern = explicit.group(1)
-        else:
-            for word, patterns in EXT.items():
-                if re.search(rf"\b{word}\b", selection, re.I):
-                    pattern = patterns
-                    break
-    if pattern is None:
-        return {
-            "clarification": "Please name the exact files, a file type like PDFs, or a quoted name. I will not guess what to throw away."
-        }
-    if re.search(r"\b(?:everything|all)\b", selection, re.I) and not re.search(
+    pattern = _trash_pattern(selection)
+    too_broad = re.search(r"\b(?:everything|all)\b", selection, re.I) and not re.search(
         r"\.[a-z0-9]{1,8}\b|\b(?:csvs?|pdfs?|notebooks?|images?|scripts?|docs?)\b", selection, re.I
-    ):
-        return {
-            "clarification": "Please name the exact files, a file type like PDFs, or a quoted name. I will not guess what to throw away."
-        }
+    )
+    if pattern is None or too_broad:
+        return {"clarification": "Please name the exact files, a file type like PDFs, or a quoted name. I will not guess what to throw away."}
     return {"source": source, "pattern": pattern}
 
 
@@ -359,76 +370,94 @@ def _in_folder(phrase):
     return f"{located.group(2).capitalize()}/{located.group(1).strip()}" if located else phrase
 
 
-def parse_simple_request(text, root):
-    body = re.sub(r"^(?:(?:please|can you|could you|would you)\s+)+", "", text.strip(), flags=re.I)
+def _rename_request(body, _root):
     rename = re.fullmatch(r"rename\s+(?:the file\s+|file\s+)?(.+?)\s+to\s+(.+)", body, re.I)
-    if rename:
-        old, new = (_clean_folder(x) for x in rename.groups())
-        old = _in_folder(old)
-        if any(c in old + new for c in "*?["):
-            return (
-                "clarify",
-                {
-                    "clarification": "Rename one exact file at a time. Please give its current and new filename."
-                },
-            )
-        return ("rename", {"path": old, "destination": new})
+    if not rename:
+        return None
+    old, new = (_clean_folder(x) for x in rename.groups())
+    old = _in_folder(old)
+    if any(c in old + new for c in "*?["):
+        return (
+            "clarify",
+            {
+                "clarification": "Rename one exact file at a time. Please give its current and new filename."
+            },
+        )
+    return ("rename", {"path": old, "destination": new})
+
+
+def _create_request(body, _root):
     create = re.fullmatch(
         r'(?:create|write)\s+(?:a (?:text )?file\s+|file\s+)?"([^"\n]+)"\s+(?:containing|with text|with the text)\s+"([^"\n]*)"[.!]?',
         body,
         re.I,
     )
-    if create:
-        return ("create", {"destination": create.group(1), "content": create.group(2)})
+    if not create:
+        return None
+    return ("create", {"destination": create.group(1), "content": create.group(2)})
+
+
+def _read_request(body, _root):
     read = re.fullmatch(r"read\s+(?:the file\s+|file\s+)?(.+)", body, re.I)
     if read and (
         re.search(r"\.[a-z0-9]{1,8}\b", read.group(1), re.I) or read.group(1).startswith('"')
     ):
         return ("read", {"path": _in_folder(_clean_folder(read.group(1)))})
+    return None
+
+
+def _list_request(body, root):
     listing = re.fullmatch(
         r"(?:list|show)\s+(?:me\s+)?(?:the\s+)?(?:files|folders|contents)(?:\s+(?:in|inside|of)\s+(.+))?[.!]?",
         body,
         re.I,
     )
-    if listing:
-        folder = match_dir(listing.group(1), root) if listing.group(1) else "Documents"
-        return (
-            ("list", {"directory": folder})
-            if folder
-            else ("clarify", {"clarification": "Please give the full folder name or path to list."})
-        )
+    if not listing:
+        return None
+    folder = match_dir(listing.group(1), root) if listing.group(1) else "Documents"
+    if folder:
+        return ("list", {"directory": folder})
+    return ("clarify", {"clarification": "Please give the full folder name or path to list."})
+
+
+def _find_request(body, root):
     finding = re.fullmatch(
         r"(?:find|search for)\s+(.+?)(?:\s+(?:in|inside|from)\s+(.+))?[.!]?", body, re.I
     )
-    if finding:
-        selection, folder = finding.groups()
-        pattern = None
-        filename = re.search(r'"([^"\n]+)"', selection)
-        if filename:
-            value = filename.group(1)
-            pattern = value if "." in value or any(c in value for c in "*?[") else "*" + value + "*"
-        elif re.fullmatch(r"[\w.*?\[\]-]+\.[a-z0-9*?]{1,8}", selection.strip(), re.I):
-            pattern = selection.strip()
-        else:
-            for word, patterns in EXT.items():
-                if re.search(rf"\b{word}\b", selection, re.I):
-                    pattern = patterns
-                    break
-        if pattern is not None:
-            source = match_dir(folder, root) if folder else "Documents"
-            return (
-                ("find", {"pattern": pattern, "source": source})
-                if source
-                else (
-                    "clarify",
-                    {"clarification": "Please give the full folder name or path to search."},
-                )
-            )
+    if not finding:
+        return None
+    selection, folder = finding.groups()
+    filename = re.search(r'"([^"\n]+)"', selection)
+    if filename:
+        value = filename.group(1)
+        pattern = value if "." in value or any(c in value for c in "*?[") else "*" + value + "*"
+    elif re.fullmatch(r"[\w.*?\[\]-]+\.[a-z0-9*?]{1,8}", selection.strip(), re.I):
+        pattern = selection.strip()
+    else:
+        pattern = _ext_pattern(selection)
+    if pattern is None:
+        return None
+    source = match_dir(folder, root) if folder else "Documents"
+    if source:
+        return ("find", {"pattern": pattern, "source": source})
+    return ("clarify", {"clarification": "Please give the full folder name or path to search."})
+
+
+_SIMPLE_REQUESTS = (_rename_request, _create_request, _read_request, _list_request, _find_request)
+
+
+def parse_simple_request(text, root):
+    """Rename, create, read, list and find requests: (kind, args) or None."""
+    body = re.sub(r"^(?:(?:please|can you|could you|would you)\s+)+", "", text.strip(), flags=re.I)
+    for parser in _SIMPLE_REQUESTS:
+        found = parser(body, root)
+        if found:
+            return found
     return None
 
 
-def route(text, root, pending=False, has_last=False):
-    text = norm(text)
+def _state_command(text, pending, has_last):
+    """Undo, cancel, resume, approve and the trash/history questions."""
     if UNDO.fullmatch(text):
         return ("undo", None)
     if pending and (CANCEL.fullmatch(text) or confirm.is_no(text)):
@@ -443,6 +472,15 @@ def route(text, root, pending=False, has_last=False):
         return ("trash_info", None)
     if FILE_HISTORY.fullmatch(text):
         return ("history", {"today": bool(re.search(r"\btoday\b", text, re.I))})
+    return None
+
+
+def route(text, root, pending=False, has_last=False):
+    """Map a spoken file request to (kind, args), or None when it is not a file command."""
+    text = norm(text)
+    command = _state_command(text, pending, has_last)
+    if command:
+        return command
     if PLANNING_RE.search(text):
         return None  # organize/sort/clean-up need a plan; the Sonnet planner takes them
     trash = parse_trash(text, root)
