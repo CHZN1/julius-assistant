@@ -85,3 +85,9 @@ julius/wake/models/julius_head_public.pt
 .ruff_cache/
 monkeytype.sqlite3
 monkeytype_config.py
+
+# local data (symlink-safe: no trailing slash)
+wake/data
+diagnostics/asr_samples
+diagnostics/voice_compare
+diagnostics/__pycache__
