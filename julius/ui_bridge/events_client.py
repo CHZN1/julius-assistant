@@ -1,8 +1,8 @@
 """Tiny test client for the UI event feed: prints every event Julius broadcasts.
 
-python julius_events_client.py            connect to ws://127.0.0.1:8765 and print events (Ctrl+C to stop)
-python julius_events_client.py 8766       another port
-python julius_events_client.py --levels   also print every level event (otherwise a level bar is drawn on one line)"""
+python -m julius.ui_bridge.events_client            connect to ws://127.0.0.1:8765 and print events (Ctrl+C to stop)
+python -m julius.ui_bridge.events_client 8766       another port
+python -m julius.ui_bridge.events_client --levels   also print every level event (otherwise a level bar is drawn on one line)"""
 
 import base64
 import json

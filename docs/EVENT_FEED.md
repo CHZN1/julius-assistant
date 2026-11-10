@@ -1,6 +1,6 @@
 # Julius event feed (the UI interface)
 
-Julius publishes what it is doing on a **read-only WebSocket on `127.0.0.1:8765`** (`[events]` in `julius.toml`: `enabled`, `port`). Any UI can follow it; the first one is the private `julius-orb` app. The server is `julius_events.py`; `python julius_events_client.py` prints the events.
+Julius publishes what it is doing on a **read-only WebSocket on `127.0.0.1:8765`** (`[events]` in `julius.toml`: `enabled`, `port`). Any UI can follow it; the first one is the private `julius-orb` app. The server is `julius_events.py`; `python -m julius.ui_bridge.events_client` prints the events.
 
 ## Connection
 - Plain RFC 6455 WebSocket, text frames, JSON, server to client only. Bound to `127.0.0.1` (not configurable).

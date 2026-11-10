@@ -1,7 +1,7 @@
 """Startup smoke check for the always-on service (Phase F4): would have caught the earlier crash loop in seconds instead of hours.
 
-    python julius_service.py smoke              check the running service as it is
-    python julius_service.py smoke --restart    restart it first, then check the fresh start (also catches a traceback written during startup)
+    python -m julius.service.service smoke              check the running service as it is
+    python -m julius.service.service smoke --restart    restart it first, then check the fresh start (also catches a traceback written during startup)
 
 Passes only when, after the (re)start: the service is loaded and running; "julius ready" appears in the log within the timeout; both hotkeys report active;
 the duplex audio line appears when [audio] duplex is on; the process id and launchd run counter stay unchanged for `stable` seconds after ready (a crash loop changes them);

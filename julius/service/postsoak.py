@@ -1,10 +1,10 @@
 """Automatic post-soak steps (Phase F4 -> G). One shot, scheduled for just after the 24 h soak ends (2026-11-09 00:13).
 
-    python julius_postsoak.py schedule     install a one-shot LaunchAgent (com.julius.postsoak) for 2026-11-09 00:15 (runs on wake if the Mac is asleep then)
-    python julius_postsoak.py unschedule   unload it (its plist file is left for you to delete)
-    python julius_postsoak.py run          do the steps now (refuses before the soak has ended unless --force)
+    python -m julius.service.postsoak schedule     install a one-shot LaunchAgent (com.julius.postsoak) for 2026-11-09 00:15 (runs on wake if the Mac is asleep then)
+    python -m julius.service.postsoak unschedule   unload it (its plist file is left for you to delete)
+    python -m julius.service.postsoak run          do the steps now (refuses before the soak has ended unless --force)
 
-Steps, in order: soak report, log scan (both --since the soak start, before the restart), `julius_service.py smoke --restart`, event feed check on ws://127.0.0.1:8765, `julius_orb.py build`.
+Steps, in order: soak report, log scan (both --since the soak start, before the restart), `python -m julius.service.service smoke --restart`, event feed check on ws://127.0.0.1:8765, `julius_orb.py build`.
 Results are appended to JULIUS_POSTSOAK.md. It then STOPS: it does not run the voice script, start the orb, or install the orb login item (`julius_orb.py on`); those wait for the user."""
 
 import datetime
@@ -71,15 +71,15 @@ def steps():
     return [
         (
             "Soak report (since the soak start)",
-            lambda: sh([PY, "julius/service/soak.py", "report", "--since", SOAK_START]),
+            lambda: sh([PY, "-m", "julius.service.soak", "report", "--since", SOAK_START]),
         ),
         (
             "Log scan (since the soak start)",
-            lambda: sh([PY, "julius/service/logscan.py", "--since", SOAK_START]),
+            lambda: sh([PY, "-m", "julius.service.logscan", "--since", SOAK_START]),
         ),
         (
             "Service smoke check with restart",
-            lambda: sh([PY, "julius/service/service.py", "smoke", "--restart"], 400),
+            lambda: sh([PY, "-m", "julius.service.service", "smoke", "--restart"], 400),
         ),
         ("Event feed check", lambda: feed_check()),
         ("Orb app build", lambda: sh([PY, str(ORB_REPO / "julius_orb.py"), "build"], 600)),
@@ -127,7 +127,7 @@ def run(force=False, now=None, step_list=None, results_path=RESULTS):
 def plist_dict():
     return {
         "Label": LABEL,
-        "ProgramArguments": [PY, str(ROOT / "julius/service/postsoak.py"), "run"],
+        "ProgramArguments": [PY, "-m", "julius.service.postsoak", "run"],
         "WorkingDirectory": str(ROOT),
         "StartCalendarInterval": {"Month": 11, "Day": 9, "Hour": 0, "Minute": 15},
         "RunAtLoad": False,

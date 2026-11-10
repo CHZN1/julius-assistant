@@ -1,13 +1,13 @@
 """Soak sampler: watches the Julius service for hours or days and reports CPU, memory, restarts, crashes and every logged problem.
 
-    python julius_soak.py install     start sampling every 60 s in the background (its own launchd agent, com.julius.soak; read-only, never touches the service)
-    python julius_soak.py status      is it running, how many samples
-    python julius_soak.py report      summary of everything sampled so far (or --since 2026-11-06T18:00)
-    python julius_soak.py uninstall   stop sampling and remove the agent (the samples in ~/Library/Logs/Julius/soak.jsonl stay until you delete them)
-    python julius_soak.py run         the sampling loop itself (what the agent runs)
+    python -m julius.service.soak install     start sampling every 60 s in the background (its own launchd agent, com.julius.soak; read-only, never touches the service)
+    python -m julius.service.soak status      is it running, how many samples
+    python -m julius.service.soak report      summary of everything sampled so far (or --since 2026-11-06T18:00)
+    python -m julius.service.soak uninstall   stop sampling and remove the agent (the samples in ~/Library/Logs/Julius/soak.jsonl stay until you delete them)
+    python -m julius.service.soak run         the sampling loop itself (what the agent runs)
 
 Samples: pid, launchd state and run counter (a changed pid or a higher run counter is a restart), CPU % over the last interval (service process and its children),
-resident memory, threads, open files, free disk. Problems come from julius_logscan (log categories, tracebacks in launchd stderr)."""
+resident memory, threads, open files, free disk. Problems come from julius.service.logscan (log categories, tracebacks in launchd stderr)."""
 
 import argparse
 import json
@@ -191,7 +191,7 @@ def report(since=None):
     s = summarize(load(since=since))
     lines = ["Julius soak report"]
     if not s["samples"]:
-        return "no samples yet (python julius_soak.py install)"
+        return "no samples yet (python -m julius.service.soak install)"
     lines += [
         f"{s['samples']} samples over {s['hours']} h ({s['from'][:19]} to {s['to'][:19]}), longest sampler gap {s['longest_sampler_gap_s']:.0f}s",
         f"restarts seen: {s['restarts_seen']} (launchd run counter moved by {s['run_counter_delta']}); samples with the service down: {s['samples_without_service']}",
@@ -211,7 +211,7 @@ def report(since=None):
 def install(runner=subprocess.run):
     d = {
         "Label": LABEL,
-        "ProgramArguments": [PY, str(ROOT / "julius/service/soak.py"), "run"],
+        "ProgramArguments": [PY, "-m", "julius.service.soak", "run"],
         "WorkingDirectory": str(ROOT),
         "RunAtLoad": True,
         "KeepAlive": True,

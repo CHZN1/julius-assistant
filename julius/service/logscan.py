@@ -1,11 +1,11 @@
 """Log scanner: summarizes what went wrong in Julius's service logs, by cause.
 
-    python julius_logscan.py                  # everything in ~/Library/Logs/Julius (julius.jsonl + rotated files, launchd.err) and the wake log
-    python julius_logscan.py --since 2026-11-05T20:00
-    python julius_logscan.py --json
+    python -m julius.service.logscan                  # everything in ~/Library/Logs/Julius (julius.jsonl + rotated files, launchd.err) and the wake log
+    python -m julius.service.logscan --since 2026-11-05T20:00
+    python -m julius.service.logscan --json
 
 It reads redacted logs (no transcripts needed): every drop, error, restart and stall has a reason line. Counts are per category with first/last
-example. Tracebacks in launchd.err are grouped by their last line. Used by the soak report (julius_soak.py report)."""
+example. Tracebacks in launchd.err are grouped by their last line. Used by the soak report (python -m julius.service.soak report)."""
 
 import argparse
 import collections

@@ -1,13 +1,13 @@
 """Run Julius as a macOS login service (a LaunchAgent: it needs your audio devices, so it is not a system daemon).
 
-  python julius_service.py on        install and start; starts at every login, restarts after a crash
-  python julius_service.py off       stop and remove from login (a clean stop is not restarted)
-  python julius_service.py status    loaded? running? pid, last exit, quiet mode, log file
-  python julius_service.py restart
-  python julius_service.py wake      leave quiet mode (same as the wake hotkey)
-  python julius_service.py logs [-n 60] [--raw] [--no-follow]   recent log lines, then new ones as they arrive (Ctrl+C to stop)
-  python julius_service.py smoke [--restart]   startup smoke check: ready, hotkeys, duplex audio, no crash loop, no traceback (see julius_smoke.py)
-  python julius_service.py doctor    check, the way launchd starts Julius, whether the stop and wake hotkeys register
+  python -m julius.service.service on        install and start; starts at every login, restarts after a crash
+  python -m julius.service.service off       stop and remove from login (a clean stop is not restarted)
+  python -m julius.service.service status    loaded? running? pid, last exit, quiet mode, log file
+  python -m julius.service.service restart
+  python -m julius.service.service wake      leave quiet mode (same as the wake hotkey)
+  python -m julius.service.service logs [-n 60] [--raw] [--no-follow]   recent log lines, then new ones as they arrive (Ctrl+C to stop)
+  python -m julius.service.service smoke [--restart]   startup smoke check: ready, hotkeys, duplex audio, no crash loop, no traceback (see julius_smoke.py)
+  python -m julius.service.service doctor    check, the way launchd starts Julius, whether the stop and wake hotkeys register
 No API key is written into the plist: Julius reads ANTHROPIC_API_KEY from the repo's .env like a normal run."""
 
 import json
@@ -131,7 +131,7 @@ def show_logs(
 ):
     lines = read_tail(path, n)
     if lines is None:
-        out(f"no log yet at {path}. Is the service on? (python julius_service.py status)")
+        out(f"no log yet at {path}. Is the service on? (python -m julius.service.service status)")
         err = Path(path).parent / "launchd.err"
         if err.exists():
             out("launchd.err says:")
@@ -289,7 +289,7 @@ def main(argv):
             )
         else:
             print(
-                "A hotkey did not register (another app may already own that key combination, or the helper could not start). Details above; no hotkey needed meanwhile: `python julius_service.py wake` does the same as the wake key."
+                "A hotkey did not register (another app may already own that key combination, or the helper could not start). Details above; no hotkey needed meanwhile: `python -m julius.service.service wake` does the same as the wake key."
             )
         return 0
     print(status())

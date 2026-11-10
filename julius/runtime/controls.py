@@ -87,7 +87,7 @@ def leave_quiet(s: Session, source: str = "hotkey") -> None:
 
 
 def hotkey_wake(s: Session, source: str = "hotkey") -> None:
-    """The wake hotkey (and `julius_service.py wake`) wakes him in every state.
+    """The wake hotkey (and `python -m julius.service.service wake`) wakes him in every state.
 
     The wake itself is the typed 'wake up' command, so it behaves exactly like saying Julius:
     awake for the session, with 'I am here.'

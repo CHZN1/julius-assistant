@@ -35,7 +35,7 @@ keep_loaded = true          # with the brain in the cloud the TTS voice is never
 announce_auto = true             # say "Noted." once after a turn in which Julius saved a fact you stated (they are marked auto in `what do you remember`; say "forget that" to remove one)
 
 [service]
-wake_hotkey = "<ctrl>+<alt>+j"   # leaves quiet mode (after "Julius, go to sleep"); also `python julius_service.py wake`
+wake_hotkey = "<ctrl>+<alt>+j"   # leaves quiet mode (after "Julius, go to sleep"); also `python -m julius.service.service wake`
 log_transcripts = true          # DIAGNOSTICS WINDOW 2026-11-07 to 2026-11-14: the JSON log keeps what you say and what he answers; it switches itself back off after log_transcripts_until
 log_transcripts_until = "2026-11-14"   # last day (inclusive); after it transcripts are redacted again with no action from you. Remove the line to keep logging on
 
@@ -44,7 +44,7 @@ hotkey = "<ctrl>+<alt>+s"      # global stop: silences Julius at once, whatever 
 voice = true                   # spoken stop: speaking over Julius cuts his speech (julius_talkover.py); the hotkey always works
 
 [events]
-enabled = true                   # read-only WebSocket on 127.0.0.1 only: state, speaker level (about 30 Hz) and transcript lines for a future UI. `python julius_events_client.py` prints them
+enabled = true                   # read-only WebSocket on 127.0.0.1 only: state, speaker level (about 30 Hz) and transcript lines for a future UI. `python -m julius.ui_bridge.events_client` prints them
 port = 8765
 
 [ui]
