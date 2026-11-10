@@ -38,7 +38,7 @@ def main(gains, floors=(0.0045, 0.0015)):
                 y = (x * g + rng.standard_normal(len(x)) * 0.0003).astype(np.float32)
                 ev = run_clip(
                     WakeStream(
-                        str(ROOT / "wake" / "models" / "julius.onnx"),
+                        str(ROOT / "julius" / "wake" / "models" / "julius.onnx"),
                         0.05,
                         verify=verify,
                         level_floor=fl,

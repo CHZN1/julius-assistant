@@ -146,7 +146,66 @@ def check_expect(expect, replies_text, had_turn, had_reply, talk_over, tools="")
     return True, ""
 
 
+def group_reference(group):
+    """What the speaker was asked to say for this group of turns, bracketed notes removed."""
+    return " ".join(re.sub(r"\s*\[[^\]]*\]\s*", " ", t.get("ref") or t["say"]) for t in group)
+
+
+def first_latency(replies):
+    """Speech-end-to-first-audio of the first spoken reply that has one, or None."""
+    lats = [latency_of(r) for r in replies if not r.get("control")]
+    return next((x for x in lats if x is not None), None)
+
+
+def group_failures(group, win, text, tools):
+    """Reasons the expectations of the turns in the group were not met (empty when all were)."""
+    replies = [e for e in win if e["kind"] == "reply" and e.get("text")]
+    controls = [e for e in win if e["kind"] == "reply" and e.get("control")]
+    talk_over = any(e["kind"] == "talk_over" for e in win)
+    had_turn = any(e["kind"] == "turn" for e in win)
+    failures = []
+    for t in group:
+        ok, why = check_expect(
+            t.get("expect"), text, had_turn, bool(replies) or bool(controls), talk_over, tools
+        )
+        if not ok:
+            failures.append(why)
+    return failures
+
+
+def score_turn(scenario, lab, window, events, tools):
+    """One graded row for a labelled turn (or group of turns) from the events inside its window."""
+    a, b = window
+    i = lab["turn"]
+    group = scenario["turns"][i : i + lab.get("group", 1)]
+    win = [e for e in events if a <= e["t"] < b]
+    drops_echo = {e.get("text") for e in win if e["kind"] == "drop" and e.get("reason") == "echo"}
+    asr = [e for e in win if e["kind"] == "asr" and e.get("text") not in drops_echo]
+    refs = group_reference(group)
+    hyp = " ".join(e["text"] for e in asr)
+    replies = [e for e in win if e["kind"] == "reply" and e.get("text")]
+    text = " ".join(e["text"] for e in replies)
+    failures = group_failures(group, win, text, tools)
+    ignored = (group[0].get("expect") or {}).get("ignored")
+    return {
+        "scenario": scenario["id"],
+        "turn": i,
+        "say": refs,
+        "heard": hyp,
+        "wer": None if ignored else round(wer(refs, hyp), 3),
+        "utterances": len(asr),
+        "expected_utterances": 0 if ignored else len(group),
+        "handled_ok": not failures,
+        "why": "; ".join(failures),
+        "latency_s": first_latency(replies),
+        "reply": text[:160],
+        "echo_drops": len(drops_echo),
+        "talk_over": any(e["kind"] == "talk_over" for e in win),
+    }
+
+
 def score_take(take):
+    """Score every labelled turn of one recorded take."""
     scenario = json.loads((take / "scenario.json").read_text())
     events = read_jsonl(take / "rec" / "events.jsonl")
     labels = read_jsonl(take / "labels.jsonl")
@@ -156,55 +215,11 @@ def score_take(take):
         )
         + 1
     )
-    turns = scenario["turns"]
-    rows = []
     tools = tool_text(take)
-    for lab, a, b in turn_windows(labels, end_t):
-        i = lab["turn"]
-        group = turns[i : i + lab.get("group", 1)]
-        win = [e for e in events if a <= e["t"] < b]
-        drops_echo = {
-            e.get("text") for e in win if e["kind"] == "drop" and e.get("reason") == "echo"
-        }
-        asr = [e for e in win if e["kind"] == "asr" and e.get("text") not in drops_echo]
-        refs = " ".join(re.sub(r"\s*\[[^\]]*\]\s*", " ", t.get("ref") or t["say"]) for t in group)
-        hyp = " ".join(e["text"] for e in asr)
-        replies = [e for e in win if e["kind"] == "reply" and e.get("text")]
-        controls = [e for e in win if e["kind"] == "reply" and e.get("control")]
-        text = " ".join(e["text"] for e in replies)
-        talk_over = any(e["kind"] == "talk_over" for e in win)
-        had_turn = any(e["kind"] == "turn" for e in win)
-        ok_all, why_all = True, []
-        for t in group:
-            ok, why = check_expect(
-                t.get("expect"), text, had_turn, bool(replies) or bool(controls), talk_over, tools
-            )
-            if not ok:
-                ok_all = False
-                why_all.append(why)
-        lats = [latency_of(r) for r in replies if not r.get("control")]
-        rows.append(
-            {
-                "scenario": scenario["id"],
-                "turn": i,
-                "say": refs,
-                "heard": hyp,
-                "wer": None
-                if (group[0].get("expect") or {}).get("ignored")
-                else round(wer(refs, hyp), 3),
-                "utterances": len(asr),
-                "expected_utterances": 0
-                if (group[0].get("expect") or {}).get("ignored")
-                else len(group),
-                "handled_ok": ok_all,
-                "why": "; ".join(why_all),
-                "latency_s": next((x for x in lats if x is not None), None),
-                "reply": text[:160],
-                "echo_drops": len(drops_echo),
-                "talk_over": talk_over,
-            }
-        )
-    return rows
+    return [
+        score_turn(scenario, lab, (a, b), events, tools)
+        for lab, a, b in turn_windows(labels, end_t)
+    ]
 
 
 def summarize(rows):

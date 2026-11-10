@@ -1,4 +1,4 @@
-"""Train the "Julius" wake-word head on top of openWakeWord's pretrained feature extractor and export wake/models/julius.onnx.
+"""Train the "Julius" wake-word head on top of openWakeWord's pretrained feature extractor and export julius/wake/models/julius.onnx.
 
 Each clip is embedded (80 ms frames x 96 dims); the head scores every 16-frame window (1.28 s) and the clip score is the max over windows
 (multiple-instance training: no word alignment needed, and "Julius, what's the weather" works like a bare "Julius").

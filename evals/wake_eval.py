@@ -196,90 +196,95 @@ def thresholds():
         )
 
 
-def compare():
-    """python evals/wake_eval.py compare MODEL DETECTOR_THR LOW_THR [WAKE_SESSION] [VERIFIER.pkl] [SPEAKER_THR]
-    Detector alone vs cascade v2 (low-threshold stage 1 -> whole-utterance Whisper) vs cascade v2 + personal speaker verifier, same metrics.
-    talk3 and the held-out Julius-voice lines are the false-wake sets; WAKE_SESSION (default wake3) is the miss-rate set."""
-    import pickle
-
+def _compare_engines(model, t_det, t_low, speaker, speaker_threshold):
+    """The detector alone, the cascade, and (with a personal verifier) the cascade plus speaker check."""
     from julius.wake.stream import WakeStream, whisper_verify
 
-    model, t_det, t_low = sys.argv[2], float(sys.argv[3]), float(sys.argv[4])
-    session = sys.argv[5] if len(sys.argv) > 5 else "wake3"
-    vpath = Path(sys.argv[6]).expanduser() if len(sys.argv) > 6 else None
-    sthr = float(sys.argv[7]) if len(sys.argv) > 7 else 0.5
     verify = whisper_verify()
-    speaker = pickle.load(open(vpath, "rb")) if vpath and vpath.exists() else None
     engines = {
         "detector alone": WakeStream(model, t_det),
         "cascade v2": WakeStream(model, t_low, verify=verify),
     }
     if speaker is not None:
         engines["cascade v2 + speaker verifier (no gate)"] = WakeStream(
-            model, t_low, verify=verify, speaker=speaker, speaker_threshold=sthr, gate=False
+            model,
+            t_low,
+            verify=verify,
+            speaker=speaker,
+            speaker_threshold=speaker_threshold,
+            gate=False,
         )
         engines["cascade v2 + speaker verifier (noise gate)"] = WakeStream(
-            model, t_low, verify=verify, speaker=speaker, speaker_threshold=sthr
+            model, t_low, verify=verify, speaker=speaker, speaker_threshold=speaker_threshold
         )
-    wake = [c for x in session.split(",") for c in load(x)]
-    talk3 = load("talk3")
-    jv = [
+    return engines
+
+
+def _idle_cpu_pct(st):
+    """CPU use (percent of one core) while a minute of near-silence streams through."""
+    rng = np.random.default_rng(0)
+    idle = (rng.standard_normal(60 * SR) * 0.003).astype(np.float32)
+    st.reset()
+    xi = (idle * 32767).astype(np.int16)
+    c0 = time.process_time()
+    for i in range(0, len(xi) - FRAME + 1, FRAME):
+        st.push(xi[i : i + FRAME])
+    return 100 * (time.process_time() - c0) / 60
+
+
+def _engine_row(label, st, wake, w, t, j, cpu):
+    """The metrics of one engine from its stats on the wake, talk and Julius-voice sets."""
+    hours = t["audio_s"] / 3600
+    casc = label != "detector alone"
+    missed = [n for n, ev in w["detail"] if not any(e["accepted"] for e in ev)]
+    verify_times = [e["verify_s"] for _, ev in w["detail"] for e in ev if e["accepted"]]
+    whisper_runs = sum(1 for _, ev in t["detail"] for e in ev if e.get("reason") != "speaker")
+    return {
+        "miss_pct": round(100 * len(missed) / len(wake), 1),
+        "missed": missed,
+        "false_wakes_per_hour": round(t["accepted"] / hours, 1),
+        "stage1_fires_per_hour": round(t["fires"] / hours, 1),
+        "julius_voice_wakes": j["accepted"],
+        "julius_voice_stage1_fires": j["fires"],
+        "idle_cpu_pct_of_core": round(cpu, 2),
+        "whisper_runs_per_hour": round(whisper_runs / hours, 1) if casc else 0,
+        "whisper_s_per_hour": round(t["whisper_s"] / hours, 1) if casc else 0,
+        "whisper_s_per_wake": round(float(np.median(verify_times or [0])), 2) if casc else 0,
+        "speaker_ms_per_fire": round(1000 * st.speaker_s / max(1, st.speaker_calls), 2)
+        if st.speaker is not None
+        else 0,
+        "talk3_min": round(t["audio_s"] / 60, 1),
+    }
+
+
+def _julius_voice_clips():
+    return [
         (p.name, sf.read(p, dtype="float32")[0])
         for p in sorted((ROOT / "wake" / "data" / "eval_julius").glob("*.wav"))
     ]
+
+
+def compare():
+    """python evals/wake_eval.py compare MODEL DETECTOR_THR LOW_THR [WAKE_SESSION] [VERIFIER.pkl] [SPEAKER_THR]
+    Detector alone vs cascade v2 (low-threshold stage 1 -> whole-utterance Whisper) vs cascade v2 + personal speaker verifier, same metrics.
+    talk3 and the held-out Julius-voice lines are the false-wake sets; WAKE_SESSION (default wake3) is the miss-rate set."""
+    import pickle
+
+    model, t_det, t_low = sys.argv[2], float(sys.argv[3]), float(sys.argv[4])
+    session = sys.argv[5] if len(sys.argv) > 5 else "wake3"
+    vpath = Path(sys.argv[6]).expanduser() if len(sys.argv) > 6 else None
+    sthr = float(sys.argv[7]) if len(sys.argv) > 7 else 0.5
+    speaker = pickle.load(open(vpath, "rb")) if vpath and vpath.exists() else None
+    engines = _compare_engines(model, t_det, t_low, speaker, sthr)
+    wake = [c for x in session.split(",") for c in load(x)]
+    talk3 = load("talk3")
+    jv = _julius_voice_clips()
     if not wake:
         sys.exit(f"no {session} recordings: python diagnostics/record_wake.py {session}")
-    rng = np.random.default_rng(0)
-    idle = (rng.standard_normal(60 * SR) * 0.003).astype(np.float32)
     res = {}
     for label, st in engines.items():
-        w = stream_stats(st, wake)
-        t = stream_stats(st, talk3)
-        j = stream_stats(st, jv)
-        st.reset()
-        xi = (idle * 32767).astype(np.int16)
-        c0 = time.process_time()
-        for i in range(0, len(xi) - FRAME + 1, FRAME):
-            st.push(xi[i : i + FRAME])
-        cpu = 100 * (time.process_time() - c0) / 60
-        hours = t["audio_s"] / 3600
-        casc = label != "detector alone"
-        res[label] = {
-            "miss_pct": round(
-                100
-                * (1 - sum(any(e["accepted"] for e in ev) for _, ev in w["detail"]) / len(wake)),
-                1,
-            ),
-            "missed": [n for n, ev in w["detail"] if not any(e["accepted"] for e in ev)],
-            "false_wakes_per_hour": round(t["accepted"] / hours, 1),
-            "stage1_fires_per_hour": round(t["fires"] / hours, 1),
-            "julius_voice_wakes": j["accepted"],
-            "julius_voice_stage1_fires": j["fires"],
-            "idle_cpu_pct_of_core": round(cpu, 2),
-            "whisper_runs_per_hour": round(
-                sum(1 for _, ev in t["detail"] for e in ev if e.get("reason") != "speaker") / hours,
-                1,
-            )
-            if casc
-            else 0,
-            "whisper_s_per_hour": round(t["whisper_s"] / hours, 1) if casc else 0,
-            "whisper_s_per_wake": round(
-                float(
-                    np.median(
-                        [e["verify_s"] for _, ev in w["detail"] for e in ev if e["accepted"]] or [0]
-                    )
-                ),
-                2,
-            )
-            if casc
-            else 0,
-            "speaker_ms_per_fire": round(1000 * st.speaker_s / max(1, st.speaker_calls), 2)
-            if st.speaker is not None
-            else 0,
-            "speaker_rejects_wake": sum(1 for _ in [0]) and None,
-            "talk3_min": round(t["audio_s"] / 60, 1),
-        }
-        del res[label]["speaker_rejects_wake"]
+        w, t, j = stream_stats(st, wake), stream_stats(st, talk3), stream_stats(st, jv)
+        res[label] = _engine_row(label, st, wake, w, t, j, _idle_cpu_pct(st))
         if "gate" in label:
             t4 = stream_stats(st, load("talk4"))
             res[label]["talk4_false_wakes"] = t4["accepted"]
@@ -304,7 +309,7 @@ def suite():
     vpath = Path(str(wake_cfg["verifier"])).expanduser()
     speaker = pickle.load(open(vpath, "rb")) if vpath.exists() else None
     model_file = Path(
-        os.environ.get("WAKE_EVAL_MODEL") or ROOT / "wake" / "models" / "julius.onnx"
+        os.environ.get("WAKE_EVAL_MODEL") or ROOT / "julius" / "wake" / "models" / "julius.onnx"
     )  # WAKE_EVAL_MODEL: score another model (e.g. julius_public.onnx) with the same cascade
     st = WakeStream(
         model_file,

@@ -538,7 +538,7 @@ def stage1_fires(clean, onset_f, thr_list=(0.05, 0.2, 0.5)):
     """Highest stage-1 'Julius' score in the 2 s after the duck and the time it is first above each threshold (the detector alone, no Whisper)."""
     from julius.wake.stream import WakeStream
 
-    st = WakeStream(str(ROOT / "wake" / "models" / "julius.onnx"), 2.0, verify=None, gate=False)
+    st = WakeStream(str(ROOT / "julius" / "wake" / "models" / "julius.onnx"), 2.0, verify=None, gate=False)
     best, first = 0.0, {str(t): None for t in thr_list}
     seg = clean[max(0, onset_f * HOP - int(1.5 * SR)) : onset_f * HOP + int(2.5 * SR)]
     x = (np.clip(seg, -1, 1) * 32767).astype(np.int16)

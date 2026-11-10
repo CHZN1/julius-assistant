@@ -121,12 +121,7 @@ def _keys():
     return q
 
 
-def record_scenario(sc, take, keys, extra_env=None):
-    """Returns 'keep' | 'redo' | 'quit'."""
-    rec = take / "rec"
-    take.mkdir(parents=True)
-    (take / "scenario.json").write_text(json.dumps(sc, indent=1))
-    memory = tempfile.mkdtemp(prefix="julius_voice_mem_")
+def _launch(sc, take, rec, memory, extra_env):
     env = {
         **os.environ,
         "JULIUS_SESSION_RECORD_DIR": str(rec),
@@ -144,6 +139,132 @@ def record_scenario(sc, take, keys, extra_env=None):
         cwd=ROOT,
         start_new_session=True,
     )
+    return proc, log
+
+
+def _wait_until_ready(proc, take):
+    """Wait up to three minutes for Julius to print its ready line."""
+    t_end = time.time() + 180
+    while (
+        time.time() < t_end
+        and proc.poll() is None
+        and "julius ready" not in Path(take / "console.log").read_text(errors="replace")
+    ):
+        time.sleep(1)
+    return proc.poll() is None
+
+
+def _turn_group(turns, i):
+    """The turn at i plus the instructions spoken over his reply to it."""
+    group = [turns[i]]
+    while i + len(group) < len(turns) and turns[i + len(group)].get("when") == "during_reply":
+        group.append(turns[i + len(group)])
+    return group
+
+
+def _show_turn(i, turns, group):
+    t = group[0]
+    print(f"\n--- turn {i + 1}/{len(turns)} ---")
+    print(f"  SAY:  {t['say']}")
+    if t.get("wait_note"):
+        print(f"        ({t['wait_note']})")
+    if t.get("when") == "pause":
+        print("        (stop for about 2 seconds at [pause], then finish)")
+    for g in group[1:]:
+        print(f"  THEN, about 3 seconds into his answer, talk over him:  {g['say']}")
+    if t.get("expect", {}).get("ignored"):
+        print("        (he should stay silent; press Enter after about 8 seconds)")
+
+
+def _write_label(labels, i, t, group):
+    labels.write(
+        json.dumps(
+            {
+                "t": time.time(),
+                "turn": i,
+                "say": t["say"],
+                "ref": reference_text(t),
+                "expect": t.get("expect"),
+                "when": t.get("when", "after_reply"),
+                "group": len(group),
+            }
+        )
+        + "\n"
+    )
+    labels.flush()
+
+
+def _settle_after_reply(proc, events, baseline, group):
+    if len(group) > 1:
+        # the first reply is "Response stopped"; the instruction after it is answered by a second one: wait for that (up to 45 s)
+        t_wait = time.time() + 45
+        while (
+            _count(events, "reply") < baseline + 2 and time.time() < t_wait and proc.poll() is None
+        ):
+            time.sleep(0.5)
+    time.sleep(1.5)
+
+
+def _await_turn(proc, events, keys, group, baseline):
+    """Wait for Enter, a reply or a stop; returns 'redo' or 'quit' to end the take, else None."""
+    ignored = group[0].get("expect", {}).get("ignored")
+    deadline = time.time() + (10 if ignored else 240)
+    while time.time() < deadline:
+        try:
+            k = keys.get(timeout=0.5)
+            return {"r": "redo", "q": "quit"}.get(k)
+        except queue.Empty:
+            pass
+        if proc.poll() is not None:
+            print("Julius stopped unexpectedly.")
+            return "quit"
+        if _count(events, "reply") > baseline:
+            _settle_after_reply(proc, events, baseline, group)
+            return None
+    return None
+
+
+def _run_turns(sc, proc, events, labels, keys):
+    """Guide the speaker through every turn; returns 'redo', 'quit' or None."""
+    turns = sc["turns"]
+    i = 0
+    while i < len(turns):
+        group = _turn_group(turns, i)
+        baseline = _count(events, "reply")
+        while not keys.empty():
+            keys.get_nowait()  # stray Enter presses must not skip this instruction
+        _show_turn(i, turns, group)
+        _write_label(labels, i, group[0], group)
+        outcome = _await_turn(proc, events, keys, group, baseline)
+        if outcome:
+            return outcome
+        i += len(group)
+    return None
+
+
+def _shutdown(proc, log, labels, rec, memory):
+    labels.close()
+    if proc.poll() is None:
+        proc.send_signal(signal.SIGINT)
+        try:
+            proc.wait(40)
+        except subprocess.TimeoutExpired:
+            proc.terminate()
+            proc.wait(10)
+    log.close()
+    from julius.audio.session_record import finalize
+
+    finalize(rec)  # no-op when Julius already closed the recording itself
+    shutil.rmtree(memory, ignore_errors=True)
+
+
+def record_scenario(sc, take, keys, extra_env=None):
+    """Returns 'keep' | 'redo' | 'quit'."""
+    rec = take / "rec"
+    take.mkdir(parents=True)
+    (take / "scenario.json").write_text(json.dumps(sc, indent=1))
+    memory = tempfile.mkdtemp(prefix="julius_voice_mem_")
+    proc, log = _launch(sc, take, rec, memory, extra_env)
     events = rec / "events.jsonl"
     labels = open(take / "labels.jsonl", "a")
     result = "keep"
@@ -152,100 +273,12 @@ def record_scenario(sc, take, keys, extra_env=None):
             f"\n=== {sc['id']}: {sc['title']} ===\n{sc.get('intro', '')}\nStarting Julius (about 20 seconds, stay quiet)...",
             flush=True,
         )
-        t_end = time.time() + 180
-        while (
-            time.time() < t_end
-            and proc.poll() is None
-            and "julius ready" not in Path(take / "console.log").read_text(errors="replace")
-        ):
-            time.sleep(1)
-        if proc.poll() is not None:
+        if not _wait_until_ready(proc, take):
             print("Julius did not start; see", take / "console.log")
             return "quit"
-        turns = sc["turns"]
-        i = 0
-        while i < len(turns):
-            t = turns[i]
-            group = [t]
-            while (
-                i + len(group) < len(turns) and turns[i + len(group)].get("when") == "during_reply"
-            ):
-                group.append(turns[i + len(group)])
-            baseline = _count(events, "reply")
-            while not keys.empty():
-                keys.get_nowait()  # stray Enter presses must not skip this instruction
-            print(f"\n--- turn {i + 1}/{len(turns)} ---")
-            print(f"  SAY:  {t['say']}")
-            if t.get("wait_note"):
-                print(f"        ({t['wait_note']})")
-            if t.get("when") == "pause":
-                print("        (stop for about 2 seconds at [pause], then finish)")
-            for g in group[1:]:
-                print(f"  THEN, about 3 seconds into his answer, talk over him:  {g['say']}")
-            if t.get("expect", {}).get("ignored"):
-                print("        (he should stay silent; press Enter after about 8 seconds)")
-            labels.write(
-                json.dumps(
-                    {
-                        "t": time.time(),
-                        "turn": i,
-                        "say": t["say"],
-                        "ref": reference_text(t),
-                        "expect": t.get("expect"),
-                        "when": t.get("when", "after_reply"),
-                        "group": len(group),
-                    }
-                )
-                + "\n"
-            )
-            labels.flush()
-            deadline = time.time() + (10 if t.get("expect", {}).get("ignored") else 240)
-            while time.time() < deadline:
-                try:
-                    k = keys.get(timeout=0.5)
-                    if k == "r":
-                        result = "redo"
-                        raise StopIteration
-                    if k == "q":
-                        result = "quit"
-                        raise StopIteration
-                    break
-                except queue.Empty:
-                    pass
-                if proc.poll() is not None:
-                    print("Julius stopped unexpectedly.")
-                    result = "quit"
-                    raise StopIteration
-                if _count(events, "reply") > baseline:
-                    if (
-                        len(group) > 1
-                    ):  # the first reply is "Response stopped"; the instruction after it is answered by a second one: wait for that (up to 45 s)
-                        t_wait = time.time() + 45
-                        while (
-                            _count(events, "reply") < baseline + 2
-                            and time.time() < t_wait
-                            and proc.poll() is None
-                        ):
-                            time.sleep(0.5)
-                    time.sleep(1.5)
-                    break
-            i += len(group)
-    except StopIteration:
-        pass
+        result = _run_turns(sc, proc, events, labels, keys) or "keep"
     finally:
-        labels.close()
-        if proc.poll() is None:
-            proc.send_signal(signal.SIGINT)
-            try:
-                proc.wait(40)
-            except subprocess.TimeoutExpired:
-                proc.terminate()
-                proc.wait(10)
-        log.close()
-        from julius.audio.session_record import finalize
-
-        finalize(rec)  # no-op when Julius already closed the recording itself
-        shutil.rmtree(memory, ignore_errors=True)
+        _shutdown(proc, log, labels, rec, memory)
     if result == "keep":
         while not keys.empty():
             keys.get_nowait()
