@@ -5,8 +5,8 @@ custom verifier). Positives: your own wake recordings. Negatives: your ordinary 
 "Julius", sound-alikes and background noise. It is trained on your voice, so it is stored OUTSIDE the repo (default ~/.julius/wake_verifier.pkl,
 setting [wake] verifier in julius.toml) and never committed.
 
-  python wake/verifier.py train [--holdout wake2] [--out PATH]    --holdout leaves a wake session (and talk3, always) out of training
-  python wake/verifier.py info
+  python -m julius.wake.verifier train [--holdout wake2] [--out PATH]    --holdout leaves a wake session (and talk3, always) out of training
+  python -m julius.wake.verifier info
 Training sessions used: wake, wake2, quick, talk1, talk2, talk4 (when recorded). Never: talk3, wake3 and wake4 (the final eval sets)."""
 
 import argparse
@@ -62,7 +62,9 @@ def train(
     from sklearn.preprocessing import StandardScaler
 
     rng = np.random.default_rng(seed)
-    model_path = Path(model) if model else ROOT / "julius" / "wake" / "models" / "julius.onnx"
+    model_path = (
+        Path(model) if model else ROOT / "julius" / "wake" / "models" / "julius_starter.onnx"
+    )
     m = Model(wakeword_models=[str(model_path)], inference_framework="onnx")
     name = list(m.models)[0]
     pos, neg, count = [], [], {}

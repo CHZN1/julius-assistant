@@ -37,15 +37,20 @@ class EvalToolingTests(unittest.TestCase):
         self.assertFalse(routing_eval.arg_matches("btc", "not json"))
 
     def test_judge_scores_path_tool_args_and_success(self):
-        case = {"expect": {"path": "shortcut", "tool": "get_weather", "args_contain": ["springfield"]}}
+        case = {
+            "expect": {"path": "shortcut", "tool": "get_weather", "args_contain": ["springfield"]}
+        }
         self.assertEqual(
             routing_eval.judge(
-                case, {"path": "shortcut", "tool": "get_weather", "args": '{"location": "Springfield"}'}
+                case,
+                {"path": "shortcut", "tool": "get_weather", "args": '{"location": "Springfield"}'},
             ),
             (True, True, True, True),
         )
         self.assertEqual(
-            routing_eval.judge(case, {"path": "tool", "tool": "get_weather", "args": "springfield"})[0],
+            routing_eval.judge(
+                case, {"path": "tool", "tool": "get_weather", "args": "springfield"}
+            )[0],
             False,
         )
         self.assertEqual(

@@ -1,4 +1,4 @@
-"""Unit tests for qwen3 mlx tools."""
+"""Manual smoke script (not a unit test): loads Qwen3-8B 4-bit with MLX and checks Julius tool calls. Run it directly; it downloads the model on first use."""
 
 import json
 import re

@@ -2,7 +2,7 @@
 
 The selected speaker remains the Qwen 1.7B VoiceDesign seed-1301 identity. The normal runtime uses only `Qwen/Qwen3-TTS-12Hz-0.6B-Base`. The two source recordings were inspected before changing the runtime: balanced is 19.84 seconds, more-lift is 20.64 seconds, both mono 24 kHz. Local Whisper recovered the expected passage from both, with minor interjection/orthography differences.
 
-The original standalone script was found at `/Users/user/Downloads/test_julius_clone_06b.py`. That saved version still contains FP16 and explicit sampling arguments. The user supplied the corrected behavior, which takes precedence: BF16, exact reference transcript, transcript-conditioned cloning, and checkpoint sampling defaults. The existing BF16 output WAVs were retained.
+The original standalone script was found at `test_julius_clone_06b.py` in a Downloads folder. That saved version still contains FP16 and explicit sampling arguments. The user supplied the corrected behavior, which takes precedence: BF16, exact reference transcript, transcript-conditioned cloning, and checkpoint sampling defaults. The existing BF16 output WAVs were retained.
 
 ## Comparison
 

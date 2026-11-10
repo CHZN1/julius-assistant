@@ -10,7 +10,7 @@ Updated November 9, 2026. Current priority order; older milestone documents (JUL
 | B Daily driver (wake word, hotkeys, service, memory, voice barge-in) | done |
 | C Agents (file, coding, planner, research) | done; research agent and coding-agent network lockdown added 2026-11-09 |
 | D Sports analytics | paused until the user's models are ready |
-| E Open-source release | prep: audit, wake-model retrain, README, .env.example, MIT licence (see Phase E); nothing removed or rewritten yet |
+| E Open-source release | public repository prepared from a rewritten history: personal data removed, starter wake model with passive learning, `[profile]` config, README, MIT licence |
 | F Voice polish and reliability | done (F1 to F3 built and live; Silero VAD skipped unless endpointing problems show; F4 soak ran 2026-11-08 to 11-09) |
 | H Senses (vision on demand, presence and gestures, ShazamKit, speaker profiles, whiteboard to text) | planned, nothing built |
 | G UI (orb app) | modes, typing, drops, installed app and login item built and in live testing; side-panel work (charts, images, vision, pixel art) waits for the user's go; image generation deferred (no provider) |
@@ -91,7 +91,7 @@ Julius supervises my NHL/NFL/MLB/WNBA pipelines in `~/dev` as sub-agents: run to
 - Bring-your-own Anthropic key via `.env.example`; clear setup README with requirements (Apple Silicon, memory), a demo GIF/video, architecture diagram, and cost-per-turn table.
 - **Never ship local voice data:** `voice_data/` (eval recordings of the user's voice and conversations), `julius_memory/`, `~/.julius/` and the personal wake verifier stay out of the repo and out of any release archive. `python evals/voice_record.py delete-all` removes every recording.
 - MIT license.
-- Wake word: the shipped detector (`wake/models/julius.onnx`) and the default `engine = "cascade"` path must work for anyone without the personal speaker verifier. The verifier is a personal layer trained on one person's voice (`python wake/verifier.py train`) and stored outside the repo in `~/.julius/`; the repo must not contain recordings, the verifier file or `julius_memory/wake_log.jsonl`. The detector was trained with the author's wake recordings as part of its positives: before release, retrain it from synthetic voices only (or ship it clearly labelled) and document how to record a personal wake set. Confirm the openWakeWord models download step (`openwakeword.utils.download_models`) is in the setup README.
+- Wake word: the shipped detector (`julius/wake/models/julius_starter.onnx`) and the default `engine = "cascade"` path must work for anyone without the personal speaker verifier. The verifier is a personal layer trained on one person's voice (`python -m julius.wake.verifier train`) and stored outside the repo in `~/.julius/`; the repo must not contain recordings, the verifier file or `julius_memory/wake_log.jsonl`. The detector was trained with the author's wake recordings as part of its positives: before release, retrain it from synthetic voices only (or ship it clearly labelled) and document how to record a personal wake set. Confirm the openWakeWord models download step (`openwakeword.utils.download_models`) is in the setup README.
 
 ## Phase F: Voice polish and reliability: DONE (built 2026-11-06 to 11-08; Silero VAD skipped)
 
@@ -117,7 +117,7 @@ Not measurable today: turn latency (not logged), real endpointing behaviour (no 
 
 ## Phase G: UI (started 2026-11-08)
 
-The UI lives in its own **private** repo, `a private UI repo` (`a private UI repo`, split out 2026-11-09 with its history). This repo keeps only the interface: the read-only event feed (`julius_events.py`, `docs/EVENT_FEED.md`, `julius_events_client.py`, a test that the document matches the code) and the authenticated write channel (`julius_uichannel.py`, `julius_dropstage.py`, `docs/UI_CHANNEL.md`: typed text and dropped files; dropped files are only staged, nothing is opened or moved without the file agent's own yes).
+The UI lives in its own repo, split out on 2026-11-09 with its history. This repo keeps only the interface: the read-only event feed (`julius_events.py`, `docs/EVENT_FEED.md`, `julius_events_client.py`, a test that the document matches the code) and the authenticated write channel (`julius_uichannel.py`, `julius_dropstage.py`, `docs/UI_CHANNEL.md`: typed text and dropped files; dropped files are only staged, nothing is opened or moved without the file agent's own yes).
 
 Built: the animated orb (states asleep/quiet/offline/listening/thinking/speaking, 8 finishes, shake and brush physics, power caps, settings drawer), window modes (Mini 100 px with corner snap, Floating 420 wide, Full), typing in the orb, drag and drop onto the orb, click-and-drag to move, restart sync, `Julius Orb.app` in `~/Applications` with menu-bar Quit and Cmd+Q, and a login item (`julius_orb.py on`). Details and tests are in that repo's README.
 
@@ -199,7 +199,7 @@ it unchanged through a shim (`DuplexAudio.shim()`), so prefill/underflow logging
 With `audio.duplex = true` (or `JULIUS_DUPLEX=1` for one run): mic gate bypassed, cleaned audio goes into the normal `q`, `CleanTalkOver` (energy on the cleaned signal,
 not echo-correlated, 0.3 s sustained, not in the first 0.4 s of a reply) stops him and keeps the last 4 s of audio as the next turn.
 Safety: `AecMonitor` — residual above 2.5x room noise (and above 0.002) that moves with the playback loudness for `fallback_seconds` (3.0) of playback puts the mic gate back
-(`duplex_fallback` event in the session log and the recording). the user's own voice does not follow Julius's envelope, so it does not count as leaking echo.
+(`duplex_fallback` event in the session log and the recording). The user's own voice does not follow Julius's envelope, so it does not count as leaking echo.
 Recorder: duplex takes save the raw mic and the aligned reference, plus a `mic_start` event, so replay needs no clock guessing (`replay_frontend` handles both kinds).
 
 Tests (test_julius_duplex.py, 20): reference == decimated callback output sample for sample; >15 dB echo reduction on synthetic speech through a delayed room; fallback fires in

@@ -88,7 +88,8 @@ class StopWords(unittest.TestCase):
             self.assertTrue(stop_only(t), t)
         self.assertFalse(stop_only("stop the music in the playlist"))
         self.assertEqual(
-            drop_stop_lead("Stop. What's the weather in Springfield?"), "What's the weather in Springfield?"
+            drop_stop_lead("Stop. What's the weather in Springfield?"),
+            "What's the weather in Springfield?",
         )
         self.assertEqual(drop_stop_lead("stop it"), "stop it")
 

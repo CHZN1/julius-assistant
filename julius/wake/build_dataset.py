@@ -4,7 +4,7 @@
   neg_hard/     sound-alikes (Julia, Julian, jealous, July ...) in the same voices and augmentations
   neg_general/  ordinary sentences and other assistants' wake phrases, same voices
   neg_julius/   Julius's own voices (the Qwen clone and Kokoro am_adam, his legacy voice) saying his name and his usual replies; these must never wake him
-Usage: python wake/build_dataset.py [--per-class N] [--julius-voice]
+Usage: python -m julius.wake.build_dataset [--per-class N] [--julius-voice]
 Positives never use Julius's voice. The recorded sessions in diagnostics/wake_real/ are eval-only and never enter training."""
 
 import argparse

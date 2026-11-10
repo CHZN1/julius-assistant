@@ -144,7 +144,8 @@ class CallCountTests(unittest.TestCase):
             "What is the weather in Springfield and in Tokyo?",
             [
                 tool_call(
-                    ("get_weather", {"location": "Springfield"}), ("get_weather", {"location": "Tokyo"})
+                    ("get_weather", {"location": "Springfield"}),
+                    ("get_weather", {"location": "Tokyo"}),
                 )
             ],
             out=WEATHER,

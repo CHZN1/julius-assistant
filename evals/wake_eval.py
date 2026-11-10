@@ -309,7 +309,8 @@ def suite():
     vpath = Path(str(wake_cfg["verifier"])).expanduser()
     speaker = pickle.loads(vpath.read_bytes()) if vpath.exists() else None
     model_file = Path(
-        os.environ.get("WAKE_EVAL_MODEL") or ROOT / "julius" / "wake" / "models" / "julius.onnx"
+        os.environ.get("WAKE_EVAL_MODEL")
+        or ROOT / "julius" / "wake" / "models" / "julius_starter.onnx"
     )  # WAKE_EVAL_MODEL: score another model (e.g. julius_public.onnx) with the same cascade
     st = WakeStream(
         model_file,

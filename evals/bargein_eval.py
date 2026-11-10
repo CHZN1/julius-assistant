@@ -539,7 +539,10 @@ def stage1_fires(clean, onset_f, thr_list=(0.05, 0.2, 0.5)):
     from julius.wake.stream import WakeStream
 
     st = WakeStream(
-        str(ROOT / "julius" / "wake" / "models" / "julius.onnx"), 2.0, verify=None, gate=False
+        str(ROOT / "julius" / "wake" / "models" / "julius_starter.onnx"),
+        2.0,
+        verify=None,
+        gate=False,
     )
     best, first = 0.0, {str(t): None for t in thr_list}
     seg = clean[max(0, onset_f * HOP - int(1.5 * SR)) : onset_f * HOP + int(2.5 * SR)]

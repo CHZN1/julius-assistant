@@ -124,7 +124,9 @@ class PlannerTests(unittest.TestCase):
                 ],
                 "tool_use",
             ),
-            resp([use("s1", "get_weather", location="Springfield")], "tool_use", usage(i=300, o=30)),
+            resp(
+                [use("s1", "get_weather", location="Springfield")], "tool_use", usage(i=300, o=30)
+            ),
             resp([text("Springfield 75F.")], "end_turn", usage(i=320, o=12)),
             resp([text("Springfield is 75 degrees.")]),
         )

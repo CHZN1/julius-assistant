@@ -5,7 +5,7 @@ Each clip is embedded (80 ms frames x 96 dims); the head scores every 16-frame w
 Positives: wake/data/pos. Negatives: neg_hard, neg_general, neg_julius (Julius's own voices, weighted up) and real human speech from
 ~/datasets (CREMA_D, RAVDESS) plus synthetic noise. Validation holds out three voices (bf_emma, af_sky, bm_george) the head never trains on.
 Your ordinary-talk sessions talk1 and talk2 (diagnostics/wake_real/) are negatives; talk3 and the 30 wake utterances are never trained on.
-Usage: python wake/train_head.py [--epochs 40]"""
+Usage: python -m julius.wake.train_head [--epochs 40]"""
 
 import argparse
 import json
@@ -140,7 +140,7 @@ def _talk_and_noise_sets(sets: Any, args: list[str], extractor: Any) -> None:
     sessions = (
         ()
         if args.public
-        else (("talk1", "user"), ("talk2", "user"), ("talk4", "user"), ("talk3", "roy_val"))
+        else (("talk1", "user"), ("talk2", "user"), ("talk4", "user"), ("talk3", "user_val"))
     )
     for sess, voice in sessions:
         tf = sorted((ROOT / "diagnostics" / "wake_real" / sess).glob(f"{sess}_*.wav"))
@@ -222,7 +222,7 @@ def main() -> None:
     train, val = [], []
     for cls, items in sets.items():
         for voice, e in items:
-            (val if voice in HOLDOUT_VOICES + ("roy_val",) else train).append((cls, e))
+            (val if voice in HOLDOUT_VOICES + ("user_val",) else train).append((cls, e))
     print(
         {c: sum(1 for k, _ in train if k == c) for c in sets},
         "| held-out voice clips:",

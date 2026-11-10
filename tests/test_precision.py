@@ -13,7 +13,9 @@ class ShortcutPrecisionTests(unittest.TestCase):
 
     def test_multi_intent_goes_to_brain(self):
         self.assertIsNone(
-            self.r("Check the weather in Springfield, the price of Bitcoin, and the latest NHL scores")
+            self.r(
+                "Check the weather in Springfield, the price of Bitcoin, and the latest NHL scores"
+            )
         )
         self.assertIsNone(self.r("what's the weather and the time in Springfield"))
         self.assertIsNone(self.r("What's the weather in Springfield and Tokyo"))

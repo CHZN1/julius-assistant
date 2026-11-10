@@ -78,7 +78,12 @@ def num_ok(want):
 
 
 TOOLS = [
-    ("weather", "What's the weather like in Springfield right now?", "get_weather", lambda n, ar: True),
+    (
+        "weather",
+        "What's the weather like in Springfield right now?",
+        "get_weather",
+        lambda n, ar: True,
+    ),
     ("pct", "What is 17.5 percent of 2480?", "calculate", num_ok(434)),
     ("times", "What's 17 times 4839?", "calculate", num_ok(82263)),
     ("divide", "What's 15 divided by 4?", "calculate", num_ok(3.75)),

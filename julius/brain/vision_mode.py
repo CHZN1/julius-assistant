@@ -1,5 +1,6 @@
-"""Optional perception: disabled mode imports and loads no vision dependencies."""
+"""Optional perception: disabled mode imports and loads no vision dependencies. Julius ships no implementation; an enabled install names a module (JULIUS_VISION_MODULE, default julius_perception) that provides Perception and describe."""
 
+import importlib
 import os
 from typing import Any
 
@@ -10,8 +11,10 @@ class VisionMode:
         self._perception = None
         self._describe = None
         if enabled:
-            from emotion.julius_perception import Perception, describe
-
+            module = importlib.import_module(
+                os.environ.get("JULIUS_VISION_MODULE", "julius_perception")
+            )
+            Perception, describe = module.Perception, module.describe
             self._perception = Perception(**options)
             self._describe = describe
 

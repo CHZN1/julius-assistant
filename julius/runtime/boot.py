@@ -14,7 +14,7 @@ import julius.agents.files as jf
 import julius.brain.tools as jt
 import julius.config as config
 import julius.memory.sessions as jm
-from julius import log, state
+from julius import log, profile, state
 from julius.agents.code_session import CodeSession
 from julius.agents.file_session import FileSession
 from julius.agents.utility_session import UtilitySession
@@ -85,6 +85,12 @@ def setup_basics(s: Session) -> None:
     s.asr_hint = config.asr_initial_prompt()  # vocabulary hint from [asr] and [profile]
     s.wake_hint = config.asr_initial_prompt(wake=True)
     s.intent_router = LiveIntentRouter()
+    if profile.needs_setup():
+        log.console(
+            "  [first run: no name or home city set. Run `python -m julius.profile setup`, "
+            "or just tell Julius your city when you ask for the weather]",
+            flush=True,
+        )
 
 
 def setup_vision(s: Session) -> None:

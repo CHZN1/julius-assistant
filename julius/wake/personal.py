@@ -3,8 +3,8 @@
 What is collected (by `Learner`, called from julius_wake.WakeEngine):
   positives   a wake the Whisper stage confirmed, and an earlier rejected fire that you repeated within 5 s ("Julius." ... "Julius!") once the repeat was accepted
   negatives   a rejected fire nobody repeated (Whisper heard something that is not Julius) - kept after the 5 s repeat window has passed
-  setup       up to 5 clips from `python wake/personal.py setup` (optional, skippable)
-When `learn_after` (default 20) new positives have arrived, a background process (`python wake/personal.py retrain`, low priority) fine-tunes the starter head on them,
+  setup       up to 5 clips from `python -m julius.wake.personal setup` (optional, skippable)
+When `learn_after` (default 20) new positives have arrived, a background process (`python -m julius.wake.personal retrain`, low priority) fine-tunes the starter head on them,
 then KEEPS the result only if it beats the current model on your own most recent clips (held out from that training run): more of them detected, and no
 more false fires on your recent rejected clips. Otherwise the current model stays. The new model is picked up the next time the detector resets (after a turn).
 Needs torch and onnx for the retrain step (pip install -r requirements-wake-learning.txt); without them clips are still collected and nothing else changes.

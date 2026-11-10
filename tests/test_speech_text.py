@@ -84,14 +84,6 @@ class TranscriptFixTests(unittest.TestCase):
         from julius.audio.speech_text import fix_transcript as fix
 
         self.assertEqual(
-            fix("What's the best prize pick slip for tonight?"),
-            "What's the best AcmeCorp slip for tonight?",
-        )
-        self.assertEqual(
-            fix("I checked the price picks line and the Prize Picks app"),
-            "I checked the AcmeCorp line and the AcmeCorp app",
-        )
-        self.assertEqual(
             fix("Who won the N.H.L. game and the N. F. L. game?"),
             "Who won the NHL game and the NFL game?",
         )

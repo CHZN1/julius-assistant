@@ -433,7 +433,7 @@ class MemoryAssistant:
             x
             for x in facts
             if isinstance(x, str)
-            and x.strip().lower().startswith("user")
+            and x.strip().lower().startswith("the user")
             and not re.search(
                 r"\b(?:julius|assistant|the model|tool|tools|instruction|instructions)\b", x, re.I
             )

@@ -1,0 +1,3 @@
+# Optional: lets passive wake learning retrain the starter head (without these, clips are still collected)
+torch
+onnx

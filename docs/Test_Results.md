@@ -118,7 +118,7 @@ Continue core conversation/reliability before adding coding/specialist agents.
 
 ## User accepted speech flow and silence behavior — October 5, 2026
 
-the user: "speech flow is much better! and he stays quiet afterwards" after the
+The user: "speech flow is much better! and he stays quiet afterwards" after the
 36-word-span / no vocabulary-hint / input-gating retry. One actual recognized
 utterance: "explain over fitting simply." Correct intent and complete explanation.
 No extra user turn logged during silent follow-up. Accepted for this listening
@@ -143,7 +143,7 @@ No production context/model/residency change made. All test processes stopped.
 
 ## Phrase pauses and unsolicited turn corrections — October 5, 2026
 
-the user reported a somewhat faster response, unnatural word pauses and an unsolicited
+The user reported a somewhat faster response, unnatural word pauses and an unsolicited
 regularization explanation. Actual guided retry timings: first two questions
 8.36 and 7.70 seconds end-of-speech to first audio; 2.30/1.85 seconds ASR and
 3.58/3.47 seconds reasoning. This remains slow, not accepted as optimal.
@@ -193,7 +193,7 @@ reliability remains a known issue; no error-free or deployable claim.
 
 ## Latest listening feedback and delivery/recognition fixes — October 5, 2026
 
-the user reported improvement but continued excessive pause, initial failure to hear
+The user reported improvement but continued excessive pause, initial failure to hear
 "overfitting", and an unwanted lift-to-balanced switch. Stopped the microphone
 session cleanly. Log shows "or fitting" initially and correct "overfitting" on
 retry. This session omitted JULIUS_VALIDATION_OUTPUT, so detailed latency cannot
@@ -263,7 +263,7 @@ Retry completed; see the latest feedback and corrections above.
 
 ## Pre-agent conversation reliability — October 5, 2026
 
-the user requested finishing conversation/reliability before adding specialists and
+The user requested finishing conversation/reliability before adding specialists and
 confirmed availability for a microphone trial. The prior October 2 natural-
 conversation trial has zero recorded turns; its 0.9-second threshold is NOT
 accepted or a default. No new coder installation or integration this phase.
@@ -286,7 +286,7 @@ and unverified; preserve the retained Apple test. No deployment or push.
 
 ## Natural conversation trial — October 2, 2026
 
-the user confirms the overdue reminder and microphone calculation both worked after
+The user confirms the overdue reminder and microphone calculation both worked after
 actual Mac sleep/wake. Power log records Wake from Deep Idle at 21:45:55 PDT.
 However, the first output stream startup failed with PortAudio -9986; the
 existing reminder retry delivered it about 30 seconds later. This is recovered
@@ -319,7 +319,7 @@ leave the retained owned Apple reminder untouched. No deployment or push.
 
 ## Current focus correction — October 2, 2026
 
-the user confirms the retained test reminder is absent from iCloud.com as well as
+The user confirms the retained test reminder is absent from iCloud.com as well as
 from iPhone. This narrows the unresolved issue to Mac-to-iCloud/account upload;
 full iCloud storage is a plausible cause, not proven. Leave the owned test
 present and incomplete. Do not proceed to OS sleep testing yet: the user explicitly
@@ -330,9 +330,9 @@ resume pass. Continue phone/cloud diagnosis before requesting another phase.
 ## Reliability follow-up — October 2, 2026, evening
 
 The second owned Apple test is intentionally left present and incomplete until
-the user confirms phone receipt. Private state: `.cache/supervised-apple-phone-retry-20261002`.
+The user confirms phone receipt. Private state: `.cache/supervised-apple-phone-retry-20261002`.
 It was due at 21:05 PDT. Native readback confirms one alarm and the configured
-list belongs to iCloud (list name Reminders). the user reports it appears only on
+list belongs to iCloud (list name Reminders). The user reports it appears only on
 Mac despite Reminders enabled and matching-looking lists on iPhone. He reports
 full iCloud storage: plausible sync cause, not yet demonstrated. Do not delete
 or complete this item automatically. Phone/server delivery remains unverified.
@@ -367,7 +367,7 @@ Normal launcher remains unchanged; vision off; no deployment or GitHub push.
 
 ## Supervised device and latency update — October 2, 2026
 
-the user confirmed physical calculation, assistant sleep and wake controls worked,
+The user confirmed physical calculation, assistant sleep and wake controls worked,
 but the original response felt slow. He selected the lift reference for
 “Great, that worked!”; seed-1301 identity and two-prompt routing remain intact.
 Three actual streaming playback clips had zero output underflows. The separate
@@ -385,7 +385,7 @@ loaded during ASR remains opt-in (`JULIUS_MLX_ASR_KEEP_VOICE=1`). An initial
 experiment hit the resource guard with a leftover reasoning model loaded;
 a clean bounded repeat passed with minimum free 38% and no swap growth.
 Live calculator processing after transcription improved from 7.40 to 1.52 s;
-the user confirmed the retry felt noticeably faster. This is one paired observation,
+The user confirmed the retry felt noticeably faster. This is one paired observation,
 not an end-to-end latency distribution or proof of optimal performance.
 
 146 regression tests pass. Vision stays off and the normal launcher remains
@@ -562,7 +562,7 @@ Raw evidence is in `benchmarks/2026-09-30/`. Model tests used the same original 
 - Kokoro generated ~2.7-second clips in about 1.15–1.30 s.
 - BF16 Qwen clone generated ~2.9–3.2-second clips in 6.52–7.29 s warm, with 11.23 s on the first sample. MPS active allocation was about 2.20 GB, driver allocation about 3.27 GB. Separate-worker startup was ~13 s, and its sample took ~6.74 s.
 - Whisper correctly transcribed all six generated voice samples. The reference transcript was also recovered.
-- Recorded face-present vision workload, 20-second samples: original 8 FPS used 33.83 CPU-seconds; 2 FPS/one-second emotion interval used 9.48; restricting retained InsightFace modules used 6.04. Final reduction: approximately 82%. the user's identity confidence (~0.8265) and neutral-expression confidence (~0.4698) remained consistent on this static recording. This is CPU work, not a measured wattage or battery-life improvement.
+- Recorded face-present vision workload, 20-second samples: original 8 FPS used 33.83 CPU-seconds; 2 FPS/one-second emotion interval used 9.48; restricting retained InsightFace modules used 6.04. Final reduction: approximately 82%. The user's identity confidence (~0.8265) and neutral-expression confidence (~0.4698) remained consistent on this static recording. This is CPU work, not a measured wattage or battery-life improvement.
 
 The Mac has 16 GB unified memory and already had about 39.7 GB swap in use before testing. Background workload, swap, model load order, and differing generated replies affect these timings. No fresh model-weight downloads were necessary. The historical crash cause is not conclusively identified. The old 1.7B float32 voice adds a substantially larger memory requirement than the tested 0.6B BF16 clone, but it was not deliberately relaunched to reproduce a crash.
 

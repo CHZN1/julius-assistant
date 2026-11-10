@@ -4,10 +4,12 @@ Usage: python -m scripts.live_tool_check
 """
 
 import json
+import os
+from pathlib import Path
 
-from scripts.experiments.julius_benchmark_paths import BENCHMARK_DIR
 from tests.harness import TurnHarness
 
+BENCHMARK_DIR = Path(os.environ.get("JULIUS_BENCH_DIR", "benchmarks"))
 PROMPTS = [
     "What's the weather today?",
     "Is that for Springfield?",
@@ -39,6 +41,7 @@ def main() -> None:
         for keyword, expected in EXPECTED.items():
             if keyword in text:
                 assert expected in out
+    BENCHMARK_DIR.mkdir(parents=True, exist_ok=True)
     (BENCHMARK_DIR / "candidate_live_tools.json").write_text(json.dumps(rows, indent=2))
     print(f"Turn function completed all {len(PROMPTS)} live tool/follow-up checks")
 

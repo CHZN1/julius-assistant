@@ -1,6 +1,6 @@
 ## Natural conversation trial — October 2, 2026
 
-the user confirms the overdue reminder and microphone calculation both worked after
+The user confirms the overdue reminder and microphone calculation both worked after
 actual Mac sleep/wake. Power log records Wake from Deep Idle at 21:45:55 PDT.
 However, the first output stream startup failed with PortAudio -9986; the
 existing reminder retry delivered it about 30 seconds later. This is recovered
@@ -33,7 +33,7 @@ leave the retained owned Apple reminder untouched. No deployment or push.
 
 ## Current focus correction — October 2, 2026
 
-the user confirms the retained test reminder is absent from iCloud.com as well as
+The user confirms the retained test reminder is absent from iCloud.com as well as
 from iPhone. This narrows the unresolved issue to Mac-to-iCloud/account upload;
 full iCloud storage is a plausible cause, not proven. Leave the owned test
 present and incomplete. Do not proceed to OS sleep testing yet: the user explicitly
@@ -44,9 +44,9 @@ resume pass. Continue phone/cloud diagnosis before requesting another phase.
 ## Reliability follow-up — October 2, 2026, evening
 
 The second owned Apple test is intentionally left present and incomplete until
-the user confirms phone receipt. Private state: `.cache/supervised-apple-phone-retry-20261002`.
+The user confirms phone receipt. Private state: `.cache/supervised-apple-phone-retry-20261002`.
 It was due at 21:05 PDT. Native readback confirms one alarm and the configured
-list belongs to iCloud (list name Reminders). the user reports it appears only on
+list belongs to iCloud (list name Reminders). The user reports it appears only on
 Mac despite Reminders enabled and matching-looking lists on iPhone. He reports
 full iCloud storage: plausible sync cause, not yet demonstrated. Do not delete
 or complete this item automatically. Phone/server delivery remains unverified.
@@ -81,7 +81,7 @@ Normal launcher remains unchanged; vision off; no deployment or GitHub push.
 
 ## Supervised device and latency update — October 2, 2026
 
-the user confirmed physical calculation, assistant sleep and wake controls worked,
+The user confirmed physical calculation, assistant sleep and wake controls worked,
 but the original response felt slow. He selected the lift reference for
 “Great, that worked!”; seed-1301 identity and two-prompt routing remain intact.
 Three actual streaming playback clips had zero output underflows. The separate
@@ -99,7 +99,7 @@ loaded during ASR remains opt-in (`JULIUS_MLX_ASR_KEEP_VOICE=1`). An initial
 experiment hit the resource guard with a leftover reasoning model loaded;
 a clean bounded repeat passed with minimum free 38% and no swap growth.
 Live calculator processing after transcription improved from 7.40 to 1.52 s;
-the user confirmed the retry felt noticeably faster. This is one paired observation,
+The user confirmed the retry felt noticeably faster. This is one paired observation,
 not an end-to-end latency distribution or proof of optimal performance.
 
 146 regression tests pass. Vision stays off and the normal launcher remains

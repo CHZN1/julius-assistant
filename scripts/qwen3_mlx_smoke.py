@@ -1,4 +1,4 @@
-"""Unit tests for qwen3 mlx."""
+"""Manual smoke script (not a unit test): loads Qwen3-8B 4-bit with MLX and asks three questions. Run it directly; it downloads the model on first use."""
 
 import time
 

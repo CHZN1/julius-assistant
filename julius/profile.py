@@ -1,8 +1,11 @@
 """Default launch profile: cloud brain (Haiku/Sonnet tiers from julius.toml) with the MLX voice.
 run_julius.sh's `cloud` profile sets the same values; test_julius_default_profile.py keeps them in sync."""
 
+import json
 import os
 import re
+from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 CLOUD_DEFAULTS = {
@@ -45,11 +48,64 @@ def home_city() -> str:
 
 
 def apply(text: str, profile: None = None) -> str:
-    """Swap the author's placeholder name and city in a prompt for this install's profile. Applied to the system prompt and tool descriptions on their way to the model."""
+    """Swap the placeholder user ("the user") and placeholder city in a prompt for this install's profile. Applied to the system prompt and tool descriptions on their way to the model. With no name set the text is left as written."""
     p = profile if profile is not None else _profile()
-    name = (p.get("name") or "").strip() or "the user"
+    name = (p.get("name") or "").strip()
     city = (p.get("home_city") or "").strip() or "the user's home city"
-    text = re.sub(
-        r"\bRoy(?:'s)?\b", lambda m: name + ("'s" if m.group(0).endswith("'s") else ""), text
+    if name:
+        text = re.sub(
+            r"\b([Tt])he user(?:'s)?\b",
+            lambda m: name + ("'s" if m.group(0).endswith("'s") else ""),
+            text,
+        )
+    return text.replace(PLACEHOLDER_CITY, city)
+
+
+PLACEHOLDER_CITY = "Springfield, Illinois"
+
+
+def _toml_string(value: str) -> str:
+    return json.dumps(value, ensure_ascii=False)
+
+
+def local_config_path() -> Path:
+    import julius.config as cfg
+
+    return Path(os.environ.get("JULIUS_LOCAL_CONFIG") or cfg.ROOT / "julius.local.toml")
+
+
+def needs_setup() -> bool:
+    """True until a name or a home city has been configured."""
+    p = _profile()
+    return not ((p.get("name") or "").strip() or (p.get("home_city") or "").strip())
+
+
+def setup(ask: Callable[[str], str] = input, say: Callable[[str], Any] = print) -> Path | None:
+    """First-run questions: name, home city, words Whisper should know. Writes [profile] to julius.local.toml (gitignored). Never overwrites an existing [profile]."""
+    path = local_config_path()
+    if path.is_file() and "[profile]" in path.read_text():
+        say(f"{path} already has a [profile] section; edit it there.")
+        return None
+    name = ask("What should Julius call you? (blank to skip) ").strip()
+    city = ask("Home city for weather, e.g. Reno, Nevada (blank to skip) ").strip()
+    words = ask("Names Whisper should recognise, comma separated (blank to skip) ")
+    vocabulary = [w.strip() for w in words.split(",") if w.strip()]
+    block = (
+        "[profile]\n"
+        f"name = {_toml_string(name)}\n"
+        f"home_city = {_toml_string(city)}\n"
+        f"vocabulary = [{', '.join(_toml_string(w) for w in vocabulary)}]\n"
     )
-    return text.replace("Springfield, Illinois", city)
+    existing = path.read_text() if path.is_file() else ""
+    path.write_text(existing + ("\n" if existing and not existing.endswith("\n\n") else "") + block)
+    say(f"Saved to {path} (gitignored). Edit it any time.")
+    return path
+
+
+if __name__ == "__main__":
+    import sys
+
+    if sys.argv[1:] == ["setup"]:
+        setup()
+    else:
+        print("usage: python -m julius.profile setup")

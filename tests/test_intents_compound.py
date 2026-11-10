@@ -40,7 +40,8 @@ class CompoundRoutingTests(unittest.TestCase):
             self.resolve("What time is it in Tokyo?"), ("get_datetime", {"location": "Tokyo"})
         )
         self.assertEqual(
-            self.resolve("What's the weather in Springfield?"), ("get_weather", {"location": "Springfield"})
+            self.resolve("What's the weather in Springfield?"),
+            ("get_weather", {"location": "Springfield"}),
         )
 
 

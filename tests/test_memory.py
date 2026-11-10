@@ -190,7 +190,8 @@ class CorrectionTests(unittest.TestCase):
         d, s, a, _ = make()
         a.handle("remember I live in Springfield California")
         a.autocapture(
-            "I live in Springfield and I love it", lambda p: '{"facts": ["the user lives in Springfield."]}'
+            "I live in Springfield and I love it",
+            lambda p: '{"facts": ["the user lives in Springfield."]}',
         )
         self.assertEqual(len(s.all()), 1)
         self.assertEqual(s.all()[0]["text"], "I live in Springfield California")
@@ -252,7 +253,8 @@ class AutoCaptureTests(unittest.TestCase):
 
         rows = a.autocapture("I am allergic to peanuts and I live in Springfield", llm)
         self.assertEqual(
-            [r["text"] for r in rows], ["the user is allergic to peanuts.", "the user lives in Springfield."]
+            [r["text"] for r in rows],
+            ["the user is allergic to peanuts.", "the user lives in Springfield."],
         )
         self.assertTrue(all(r["source"] == "auto" for r in s.all()))
         self.assertEqual(a.autocapture("what time is it", llm), [])

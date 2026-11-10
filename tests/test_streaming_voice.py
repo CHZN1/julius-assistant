@@ -20,8 +20,8 @@ class StreamingProtocolTests(unittest.TestCase):
         from julius.audio.voice_identity import REF_TEXT
 
         self.assertEqual(
-            normalize_speech("Reminder: the user, check this."),
-            "Here is your reminder. the user, check this.",
+            normalize_speech("Reminder: Sam, check this."),
+            "Here is your reminder. Sam, check this.",
         )
         self.assertEqual(normalize_speech(REF_TEXT), REF_TEXT)
         self.assertEqual(

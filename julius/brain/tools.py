@@ -367,7 +367,10 @@ SCHEMAS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "location": {"type": "string", "description": "City, e.g. 'Springfield, Illinois'"}
+                    "location": {
+                        "type": "string",
+                        "description": "City, e.g. 'Springfield, Illinois'",
+                    }
                 },
                 "required": [],
             },
@@ -713,9 +716,7 @@ def forget_fact(topic: str = "") -> str:
     if not topic:
         return memory_assistant._forget_that()
     if not _grounded(topic, _said_this_turn(), 0.01):
-        return (
-            "Not deleted: that topic is not what the user just asked to forget. Ask him what to forget."
-        )
+        return "Not deleted: that topic is not what the user just asked to forget. Ask him what to forget."
     return memory_assistant._forget(topic)
 
 
@@ -770,7 +771,7 @@ def code_request(request: str = "", goal: str = "", project: str = "") -> str:
             code_session.handle(said, turn) if said else None
         )
     if out is None:
-        return "That is not a coding-agent command I understood. the user can say 'have the coding agent fix the failing tests in <project>', then yes to start; later 'show the changes', 'merge it', 'undo the merge' or 'cancel the coding task'."
+        return "That is not a coding-agent command I understood. The user can say 'have the coding agent fix the failing tests in <project>', then yes to start; later 'show the changes', 'merge it', 'undo the merge' or 'cancel the coding task'."
     return out["message"] + (
         " (Staged only: nothing runs or merges until the user says yes.)"
         if out.get("code") == "preview"

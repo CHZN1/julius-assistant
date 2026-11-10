@@ -22,7 +22,9 @@ class NormalizeTests(unittest.TestCase):
             normalize_request("Thanks, Julius. What's 17% of 2480?"), "What's 17% of 2480?"
         )
         self.assertEqual(normalize_request("Julius, what about tomorrow?"), "what about tomorrow?")
-        self.assertEqual(normalize_request("Okay, hey Julius, and in Shelbyville?"), "in Shelbyville?")
+        self.assertEqual(
+            normalize_request("Okay, hey Julius, and in Shelbyville?"), "in Shelbyville?"
+        )
         self.assertEqual(
             normalize_request("Okay, hey Julius, and in Shelbyville?", keep_and=True),
             "and in Shelbyville?",
@@ -58,7 +60,9 @@ class RouterFollowUpTests(unittest.TestCase):
             want = (
                 "get_forecast",
                 {
-                    "location": "Shelbyville" if text.endswith("Shelbyville") else "Springfield, Illinois",
+                    "location": "Shelbyville"
+                    if text.endswith("Shelbyville")
+                    else "Springfield, Illinois",
                     "days": 2,
                 },
             )
@@ -81,7 +85,8 @@ class RouterFollowUpTests(unittest.TestCase):
         r = LiveIntentRouter()
         r.record("get_forecast", {"location": "Springfield", "days": 2}, "out")
         self.assertEqual(
-            r.resolve("and in Shelbyville?"), ("get_forecast", {"location": "Shelbyville", "days": 2})
+            r.resolve("and in Shelbyville?"),
+            ("get_forecast", {"location": "Shelbyville", "days": 2}),
         )
 
     def test_other_symbol_after_a_price(self):

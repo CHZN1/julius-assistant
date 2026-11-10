@@ -115,24 +115,9 @@ TRANSCRIPT_FIXES = [
 ]
 
 
-ACMECORP = (
-    re.compile(r"\b(?:prize|price)[ -]?pic(?:k|ks|s)\b", re.I),
-    "AcmeCorp",
-)  # only for installs that list AcmeCorp in [profile] vocabulary
-
-
 def fix_transcript(text: str) -> str:
-    """Correct known product names and acronyms in recognised text (AcmeCorp, NHL, NFL)."""
-    fixes = TRANSCRIPT_FIXES
-    if "acmecorp" in text.lower().replace(" ", "").replace("-", "") or ACMECORP[0].search(text):
-        try:
-            from julius import config
-
-            if "AcmeCorp" in config.load_config().get("profile", {}).get("vocabulary", []):
-                fixes = [ACMECORP] + fixes
-        except Exception:
-            pass
-    for pattern, replacement in fixes:
+    """Correct known acronyms in recognised text (ETH, NHL, NFL)."""
+    for pattern, replacement in TRANSCRIPT_FIXES:
         text = pattern.sub(replacement, text)
     return text
 

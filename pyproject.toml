@@ -16,7 +16,7 @@ test = [
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-extend-exclude = ["emotion", "scripts/experiments", "*.ipynb"]
+extend-exclude = ["*.ipynb"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "C90", "UP", "SIM", "T20"]
@@ -30,10 +30,10 @@ max-complexity = 20
 # print is the interface of the command-line tools and workers; library code writes through julius.log.console.
 "evals/*" = ["E402", "T20"]
 "diagnostics/*" = ["E402", "T20"]
-"benchmarks/*" = ["E402", "T20"]
 "scripts/*" = ["E402", "T20"]
 "julius/service/*" = ["T20"]
 "julius/wake/*" = ["T20"]
+"julius/profile.py" = ["T20"]
 "julius/memory/review.py" = ["T20"]
 "julius/memory/store.py" = ["T20"]
 "julius/ui_bridge/events_client.py" = ["T20"]

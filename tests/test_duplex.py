@@ -67,7 +67,9 @@ class Passthrough:
         return np.asarray(c, dtype=np.float32)
 
 
-def room(duplex, played, user=None, echo_gain=0.07, delay=0.03, noise=0.0008, seed=1, on_frame=None):
+def room(
+    duplex, played, talker=None, echo_gain=0.07, delay=0.03, noise=0.0008, seed=1, on_frame=None
+):
     """Drive the duplex callback like PortAudio would: 10 ms blocks; the microphone hears the previous output with a delay plus room noise plus optional the user."""
     st = duplex.start() or duplex.stream
     r = np.random.default_rng(seed)
@@ -85,8 +87,8 @@ def room(duplex, played, user=None, echo_gain=0.07, delay=0.03, noise=0.0008, se
                 out_all[lo : lo + B] + 0.35 * out_all[max(0, lo - 7) : max(0, lo - 7) + B]
             )
         mic += (noise * r.standard_normal(B)).astype(np.float32)
-        if user is not None:
-            mic += user[i : i + B]
+        if talker is not None:
+            mic += talker[i : i + B]
         outdata = np.zeros((B, 1), np.float32)
         st.callback(mic.reshape(-1, 1).copy(), outdata, B, None, None)
         out_all[i : i + B] = outdata[:, 0]
@@ -238,9 +240,9 @@ class Fallback(unittest.TestCase):
         from julius.audio.aec import EchoCanceller
 
         d, mon = self.make(EchoCanceller(lag=0.0))
-        user = np.zeros(RATE * 12, np.float32)
-        user[RATE * 3 :] = voice_like(9.0, 99, rms=0.012)
-        room(d, voice_like(12.0, 10), user=user)
+        talker = np.zeros(RATE * 12, np.float32)
+        talker[RATE * 3 :] = voice_like(9.0, 99, rms=0.012)
+        room(d, voice_like(12.0, 10), talker=talker)
         self.assertFalse(mon.fell_back, mon.reason)
 
 
@@ -264,15 +266,15 @@ class BargeIn(unittest.TestCase):
             canceller=EchoCanceller(lag=0.0) if canceller else Passthrough(),
             monitor=mon,
         )
-        user = None
+        talker = None
         if roy_from is not None:
-            user = np.zeros(int(seconds * RATE), np.float32)
-            user[int(roy_from * RATE) :] = voice_like(seconds - roy_from, 77, rms=roy_rms)
+            talker = np.zeros(int(seconds * RATE), np.float32)
+            talker[int(roy_from * RATE) :] = voice_like(seconds - roy_from, 77, rms=roy_rms)
 
         def tick(t):
             self.now = t
 
-        room(d, voice_like(seconds, 11), user=user, on_frame=tick)
+        room(d, voice_like(seconds, 11), talker=talker, on_frame=tick)
         return mon
 
     def test_speaking_over_him_triggers_quickly(self):

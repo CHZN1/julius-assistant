@@ -4,7 +4,7 @@ import os
 import tempfile
 from pathlib import Path
 
-PERSONAL = '[profile]\nname = "the user"\nhome_city = "Springfield, Illinois"\nvocabulary = ["AcmeCorp", "Pat Example", "FER 2013", "Ethereum", "ETH", "Bitcoin"]\n[asr]\nnhl_teams = ["Sharks"]\nnfl_teams = ["Chiefs"]\n'
+PERSONAL = '[profile]\nname = "Alex"\nhome_city = "Springfield, Illinois"\nvocabulary = ["AcmeCorp", "Pat Example", "FER 2013", "Ethereum", "ETH", "Bitcoin"]\n[asr]\nnhl_teams = ["Sharks"]\nnfl_teams = ["Chiefs"]\n'
 
 
 def personal(testcase, text=PERSONAL):
