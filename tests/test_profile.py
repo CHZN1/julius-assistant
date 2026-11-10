@@ -151,3 +151,27 @@ class VisionHook(unittest.TestCase):
         self.addCleanup(os.environ.pop, "JULIUS_VISION_MODULE", None)
         with self.assertRaises(ImportError):
             VisionMode(enabled=True)
+
+
+class ModelFetch(unittest.TestCase):
+    def test_fetch_downloads_wake_speech_and_voice_models_into_the_workers_cache(self):
+        import sys
+        import types
+        from unittest.mock import patch
+
+        from julius import models
+
+        calls = []
+        hub = types.ModuleType("huggingface_hub")
+        hub.snapshot_download = lambda repo, **kw: calls.append((repo, kw.get("cache_dir")))
+        oww = types.ModuleType("openwakeword.utils")
+        oww.download_models = lambda: calls.append(("wake", None))
+        pkg = types.ModuleType("openwakeword")
+        pkg.utils = oww
+        with patch.dict(
+            sys.modules,
+            {"huggingface_hub": hub, "openwakeword": pkg, "openwakeword.utils": oww},
+        ):
+            models.fetch(lambda _m: None)
+        self.assertEqual([c[0] for c in calls], ["wake", models.WHISPER_REPO, models.VOICE_REPO])
+        self.assertEqual(calls[2][1], models.voice_cache_dir())

@@ -34,6 +34,7 @@ max-complexity = 20
 "julius/service/*" = ["T20"]
 "julius/wake/*" = ["T20"]
 "julius/profile.py" = ["T20"]
+"julius/models.py" = ["T20"]
 "julius/memory/review.py" = ["T20"]
 "julius/memory/store.py" = ["T20"]
 "julius/ui_bridge/events_client.py" = ["T20"]

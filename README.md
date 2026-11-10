@@ -74,9 +74,9 @@ Numbers come from the author's Mac (M-series, 16 GB) and the suites in `evals/`.
 1. Clone, then create the main environment: `python3.12 -m venv .venv && . .venv/bin/activate && pip install -r requirements-cloud.txt`.
 2. Create the voice environment (the voice runs as a separate process because its pins conflict with the main environment): `python3.12 -m venv .venv-mlx-tts && .venv-mlx-tts/bin/pip install -r requirements-mlx-voice.txt`.
 3. `cp .env.example .env` and paste your `ANTHROPIC_API_KEY` (never committed, never logged). Set a spend cap in the Anthropic console too.
-4. Download the wake-word feature models once: `python -c "import openwakeword.utils as u; u.download_models()"`.
+4. Download the models once: `python -m julius.models fetch` (wake-word features, Whisper small.en, the Qwen3-TTS voice; about 2 GB). Without this the first start waits on downloads and the voice worker times out.
 5. First run: `python -m julius.profile setup` asks your name, home city and any words Whisper should know (team names, product names), and writes them to `julius.local.toml`, which is gitignored. Skip it and Julius asks for a city the first time you want the weather.
-6. Run in the foreground: `python -m julius`, or install as a login service: `python -m julius.service.service on`. The first run downloads the speech models (a few GB) from Hugging Face, so it takes several minutes. Type a request at the prompt or say "Julius".
+6. Run in the foreground: `python -m julius`, or install as a login service: `python -m julius.service.service on`. Type a request at the prompt or say "Julius".
 7. Check it: `python -m julius.service.service doctor`, then `python -m julius.service.service smoke`.
 
 Vision is off and ships without an implementation. To add one, point `JULIUS_VISION_MODULE` at a module exposing `Perception` and `describe`; [fer2013-emotion-cnn](https://github.com/CHZN1/fer2013-emotion-cnn) is one such plugin.
