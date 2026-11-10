@@ -66,17 +66,17 @@ evals/results/dev_runs/
 wake/data/
 wake/personal/
 
-!wake/models/julius.onnx
+!julius/wake/models/julius.onnx
 
 # Voice eval recordings (the user's voice and conversation text): local only, never committed or released. Delete with: python evals/voice_record.py delete-all
 voice_data/
 
 # Personal values (name, city, vocabulary, private wake model): never committed
 julius.local.toml
-wake/models/julius.onnx
-wake/models/julius_head.pt
-wake/models/julius_public.onnx.data
-!wake/models/julius_starter.onnx
-!wake/models/julius_starter_head.pt
-wake/models/julius_public.onnx
-wake/models/julius_head_public.pt
+julius/wake/models/julius.onnx
+julius/wake/models/julius_head.pt
+julius/wake/models/julius_public.onnx.data
+!julius/wake/models/julius_starter.onnx
+!julius/wake/models/julius_starter_head.pt
+julius/wake/models/julius_public.onnx
+julius/wake/models/julius_head_public.pt

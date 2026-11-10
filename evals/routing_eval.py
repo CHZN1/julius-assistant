@@ -23,10 +23,10 @@ def load_cases(only=None):
 
 def system_prompt():
     """The production SYSTEM prompt (cloud profile), read from julius_candidate without importing its runtime."""
-    import julius_cloud as jc
-    from julius_vision_mode import vision_capability_prompt
+    import julius.brain.cloud as jc
+    from julius.brain.vision_mode import vision_capability_prompt
     ns = {}
-    for n in ast.parse((ROOT / "julius_candidate.py").read_text()).body:
+    for n in ast.parse((ROOT / "julius/runtime.py").read_text()).body:
         if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "SYSTEM" for t in n.targets):
             exec(compile(ast.Module(body=[n], type_ignores=[]), "<candidate>", "exec"), ns)
     return ns["SYSTEM"] + vision_capability_prompt(False) + jc.CAPABILITIES_PROMPT + jc.PLANNING_PROMPT
@@ -34,10 +34,10 @@ def system_prompt():
 class Sandbox:
     """Fresh file area + planner state per run; nothing outside a temp directory is read or written."""
     def __init__(self):
-        from julius_file_agent import FileAgent
-        from julius_file_session import FileSession
-        from julius_utility_session import UtilitySession
-        from julius_planning import Planner
+        from julius.agents.file_agent import FileAgent
+        from julius.agents.file_session import FileSession
+        from julius.agents.utility_session import UtilitySession
+        from julius.brain.planning import Planner
         self.dir = Path(tempfile.mkdtemp(prefix="julius_eval_")).resolve()
         home = self.dir / "home"
         for d in ("Documents", "Desktop", "Downloads"): (home / d).mkdir(parents=True)
@@ -46,9 +46,9 @@ class Sandbox:
         self.agent = FileAgent(home, self.dir / "state")
         self.files = FileSession(self.agent)
         self.utility = UtilitySession(Planner(self.dir / "planner"), "America/Los_Angeles", None)
-        from julius_intents import LiveIntentRouter
+        from julius.brain.intents import LiveIntentRouter
         self.new_router = LiveIntentRouter
-        from julius_code_session import CodeSession
+        from julius.agents.code_session import CodeSession
         (self.dir / "dev" / "demo").mkdir(parents=True); (self.dir / "dev" / "demo" / "calc.py").write_text("def add(a, b):\n    return a - b\n")
         self.code = CodeSession(config={"projects_root": str(self.dir / "dev")}, projects_root=str(self.dir / "dev"), sandbox=False)   # stages previews only; nothing here ever starts a run
 
@@ -61,7 +61,7 @@ def shortcut(text, sb, ctx, turn, case_history=None):
     if code is not None:
         if sb.code.pending: sb.code.handle("cancel", turn)   # the eval never starts a coding task
         return {"path": "shortcut", "tool": f"code:{code.get('code')}", "args": "", "ok": bool(code.get("ok")), "detail": code.get("message", "")[:200]}
-    from julius_router import route
+    from julius.agents.file_router import route
     kind = route(text, sb.agent.root / "Documents", pending=False, has_last=False)
     hist = case_history or []
     sb.files.suppress_idle_yes = bool(hist and hist[-1].get("role") == "assistant" and str(hist[-1].get("content", "")).rstrip().endswith("?"))
@@ -97,7 +97,7 @@ def judge(case, got):
     return path_ok, tool_ok, args_ok, success_ok
 
 def brain_turn(case, brain, tracker, system):
-    import julius_tools as jt
+    import julius.brain.tools as jt
     msgs = [{"role": "system", "content": system}] + case.get("history", []) + [{"role": "user", "content": case["text"]}]
     before, t0 = sum(tracker.today_by_tier().values()), time.perf_counter()
     try:
@@ -132,7 +132,7 @@ def main():
     skipped = set()
     runs = {}
     if pending and not a.no_brain:
-        import julius_cloud as jc
+        import julius.brain.cloud as jc
         brain, tracker, system = jc.get_brain(), jc.get_tracker(), system_prompt()
         jobs = [(c, k) for c in pending for k in range(a.runs)]
         with ThreadPoolExecutor(a.workers) as ex:

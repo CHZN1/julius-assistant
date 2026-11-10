@@ -75,8 +75,8 @@ def front_end(mic, out, mode, duplex=False):
         for i in np.flatnonzero(shut): sig[i * CHUNK:(i + 1) * CHUNK] = 0
         return sig
     if mode == "aec":
-        import julius_aec
-        return julius_aec.cancel(mic, out, lag=0.0 if duplex else PHYS)   # duplex recordings: the reference is already sample-aligned
+        from julius.audio import aec
+        return aec.cancel(mic, out, lag=0.0 if duplex else PHYS)   # duplex recordings: the reference is already sample-aligned
     raise ValueError(mode)
 
 
@@ -85,8 +85,8 @@ _asr_ready = False
 
 def transcribe(audio):
     global _asr_ready
-    import mlx_whisper, julius_config
-    prompt = julius_config.asr_initial_prompt()
+    import mlx_whisper; from julius import config
+    prompt = config.asr_initial_prompt()
     r = mlx_whisper.transcribe(audio.astype(np.float32), path_or_hf_repo=ASR, condition_on_previous_text=False, language="en", no_speech_threshold=0.6, **({"initial_prompt": prompt} if prompt else {}))
     nsp = max((s.get("no_speech_prob", 0) for s in r.get("segments", [])), default=0)
     return r["text"].strip(), nsp
@@ -104,8 +104,8 @@ def replay_take(take, mode):
         mic_s = end_ev.get("mic_seconds") or n / SR   # mic.wav is padded to the length of out.wav; the true microphone duration is in the session_end event
         off = (end_ev["t"] - t0) - mic_s   # first guess: when the microphone opened relative to session_start (the session closes a little after the last sample, so this is too large)
         shift = int(round(off * SR)); out = np.concatenate([out[shift:], np.zeros(shift, dtype=np.float32)])[:n] if shift > 0 else out
-        import julius_aec
-        lag = julius_aec.estimate_lag(mic, out)   # whatever is left is the acoustic delay (PHYS) plus the error of that guess
+        from julius.audio import aec
+        lag = aec.estimate_lag(mic, out)   # whatever is left is the acoustic delay (PHYS) plus the error of that guess
         off += lag - PHYS if lag > 0.1 else 0.0
         shift2 = int(round((lag - PHYS) * SR))
         if lag > 0.1 and shift2 != 0:   # move out.wav so it sits at the moment each chunk was WRITTEN to the device (the live gate's clock); the echo then trails it by PHYS
@@ -136,8 +136,8 @@ def replay_take(take, mode):
 
 
 def ve_overlap(heard, spoken):
-    import julius_selfecho
-    return julius_selfecho.overlap(heard, spoken)
+    from julius.audio import selfecho
+    return selfecho.overlap(heard, spoken)
 
 
 def summarize(rows):

@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 REAL = ROOT / "diagnostics" / "wake_real"
 SR, FRAME = 16000, 1280  # openWakeWord reads 80 ms frames
-from wake.stream import run_clip
+from julius.wake.stream import run_clip
 
 def load(session):
     files = sorted((REAL / session).glob(f"{session}_*.wav"))
@@ -30,8 +30,8 @@ def oww_scores(model, audio, tail=0.6):
 
 def whisper_wake(clips):
     import mlx_whisper, mlx.core as mx
-    import julius_config, julius_listening as jl
-    hint = julius_config.asr_initial_prompt(wake=True)
+    from julius import config; import julius.audio.listening as jl
+    hint = config.asr_initial_prompt(wake=True)
     repo = "mlx-community/whisper-small.en-mlx"
     def run(a):
         mx.random.seed(1301)
@@ -112,7 +112,7 @@ def compare():
     """python evals/wake_eval.py compare MODEL DETECTOR_THR LOW_THR [WAKE_SESSION] [VERIFIER.pkl] [SPEAKER_THR]
     Detector alone vs cascade v2 (low-threshold stage 1 -> whole-utterance Whisper) vs cascade v2 + personal speaker verifier, same metrics.
     talk3 and the held-out Julius-voice lines are the false-wake sets; WAKE_SESSION (default wake3) is the miss-rate set."""
-    from wake.stream import WakeStream, whisper_verify
+    from julius.wake.stream import WakeStream, whisper_verify
     import pickle
     model, t_det, t_low = sys.argv[2], float(sys.argv[3]), float(sys.argv[4])
     session = sys.argv[5] if len(sys.argv) > 5 else "wake3"; vpath = Path(sys.argv[6]).expanduser() if len(sys.argv) > 6 else None
@@ -151,8 +151,8 @@ def compare():
 def suite():
     """python evals/wake_eval.py suite : the shipped configuration ([wake] in julius.toml, personal verifier if present) on every fresh wake set
     (wake3, wake4 ...), talk3 and the held-out Julius-voice lines. Writes evals/results/wakecascade_<time>.summary.json for run_all.py."""
-    from wake.stream import WakeStream, whisper_verify
-    import pickle, julius_config as cfg
+    from julius.wake.stream import WakeStream, whisper_verify
+    import pickle; import julius.config as cfg
     wake_cfg = cfg.load_config()["wake"]; verify = whisper_verify()
     vpath = Path(str(wake_cfg["verifier"])).expanduser(); speaker = pickle.load(open(vpath, "rb")) if vpath.exists() else None
     model_file = Path(os.environ.get("WAKE_EVAL_MODEL") or ROOT / "wake" / "models" / "julius.onnx")   # WAKE_EVAL_MODEL: score another model (e.g. julius_public.onnx) with the same cascade

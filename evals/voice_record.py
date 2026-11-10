@@ -138,7 +138,7 @@ def record_scenario(sc, take, keys, extra_env=None):
             try: proc.wait(40)
             except subprocess.TimeoutExpired: proc.terminate(); proc.wait(10)
         log.close()
-        from julius_session_record import finalize
+        from julius.audio.session_record import finalize
         finalize(rec)   # no-op when Julius already closed the recording itself
         shutil.rmtree(memory, ignore_errors=True)
     if result == "keep":
@@ -151,7 +151,7 @@ def record_scenario(sc, take, keys, extra_env=None):
 
 
 def record(prefixes, duplex=False):
-    import julius_service as svc
+    import julius.service.service as svc
     scenarios = select(load_scenarios(DUPLEX_SCENARIOS if duplex else SCENARIOS), prefixes)
     for sc in scenarios:
         for p in preflight(sc): print(f"cannot record {sc['id']}: {p}"); return 1

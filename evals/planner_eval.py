@@ -78,9 +78,9 @@ def main():
     os.environ["JULIUS_BACKEND"] = "cloud"
     os.environ["JULIUS_COSTS_FILE"] = str(Path(tempfile.mkdtemp(prefix="julius_planner_costs_")) / "costs.jsonl")
     os.environ.setdefault("JULIUS_MEMORY_DIR", tempfile.mkdtemp(prefix="julius_planner_mem_"))
-    import julius_cloud as jc, julius_costs as costs, julius_files as jf, julius_orchestrator as jo
-    from julius_file_agent import FileAgent
-    from julius_file_session import FileSession
+    import julius.brain.cloud as jc; import julius.costs as costs; import julius.agents.files as jf; import julius.brain.orchestrator as jo
+    from julius.agents.file_agent import FileAgent
+    from julius.agents.file_session import FileSession
     tracker = jc.get_tracker(); tracker.cap = 1e9 if hasattr(tracker, "cap") else None
     brain = jc.get_brain()
     brain.tracker.cap_reached = lambda: False   # the eval has its own limit below
@@ -94,7 +94,7 @@ def main():
             jf.SAFE_ROOT, jf.STATE, jf._INSTANCE = home, tmp / "state", None
             agent = FileAgent(home, tmp / "state"); agent.use_birthtime = False
             jf._INSTANCE = ((str(home), str(tmp / "state")), agent)
-            import julius_tools as jt; jt._dispatcher = None   # the tools' dispatcher holds the previous run's agent
+            import julius.brain.tools as jt; jt._dispatcher = None   # the tools' dispatcher holds the previous run's agent
             session = FileSession(agent); turn = [0]
             jo.configure(file_session=session, turn=lambda: turn[0] + 1, user_text=REQUESTS[ri])
             before, attempts, calls, real = snapshot(home), set(), [], jo.files_propose

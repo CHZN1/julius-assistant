@@ -5,13 +5,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-import julius_livedata as ld
+import julius.brain.livedata as ld
 
 
 def run(cases):
     tmp = Path(tempfile.mkdtemp(prefix="livedata_")); (tmp / "in.json").write_text(json.dumps([c["say"] for c in cases]))
     env = {**os.environ, "JULIUS_PROFILE": "cloud", "JULIUS_VALIDATION_NO_DEVICES": "1", "JULIUS_VALIDATION_SCRIPT": str(tmp / "in.json"), "JULIUS_VALIDATION_OUTPUT": str(tmp / "out.json"), "JULIUS_MEMORY_DIR": str(tmp / "mem")}
-    p = subprocess.run([sys.executable, str(ROOT / "julius_candidate.py")], env=env, cwd=ROOT, capture_output=True, text=True, timeout=1500)
+    p = subprocess.run([sys.executable, str(ROOT / "julius/runtime.py")], env=env, cwd=ROOT, capture_output=True, text=True, timeout=1500)
     out = json.loads((tmp / "out.json").read_text()); log = re.sub(r"\x1b\[[0-9;]*[A-Za-z]|\r", "", p.stdout)
     blocks = re.split(r"\n\s*YOU \[typed\]: ", "\n" + log)[1:]
     return out, blocks

@@ -1,0 +1,314 @@
+"""Claude front end (Haiku 5.5) behind the same llm_chat shape Julius already uses.
+
+Converts Julius/Ollama-style messages and tool schemas to the Messages API, streams text so speech
+starts on the first sentence, caches the system prompt and tool schemas, records cost per response,
+and falls back to a local model when the API is unreachable. An authentication error is spoken, not hidden.
+"""
+import json, os, threading, time
+from types import SimpleNamespace
+from pathlib import Path
+
+import julius.config as cfg
+import julius.costs as costs
+
+AUTH_MESSAGE = "My API key expired or is invalid."
+CAP_MESSAGE = "I've hit today's spending limit, so I'll stick to the quick model for the rest of the day."
+HARD_CAP_MESSAGE = "I've now used twice today's spending limit, so I'm switching to my offline model for the rest of the day."
+
+# Per-tier request settings. Sampling parameters are omitted (rejected on these models); Haiku answers
+# with thinking off at low effort for latency, Sonnet keeps adaptive thinking at medium effort.
+TIERS = {
+    "haiku": {"max_tokens": 1024, "output_config": {"effort": "low"}, "thinking": {"type": "disabled"}},
+    "sonnet": {"max_tokens": 4096, "output_config": {"effort": "medium"}},
+}
+
+# Appended to Julius's system prompt in cloud mode so the front end knows when to escalate.
+PLANNING_PROMPT = ("\n\nPLANNING\nYou have a planner: escalate_to_planner. Use it when the answer needs thinking across several facts, not just fetching them. "
+                   "Escalate for: (1) a plan, itinerary or schedule, e.g. 'plan a trip', 'plan a party'; (2) comparing options or making a "
+                   "recommendation, even when each fact is a single lookup, e.g. 'compare the weather in two cities', 'which is cheaper', 'should I "
+                   "buy X or Y'; (3) open-ended research, e.g. 'look into the best X' (but 'search the web for X' is one web_search call, not research); a request that says plan or itinerary always escalates, even when it mentions the weather or the time; (4) a briefing or summary assembled from several sources; (5) any change "
+                   "to many files at once: moving, sorting, renaming, organising or cleaning up. Do NOT escalate a single fact, and do not escalate "
+                   "several independent lookups that only need reading out, e.g. 'the weather in A and the time in B': call every tool for those in the "
+                   "same reply and answer in one go. The planner can only propose file changes; nothing happens until the user says yes, so never "
+                   "say a change was made. Pass the full task. Its result is your answer: say it in your own voice, briefly.")
+
+CAPABILITIES_PROMPT = ("\n\nWHAT YOU CAN DO\nNever say you cannot do any of these. If a request for one reaches you, use its tool; do not decline, and never claim something happened unless a result says so.\n"
+                       "- Files in Documents, Desktop, Downloads and the user's configured folders such as sandbox: find, list, read, move, copy, rename, create, move to the trash (recoverable; you never delete permanently), undo, empty the trash, and say what changed. "
+                       "Call file_request with his own words, also for undo and 'what did you change'. The file controller always shows a preview first and nothing changes until the user says yes. Changes to MANY files at once (organising, sorting, cleaning up, renaming or moving everything of a kind) still go to escalate_to_planner.\n"
+                       "- Coding: a sandboxed coding agent fixes or writes code in a COPY of a project under his dev folder. Call code_request right away, never just describe how it works. It needs his yes to start and a separate yes to merge; he can say show the changes, merge it, undo the merge, cancel the coding task.\n"
+                       "- Memory: remember_fact, forget_fact, list_memories. Reminders, timers, tasks and events: set_reminder, list_reminders, cancel_reminder, list_planner_items.\n"
+                       "- Everyday single lookups (weather, time, math, conversions, quotes, scores, news, web search) use their own tools.\n"
+                       "- Comparisons, recommendations, plans, briefings that combine several facts, research, and changes to many files at once all go to escalate_to_planner, even when each fact is a simple lookup.\n"
+                       "If the user says only yes, do it or go ahead and you did not just ask him a question, nothing is waiting for a yes: say exactly \"There's nothing waiting for a yes right now. What would you like me to do?\" and never invent a result.")
+
+ESCALATE_SCHEMA = {"type": "function", "function": {
+    "name": "escalate_to_planner",
+    "description": ("Hand a task that needs thinking, not just fetching, to the planner (a stronger model with sub-agents). "
+                    "Use for plans, comparisons and recommendations, research, briefings and bulk file work, as described in PLANNING. "
+                    "Never for one fact, one tool call, or independent lookups. Describe the task fully; the result is what you say aloud."),
+                    "parameters": {"type": "object", "properties": {"task": {"type": "string", "description": "The full task, with every detail the planner needs"}},
+                   "required": ["task"], "additionalProperties": False}}}
+
+
+def convert_tools(schemas):
+    """Ollama/OpenAI function schemas -> Messages API tools; the last tool carries the cache breakpoint."""
+    tools = [{"name": s["function"]["name"], "description": s["function"].get("description", ""),
+              "input_schema": s["function"].get("parameters") or {"type": "object", "properties": {}}} for s in schemas]
+    for tool in tools:
+        if tool["name"] == "escalate_to_planner":
+            tool["strict"] = True  # schema-valid arguments: the front end must always send a task
+    if tools:
+        tools[-1] = {**tools[-1], "cache_control": {"type": "ephemeral"}}
+    return tools
+
+
+def convert_messages(messages):
+    """Julius messages -> (system text, API messages). Tool calls get sequential ids that tool results consume in order."""
+    system, out, ids, notes, counter = [], [], [], [], 0
+
+    def add(role, blocks):
+        if out and out[-1]["role"] == role:
+            out[-1]["content"].extend(blocks)
+        else:
+            out.append({"role": role, "content": list(blocks)})
+
+    for m in messages:
+        role, content = m["role"], m.get("content") or ""
+        if role == "system":
+            (notes if out else system).append(content)
+        elif role == "user":
+            add("user", [{"type": "text", "text": content}])
+        elif role == "assistant":
+            blocks = [{"type": "text", "text": content}] if content.strip() else []
+            for call in m.get("tool_calls") or []:
+                fn = call.get("function", call)
+                counter += 1
+                ids.append(f"toolu_julius_{counter}")
+                args = fn.get("arguments") or {}
+                blocks.append({"type": "tool_use", "id": ids[-1], "name": fn["name"],
+                               "input": json.loads(args) if isinstance(args, str) else dict(args)})
+            if blocks:
+                add("assistant", blocks)
+        elif role == "tool":
+            add("user", [{"type": "tool_result", "tool_use_id": ids.pop(0) if ids else "toolu_julius_0", "content": content}])
+    for note in notes:  # mid-conversation system text rides along with the latest user turn
+        add("user", [{"type": "text", "text": note}])
+    return "\n\n".join(s for s in system if s), out
+
+
+def _has_tool_blocks(api_messages):
+    return any(b.get("type") in ("tool_use", "tool_result") for m in api_messages for b in m["content"])
+
+
+def make_client(timeout=20.0, max_retries=1):
+    import anthropic
+    key = cfg.api_key()
+    if not key:
+        raise MissingKey()
+    return anthropic.Anthropic(api_key=key, timeout=timeout, max_retries=max_retries)
+
+
+class MissingKey(Exception):
+    pass
+
+
+def _personalize_tools(tools):
+    """Tool definitions with the author's name and city replaced by this install's profile in every description."""
+    from julius import profile
+    def walk(x):
+        if isinstance(x, dict): return {k: (profile.apply(v) if k == "description" and isinstance(v, str) else walk(v)) for k, v in x.items()}
+        if isinstance(x, list): return [walk(v) for v in x]
+        return x
+    return walk(tools)
+
+
+class CloudBrain:
+    """Front-end brain: one instance per process. `offline(messages, tools, stream, options)` is the local fallback."""
+
+    def __init__(self, config, tracker, client=None, offline=None, clock=time.monotonic):
+        self.config, self.tracker, self._client, self.offline, self._clock = config, tracker, client, offline, clock
+        self._slow = None
+        self.model = config["models"]["haiku"]
+        self.auth_bad = False
+        self.auth_pending = False  # the spoken auth message has not been delivered through a streamed reply yet
+        self.offline_until = 0.0
+        self.announced = {}
+        self.status = {"mode": "cloud"}
+        self._last_tools = None
+
+    # ---------- client and state ----------
+    def client(self):
+        if self._client is None:
+            self._client = make_client()
+        return self._client
+
+    def slow_client(self):
+        """Longer timeout for planner and sub-agent calls (non-streaming, adaptive thinking)."""
+        if self._slow is None:
+            self._slow = make_client(timeout=120.0, max_retries=2)
+        return self._slow
+
+    def reset_auth(self):
+        self.auth_bad, self._client, self._slow = False, None, None
+
+    def cap_notice(self):
+        """The spoken notice for a spend threshold, once per day each: the cap (Haiku only), then twice the cap (offline)."""
+        day = time.strftime("%Y-%m-%d")
+        for key, reached, message in (("hard", self.tracker.offline_required(), HARD_CAP_MESSAGE), ("cap", self.tracker.cap_reached(), CAP_MESSAGE)):
+            if reached and self.announced.get(key) != day:
+                self.announced.update({key: day, "cap": day} if key == "hard" else {key: day})
+                return message
+        return None
+
+    def tool_schemas(self, schemas):
+        """The full tool list (plus escalate_to_planner unless the cap is reached) whenever tools are offered.
+
+        Trimming schemas was a local-model speed fix. Here one stable list is cached once and shared by every turn
+        and follow-up, which costs less than rewriting per-subset caches. The offline fallback still gets the
+        caller's trimmed list.
+        """
+        if schemas is None:
+            return None
+        import julius.brain.tools as jt
+        chosen = list(jt.SCHEMAS)
+        if not self.tracker.cap_reached():
+            chosen.append(ESCALATE_SCHEMA)
+        self._last_tools = chosen
+        return chosen
+
+    # ---------- request building ----------
+    def request(self, messages, tools, max_tokens=None, force_tool=False):
+        system, api_messages = convert_messages(messages)
+        from julius import profile
+        if system: system = profile.apply(system)   # the author's name and city in the prompts become this install's [profile]
+        kwargs = {"model": self.model, "messages": api_messages, "max_tokens": max_tokens or TIERS["haiku"]["max_tokens"],
+                  "cache_control": {"type": "ephemeral"}, **{k: v for k, v in TIERS["haiku"].items() if k != "max_tokens"}}
+        if system:
+            kwargs["system"] = [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
+        api_tools = convert_tools(self.tool_schemas(tools)) if tools is not None else None
+        if api_tools: api_tools = _personalize_tools(api_tools)
+        if api_tools:
+            kwargs["tools"] = api_tools
+            if force_tool: kwargs["tool_choice"] = {"type": "any"}   # a live-data question: answer from a tool call made in THIS turn
+        elif _has_tool_blocks(api_messages):  # history contains tool calls: tools must be declared, but not callable now
+            import julius.brain.tools as jt
+            # Reuse this turn's tool list so the cached system+tools prefix from the tool phase is hit again.
+            kwargs["tools"] = _personalize_tools(convert_tools(self._last_tools or self.tool_schemas(jt.SCHEMAS)))
+            kwargs["tool_choice"] = {"type": "none"}
+        return kwargs
+
+    # ---------- public entry ----------
+    def chat(self, messages, tools=None, stream=False, options=None):
+        import anthropic
+        options = dict(options or {}); force_tool = bool(options.pop("force_tool", False))   # cloud-only request flag; never passed on to the local fallback
+        if self.auth_bad:
+            if self.auth_pending:  # speak the failure exactly once, on the reply the user actually hears
+                if stream:
+                    self.auth_pending = False
+                    return iter([SimpleNamespace(message=SimpleNamespace(content=AUTH_MESSAGE))])
+                return SimpleNamespace(message=SimpleNamespace(content=AUTH_MESSAGE, tool_calls=None))
+            return self._offline(messages, tools, stream, options, announce=False)
+        if self._clock() < self.offline_until or self.tracker.offline_required():
+            return self._offline(messages, tools, stream, options, announce=False)
+        try:
+            kwargs = self.request(messages, tools, force_tool=force_tool)  # length is steered by the prompt (brief by default, longer when asked); the local 160-token cap would cut a requested long answer mid-sentence
+            if stream:
+                return self._stream(kwargs, messages, tools, options)
+            response = self.client().messages.create(**kwargs)
+            self.tracker.record("haiku", response.usage)
+            return self._shape(response)
+        except MissingKey:
+            return self._say_auth(stream)
+        except anthropic.AuthenticationError:
+            return self._say_auth(stream)
+        except (anthropic.APIConnectionError, anthropic.APITimeoutError, anthropic.RateLimitError, anthropic.InternalServerError):
+            return self._go_offline(messages, tools, stream, options)
+
+    # ---------- responses ----------
+    @staticmethod
+    def _shape(response):
+        text = "".join(b.text for b in response.content if getattr(b, "type", "") == "text")
+        calls = [SimpleNamespace(function=SimpleNamespace(name=b.name, arguments=dict(b.input)))
+                 for b in response.content if getattr(b, "type", "") == "tool_use"]
+        return SimpleNamespace(message=SimpleNamespace(content=text, tool_calls=calls or None))
+
+    def _stream(self, kwargs, messages, tools, options):
+        import anthropic
+        brain = self
+
+        def parts():
+            first = True
+            try:
+                with brain.client().messages.stream(**kwargs) as stream:
+                    try:
+                        for text in stream.text_stream:
+                            first = False
+                            yield SimpleNamespace(message=SimpleNamespace(content=text))
+                        final = stream.get_final_message()  # a tool_use block arrives only once the reply is complete
+                        tool_calls = [SimpleNamespace(function=SimpleNamespace(name=b.name, arguments=dict(b.input)))
+                                      for b in final.content if getattr(b, "type", "") == "tool_use"]
+                        if tool_calls:
+                            yield SimpleNamespace(message=SimpleNamespace(content="", tool_calls=tool_calls))
+                    finally:
+                        snapshot = getattr(stream, "current_message_snapshot", None)
+                        if snapshot is not None and getattr(snapshot, "usage", None) is not None:
+                            brain.tracker.record("haiku", snapshot.usage, note="stream")
+            except (anthropic.AuthenticationError, MissingKey):
+                brain.auth_bad, brain.auth_pending = True, False  # delivered right here
+                yield SimpleNamespace(message=SimpleNamespace(content=AUTH_MESSAGE))
+            except (anthropic.APIConnectionError, anthropic.APITimeoutError, anthropic.RateLimitError, anthropic.InternalServerError):
+                if not first:
+                    return  # partial reply already spoken; end it rather than repeat
+                brain.offline_until = brain._clock() + brain.config["offline"]["retry_seconds"]
+                yield from brain._offline(messages, tools, True, options, announce=True)
+        return parts()
+
+    # ---------- failure paths ----------
+    def mark_auth_bad(self):
+        self.auth_bad, self.auth_pending = True, True
+        print("  [Anthropic API key missing or invalid; cloud brain disabled until restart]", flush=True)
+
+    def _say_auth(self, stream):
+        if not self.auth_bad:
+            self.mark_auth_bad()
+        if stream:  # a streamed reply is what gets spoken, so this delivers the message
+            self.auth_pending = False
+            return iter([SimpleNamespace(message=SimpleNamespace(content=AUTH_MESSAGE))])
+        return SimpleNamespace(message=SimpleNamespace(content=AUTH_MESSAGE, tool_calls=None))
+
+    def _go_offline(self, messages, tools, stream, options):
+        self.offline_until = self._clock() + self.config["offline"]["retry_seconds"]
+        return self._offline(messages, tools, stream, options, announce=True)
+
+    def _offline(self, messages, tools, stream, options, announce):
+        if self.offline is None:
+            raise RuntimeError("Claude API unreachable and no offline model configured")
+        if announce:
+            print(f"  [Claude API unreachable; using local {self.config['offline']['model']}]", flush=True)
+        return self.offline(messages, tools, stream, options)
+
+
+_BRAIN = None
+_TRACKER = None
+_LOCK = threading.RLock()
+
+
+def get_tracker():
+    global _TRACKER
+    with _LOCK:
+        if _TRACKER is None:
+            import julius.memory.sessions as jm
+            config = cfg.load_config()
+            path = Path(os.environ.get("JULIUS_COSTS_FILE") or Path(jm.MEM) / "costs.jsonl")
+            _TRACKER = costs.CostTracker(path, config["spend"]["daily_cap_usd"], offline_multiple=config["spend"]["offline_at_multiple"])
+        return _TRACKER
+
+
+def get_brain(offline=None):
+    global _BRAIN
+    with _LOCK:
+        if _BRAIN is None:
+            _BRAIN = CloudBrain(cfg.load_config(), get_tracker(), offline=offline)
+        elif offline is not None:
+            _BRAIN.offline = offline
+        return _BRAIN

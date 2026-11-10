@@ -18,7 +18,7 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent)); sys.path.insert(0, str(HERE))
 import voice_eval as ve
-import julius_selfecho
+from julius.audio import selfecho
 
 SR = 16000
 
@@ -33,7 +33,7 @@ def report_take(take):
     rows = ve.score_take(take); t0 = events[0]["t0"]; end_t = next((e["t"] for e in events if e["kind"] == "session_end"), events[-1]["t"]) + 1
     spoken = " ".join(e.get("text", "") for e in events if e["kind"] == "reply" and e.get("text"))
     asr = [e for e in events if e["kind"] == "asr"]
-    selfheard = [e for e in asr if e.get("text") and julius_selfecho.overlap(e["text"], spoken) >= 0.6 and len(e["text"].split()) >= 3]
+    selfheard = [e for e in asr if e.get("text") and selfecho.overlap(e["text"], spoken) >= 0.6 and len(e["text"].split()) >= 3]
     turns_from_self = [e for e in selfheard if any(t["kind"] == "turn" and 0 <= t["t"] - e["t"] < 3 for t in events)]
     out = {"take": take.name, "duplex": any(e["kind"] == "duplex" for e in events), "self_heard": len(selfheard), "self_heard_turns": len(turns_from_self),
            "fallback": [e.get("reason") for e in events if e["kind"] == "duplex_fallback"], "barge": [], "false_interrupts": 0, "rows": rows}
@@ -50,8 +50,8 @@ def report_take(take):
     # echo reduction while he speaks, on stretches where the user said nothing (the quiet-story scenarios)
     try:
         mic = wav(take / "rec" / "mic.wav"); ref = wav(take / "rec" / "out.wav"); n = min(len(mic), len(ref))
-        import julius_aec
-        cl = julius_aec.cancel(mic[:n], ref[:n], lag=0.0 if out["duplex"] else None)
+        from julius.audio import aec
+        cl = aec.cancel(mic[:n], ref[:n], lag=0.0 if out["duplex"] else None)
         playing = np.array([np.sqrt(np.mean(ref[i:i + 1600] ** 2)) > 0.02 for i in range(0, n - 1600, 1600)])
         r_raw = np.array([np.sqrt(np.mean(mic[i:i + 1600] ** 2)) for i in range(0, n - 1600, 1600)]); r_cl = np.array([np.sqrt(np.mean(cl[i:i + 1600] ** 2)) for i in range(0, n - 1600, 1600)])
         if sc["id"].startswith("d1") and playing.sum() > 20:

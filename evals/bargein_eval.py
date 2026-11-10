@@ -149,10 +149,10 @@ def triggers(opt, sig, mic, ref, lag, cal, floor):
 OPTIONS = ["raw", "level", "webrtc", "speex", "webrtc+level"]
 
 def make_verifier():
-    import mlx_whisper, mlx.core as mx, julius_config
-    from julius_listening import has_wake
-    from julius_speech_text import fix_transcript
-    hint = julius_config.asr_initial_prompt(wake=True); repo = "mlx-community/whisper-small.en-mlx"
+    import mlx_whisper; import mlx.core as mx; from julius import config
+    from julius.audio.listening import has_wake
+    from julius.audio.speech_text import fix_transcript
+    hint = config.asr_initial_prompt(wake=True); repo = "mlx-community/whisper-small.en-mlx"
     def tr(x):
         mx.random.seed(1301); return fix_transcript(mlx_whisper.transcribe(x.astype(np.float32), path_or_hf_repo=repo, condition_on_previous_text=False, language="en",
                                                                          no_speech_threshold=0.6, initial_prompt=hint)["text"].strip())
@@ -160,7 +160,7 @@ def make_verifier():
 
 def decide(text, spoken, use_b):
     """Permanent stop? Wake word or stop command in the transcript, unless it is the same text Julius is saying (option b)."""
-    from julius_listening import has_wake
+    from julius.audio.listening import has_wake
     cmd = has_wake(text) or bool(STOP.match(text))
     return cmd and not (use_b and self_match(text, spoken) >= 0.8)
 
@@ -262,7 +262,7 @@ def annotate_onset(res):
 
 def stage1_fires(clean, onset_f, thr_list=(0.05, 0.2, 0.5)):
     """Highest stage-1 'Julius' score in the 2 s after the duck and the time it is first above each threshold (the detector alone, no Whisper)."""
-    from wake.stream import WakeStream
+    from julius.wake.stream import WakeStream
     st = WakeStream(str(ROOT / "wake" / "models" / "julius.onnx"), 2.0, verify=None, gate=False); best, first = 0.0, {str(t): None for t in thr_list}
     seg = clean[max(0, onset_f * HOP - int(1.5 * SR)):onset_f * HOP + int(2.5 * SR)]; x = (np.clip(seg, -1, 1) * 32767).astype(np.int16); t0 = onset_f * HOP - max(0, onset_f * HOP - int(1.5 * SR))
     for i in range(0, len(x) - 1279, 1280):

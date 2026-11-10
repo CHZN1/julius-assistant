@@ -8,9 +8,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 import numpy as np, soundfile as sf, mlx_whisper, mlx.core as mx
-from julius_speech_text import fix_transcript
-from julius_listening import has_wake
-import julius_config as cfg
+from julius.audio.speech_text import fix_transcript
+from julius.audio.listening import has_wake
+import julius.config as cfg
 REAL = ROOT / "diagnostics" / "wake_real"; RESULTS = ROOT / "evals" / "results"
 NAMES = re.compile(r"julia|julian|jealous|julie|jules", re.I)
 

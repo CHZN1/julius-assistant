@@ -9,8 +9,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(Path(__file__).resolve().parent))
 import numpy as np, soundfile as sf, mlx_whisper, mlx.core as mx
 from audio_regression import wer, missed, SEED
-from julius_speech_text import fix_transcript
-import julius_config as cfg
+from julius.audio.speech_text import fix_transcript
+import julius.config as cfg
 
 def normalise(audio, peak=0.9):
     top = float(np.abs(audio).max())

@@ -15,8 +15,8 @@ FIXTURE = {"Downloads": ["budget.csv", "stats.csv", "report.pdf", "notes.txt", "
 
 class Env:
     def __init__(self):
-        from julius_file_agent import FileAgent
-        from julius_file_session import FileSession
+        from julius.agents.file_agent import FileAgent
+        from julius.agents.file_session import FileSession
         self.dir = Path(tempfile.mkdtemp(prefix="julius_file_eval_")).resolve()
         self.home = self.dir / "home"
         for folder, names in FIXTURE.items():
@@ -42,8 +42,8 @@ class Env:
 
     def reopen(self, **kw):
         """A fresh agent and session over the same state (what a restart does)."""
-        from julius_file_agent import FileAgent
-        from julius_file_session import FileSession
+        from julius.agents.file_agent import FileAgent
+        from julius.agents.file_session import FileSession
         self.agent = FileAgent(self.home, self.dir / "state", **kw); self.agent.use_birthtime = False; self.session = FileSession(self.agent)
 
     def everything(self):
@@ -55,7 +55,7 @@ class Env:
         return out
 
     def planner(self, **args):
-        import julius_orchestrator as jo
+        import julius.brain.orchestrator as jo
         jo.configure(file_session=self.session, turn=lambda: self.turn + 1); self.turn += 1
         return jo.files_propose({"action": "trash", **args})
 
@@ -202,7 +202,7 @@ def s_history_lists_changes(e):
     return out["code"] == "history" and "trashed" in out["message"], msg(out)[:90]
 
 def s_trash_notice_over_a_gigabyte(e):
-    import julius_file_agent as fa
+    import julius.agents.file_agent as fa
     old = fa.TRASH_NOTICE_BYTES; fa.TRASH_NOTICE_BYTES = 10
     try: e.say("trash notes.txt in Downloads"); out = e.say("yes")
     finally: fa.TRASH_NOTICE_BYTES = old

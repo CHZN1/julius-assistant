@@ -6,8 +6,8 @@ from pathlib import Path
 import numpy as np, soundfile as sf
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(ROOT / "wake"))
-from wake.stream import WakeStream, run_clip, whisper_verify
-from julius_listening import has_voice_activity
+from julius.wake.stream import WakeStream, run_clip, whisper_verify
+from julius.audio.listening import has_voice_activity
 def main(gains, floors=(0.0045, 0.0015)):
     base = whisper_verify(); calls = []
     def verify(clip):

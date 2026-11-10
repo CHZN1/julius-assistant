@@ -7,11 +7,11 @@ from pathlib import Path
 root = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(root)); os.chdir(root)
 os.environ["JULIUS_BACKEND"] = "cloud"
-import julius_cloud as jc, julius_tools as jt
-from julius_vision_mode import vision_capability_prompt
+import julius.brain.cloud as jc; import julius.brain.tools as jt
+from julius.brain.vision_mode import vision_capability_prompt
 
 ns = {}
-for n in ast.parse((root / "julius_candidate.py").read_text()).body:
+for n in ast.parse((root / "julius/runtime.py").read_text()).body:
     if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "SYSTEM" for t in n.targets):
         exec(compile(ast.Module(body=[n], type_ignores=[]), "<c>", "exec"), ns)
 system = ns["SYSTEM"] + vision_capability_prompt(False) + jc.PLANNING_PROMPT

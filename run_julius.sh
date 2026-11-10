@@ -37,4 +37,4 @@ export JULIUS_MODEL="${JULIUS_MODEL:-$PROFILE_MODEL}"
 export JULIUS_FALLBACK_MODEL="${JULIUS_FALLBACK_MODEL:-llama3.2:3b}"
 export JULIUS_VISION="${JULIUS_VISION:-0}"
 export JULIUS_TTS="${JULIUS_TTS:-$PROFILE_VOICE}"
-exec /opt/miniconda3/envs/torch/bin/python -u "$JULIUS_PROJECT_DIR/julius_candidate.py"
+exec /opt/miniconda3/envs/torch/bin/python -u -m julius

@@ -8,9 +8,9 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(Path(__file__).resolve().parent))
 import numpy as np, soundfile as sf, mlx_whisper, mlx.core as mx
 from audio_regression import wer, SEED
-from julius_speech_text import fix_transcript
-from julius_listening import has_wake
-import julius_config as cfg
+from julius.audio.speech_text import fix_transcript
+from julius.audio.listening import has_wake
+import julius.config as cfg
 CONTRAST = "Julius. Hey Julius. Julia. Julian. Julie. Jules."
 def combined(): return cfg.asr_initial_prompt(wake=True)
 HINTS = {"none": None, "vocab": cfg.asr_initial_prompt(), "contrast": CONTRAST, "combined": combined()}

@@ -16,7 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(Path(__file__).parent))
 import common
-import julius_cloud as jc, julius_config as cfg, julius_costs as costs, julius_research as jr
+import julius.brain.cloud as jc; import julius.config as cfg; import julius.costs as costs; import julius.agents.research as jr
 
 PUBLIC = {"stats.example.org": "93.184.216.34", "news.example.net": "151.101.1.1", "wiki.example.com": "104.18.0.1", "members.example.com": "104.18.0.2", "blog.example.io": "104.18.0.3"}
 def resolver(host, port, type=0):

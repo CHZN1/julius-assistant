@@ -43,9 +43,9 @@ def missed(number, transcript):
 
 def run_asr(folder):
     import numpy as np, soundfile as sf, mlx_whisper, mlx.core as mx
-    from julius_speech_text import fix_transcript
-    import julius_config
-    hint = julius_config.asr_initial_prompt()  # same vocabulary hint as the live transcriber
+    from julius.audio.speech_text import fix_transcript
+    from julius import config
+    hint = config.asr_initial_prompt()  # same vocabulary hint as the live transcriber
     repo = "mlx-community/whisper-small.en-mlx"
     phrases = json.loads((folder / "phrases.json").read_text())
     clips = sorted(folder.glob("phrase_*.wav"))

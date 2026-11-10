@@ -11,8 +11,8 @@ from datetime import datetime
 from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-import julius_memcmd as mc
-from julius_memstore import MemoryStore
+import julius.memory.commands as mc
+from julius.memory.store import MemoryStore
 
 COMMANDS = [  # (utterance, expected action or None)
  ("Remember that my sister is called Ana.", "remember"), ("remember I'm allergic to peanuts", "remember"), ("Please remember that my wife's birthday is June 3rd", "remember"),
@@ -75,7 +75,7 @@ def section_a():
     return {"cases": len(COMMANDS), "wrong": [list(b) for b in bad]}, not bad
 
 def section_prompt():
-    src = (ROOT / "julius_candidate.py").read_text(); m = re.search(r'SYSTEM = """(.*?)"""', src, re.S); text = m.group(1) if m else ""
+    src = (ROOT / "julius/runtime.py").read_text(); m = re.search(r'SYSTEM = """(.*?)"""', src, re.S); text = m.group(1) if m else ""
     ok = bool(re.search(r"long-term memory", text)) and bool(re.search(r"Never say you cannot remember", text))
     return {"system_prompt_mentions_memory": ok}, ok
 
@@ -95,8 +95,8 @@ def section_c():
     return {"queries": n, "recall": round(100 * (n - len(miss)) / n, 1), "missed": miss}, (n - len(miss)) / n >= .95
 
 def llm_factory():
-    import julius_cloud
-    brain = julius_cloud.get_brain(); cost = [0.0]
+    from julius.brain import cloud
+    brain = cloud.get_brain(); cost = [0.0]
     def llm(prompt):
         r = brain.chat([{"role": "user", "content": prompt}], options={"temperature": 0.0, "num_predict": 200}); return r.message.content or ""
     return llm, brain

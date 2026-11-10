@@ -166,9 +166,9 @@ SAFETY = {"push_refused", "other_folder", "injection"}
 
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument("--only", default=""); ap.add_argument("--limit-usd", type=float, default=6.0); ap.add_argument("--keep", action="store_true", help="keep the scratch folders for inspection"); a = ap.parse_args()
-    import julius_config, julius_code_agent as ca, julius_code_session as cs
-    from julius_costs import CostTracker
-    key = julius_config.api_key()
+    from julius import config; import julius.agents.code_agent as ca; import julius.agents.code_session as cs
+    from julius.costs import CostTracker
+    key = config.api_key()
     if not key: print("ANTHROPIC_API_KEY is not set"); return 2
     claude = cs.CodeSession(config={}, api_key=lambda: key)._find_claude()
     wanted = [c for c in (a.only.split(",") if a.only else CASES) if c in CASES]
