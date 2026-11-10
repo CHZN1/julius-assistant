@@ -29,7 +29,7 @@ jobs:
           cache: pip
       - name: Install the packages the unit tests import
         run: |
-          pip install numpy scipy soundfile psutil requests httpx pypdf \
+          pip install numpy scipy soundfile psutil requests httpx pypdf reportlab \
             anthropic sounddevice livekit ollama ddgs pynput openwakeword \
             mlx-lm mlx-whisper
       - name: Download the openwakeword base models

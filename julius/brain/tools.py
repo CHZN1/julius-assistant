@@ -906,6 +906,28 @@ _ASKING = re.compile(
 )
 
 
+_PLANNER_REQUEST = re.compile(
+    r"^\W*(?:julius\W+)?(?:(?:please|can you|could you)\W+)*(?:plan|compare)\b|\bitinerary\b", re.I
+)
+
+
+def planner_required(user_text: str) -> bool:
+    """True when the request opens with plan or compare (or asks for an itinerary): those always go to the planner,
+    even when every fact in them is a simple lookup, so the first model call must be escalate_to_planner."""
+    return bool(_PLANNER_REQUEST.search(user_text or ""))
+
+
+_WEEKDAY_QUESTION = re.compile(
+    r"\bday of the week\b|\bwhat day (?:is|was|will|does|did)\b|\bwhich day (?:is|was|will|does)\b",
+    re.I,
+)
+
+
+def weekday_question(user_text: str) -> bool:
+    """True for 'what day of the week is March 3rd 2027': calendar arithmetic is done by the date tool, never recalled."""
+    return bool(_WEEKDAY_QUESTION.search(user_text or ""))
+
+
 def live_tool_required(user_text: str) -> bool:
     """True when this turn asks for something that changes (a score, price, weather, schedule, news) and one of those live tools can answer it: the first model call
     must then call a tool, even if the same topic came up earlier in the conversation (an earlier answer is stale, and a remembered one is a guess)."""

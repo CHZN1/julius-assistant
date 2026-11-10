@@ -27,6 +27,8 @@ class ParseTests(unittest.TestCase):
             "forget what I just said": "forget_that",
             "forget my sister": "forget",
             "forget about the boat trip": "forget",
+            "please get rid of what you know about my cat Miso": "forget",
+            "throw away everything about the Sharks": "forget",
             "forget everything": "forget_all",
             "what do you remember about me?": "list",
             "what do you remember": "list",
@@ -46,6 +48,8 @@ class ParseTests(unittest.TestCase):
             "remember me",
             "delete that file",
             "what do you think about forgetting",
+            "get rid of the old files about taxes",
+            "throw away the screenshots",
             "remember",
         ]:
             self.assertIsNone(mc.parse(t)[0], t)

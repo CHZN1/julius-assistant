@@ -26,7 +26,7 @@ YES = re.compile(
 )
 NO = re.compile(r"^(?:no|nope|nah|cancel|never ?mind|don'?t|do not|stop|discard)\b", re.I)
 START = re.compile(
-    r"^(?:please\s+)?(?:(?:ask|tell|have|get|let)\s+(?:the\s+)?(?:coding|code)\s+agent\s+(?:to\s+)?|(?:start|run|begin)\s+(?:a\s+)?(?:coding|code)\s+task\s*(?:to|that|:)?\s*)(?P<goal>.+)$",
+    r"^(?:please\s+)?(?:(?:ask|tell|have|get|let)\s+(?:the\s+)?(?:(?:coding|code)\s+agent|opus)\s+(?:to\s+)?|(?:can|could|would|will)\s+(?:the\s+)?(?:(?:coding|code)\s+agent|opus)\s+(?=(?:fix|add|write|build|refactor|implement|change|update|make|create|debug|clean|rename|remove|test)\b)|(?:start|run|begin)\s+(?:a\s+)?(?:coding|code)\s+task\s*(?:to|that|:)?\s*)(?P<goal>.+?)(?:\s+for\s+me)?[?.!]*$",
     re.I,
 )
 CAP = re.compile(

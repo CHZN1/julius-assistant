@@ -259,7 +259,12 @@ class CloudBrain:
 
     # ---------- request building ----------
     def request(
-        self, messages: Any, tools: Any, max_tokens: Any | None = None, force_tool: bool = False
+        self,
+        messages: Any,
+        tools: Any,
+        max_tokens: Any | None = None,
+        force_tool: bool = False,
+        force_planner: bool = False,
     ) -> Any:
         system, api_messages = convert_messages(messages)
         from julius import profile
@@ -284,7 +289,9 @@ class CloudBrain:
             api_tools = _personalize_tools(api_tools)
         if api_tools:
             kwargs["tools"] = api_tools
-            if force_tool:
+            if force_planner and any(t["name"] == "escalate_to_planner" for t in api_tools):
+                kwargs["tool_choice"] = {"type": "tool", "name": "escalate_to_planner"}
+            elif force_tool:
                 kwargs["tool_choice"] = {
                     "type": "any"
                 }  # a live-data question: answer from a tool call made in THIS turn
@@ -314,6 +321,7 @@ class CloudBrain:
         force_tool = bool(
             options.pop("force_tool", False)
         )  # cloud-only request flag; never passed on to the local fallback
+        force_planner = bool(options.pop("force_planner", False))
         if self.auth_bad:
             if (
                 self.auth_pending
@@ -329,7 +337,7 @@ class CloudBrain:
             return self._offline(messages, tools, stream, options, announce=False)
         try:
             kwargs = self.request(
-                messages, tools, force_tool=force_tool
+                messages, tools, force_tool=force_tool, force_planner=force_planner
             )  # length is steered by the prompt (brief by default, longer when asked); the local 160-token cap would cut a requested long answer mid-sentence
             if stream:
                 return self._stream(kwargs, messages, tools, options)

@@ -29,6 +29,13 @@ class EvalToolingTests(unittest.TestCase):
         self.assertEqual(set(ar.CASES["recorded"]), {str(i) for i in range(1, 21)})
         self.assertEqual(set(ar.CASES["keywords"]), set(ar.CASES["recorded"]))
 
+    def test_a_company_name_counts_as_its_ticker_in_price_arguments(self):
+        self.assertTrue(routing_eval.arg_matches("tsla", '{"symbol": "Tesla"}'))
+        self.assertTrue(routing_eval.arg_matches("btc", '{"symbol": "Bitcoin"}'))
+        self.assertTrue(routing_eval.arg_matches("tsla", '{"symbol": "TSLA"}'))
+        self.assertFalse(routing_eval.arg_matches("tsla", '{"symbol": "Apple"}'))
+        self.assertFalse(routing_eval.arg_matches("btc", "not json"))
+
     def test_judge_scores_path_tool_args_and_success(self):
         case = {"expect": {"path": "shortcut", "tool": "get_weather", "args_contain": ["springfield"]}}
         self.assertEqual(

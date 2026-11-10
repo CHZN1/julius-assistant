@@ -233,6 +233,7 @@ class BrainTurn:
         allow_retry: bool = True,
         tools: list[Any] | None = None,
         force_tool: bool = False,
+        force_planner: bool = False,
     ) -> str | None:
         """Stream one reply; sentences are spoken as they complete. None means it stalled."""
         s = self.s
@@ -244,6 +245,8 @@ class BrainTurn:
         options = {"temperature": 0.4, "num_predict": 160}
         if force_tool:
             options["force_tool"] = True
+        if force_planner:
+            options["force_planner"] = True
         parts = llm_chat(messages=messages, think=False, stream=True, **kwargs, options=options)
         try:
             for part in parts:
@@ -275,10 +278,15 @@ class BrainTurn:
         s = self.s
         schemas = jt.select_schemas(self.user_text)
         if s.cloud:
-            force = jt.live_tool_required(self.user_text) and not livedata.tool_result_this_turn(
-                self.messages
+            fresh = not livedata.tool_result_this_turn(self.messages)
+            planner = jt.planner_required(self.user_text) and fresh
+            needs_tool = jt.live_tool_required(self.user_text) or jt.weekday_question(
+                self.user_text
             )
-            text = self.stream(self.messages, tools=schemas, force_tool=force)
+            force = needs_tool and fresh and not planner
+            text = self.stream(
+                self.messages, tools=schemas, force_tool=force, force_planner=planner
+            )
             if text is None:
                 return None
             return SimpleNamespace(content=text, tool_calls=list(self.stream_calls))

@@ -30,7 +30,7 @@ SAMPLES = LOG_DIR / "soak.jsonl"
 LABEL = "com.julius.soak"
 PLIST = Path("~/Library/LaunchAgents").expanduser() / f"{LABEL}.plist"
 SERVICE = "com.julius.assistant"
-PY = "/opt/miniconda3/envs/torch/bin/python"
+PY = sys.executable
 
 
 def _domain() -> str:

@@ -2,6 +2,7 @@
 A fake `claude` script stands in for the CLI so nothing costs money."""
 
 import stat
+import sys
 import textwrap
 import time
 import unittest
@@ -11,7 +12,7 @@ from julius.costs import CostTracker
 from tests.test_code_agent import SEATBELT, Base
 
 FAKE = textwrap.dedent("""\
-    #!/opt/miniconda3/envs/torch/bin/python
+    #!PYTHON_SHEBANG
     import json, os, sys, time
     argv = sys.argv; prompt = argv[argv.index("-p") + 1]; cap = float(argv[argv.index("--max-budget-usd") + 1])
     def emit(**e): print(json.dumps(e), flush=True)
@@ -40,7 +41,7 @@ class RunnerBase(Base):
     def setUp(self):
         super().setUp()
         self.fake = self.tmp / "fake_claude"
-        self.fake.write_text(FAKE)
+        self.fake.write_text(FAKE.replace("PYTHON_SHEBANG", sys.executable))
         self.fake.chmod(self.fake.stat().st_mode | stat.S_IEXEC)
         self.tracker = CostTracker(self.tmp / "costs.jsonl", 5.0)
 

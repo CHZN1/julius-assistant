@@ -150,6 +150,25 @@ DENIAL = re.compile(
 )
 
 
+def arg_matches(expected, args_text):
+    """True when the tool arguments contain `expected`, or a company or coin name the price tool resolves to it
+    (get_quote takes "Tesla" as well as "TSLA": the tool turns the name into the ticker)."""
+    wanted = expected.lower()
+    if wanted in args_text:
+        return True
+    from julius.brain import tickers
+
+    try:
+        values = [str(v) for v in json.loads(args_text).values()]
+    except (ValueError, AttributeError):
+        return False
+    for value in values:
+        found = tickers.resolve(value, search=lambda _name: [])
+        if found.symbol and found.symbol.split("-")[0].lower() == wanted:
+            return True
+    return False
+
+
 def judge(case, got):
     e = case["expect"]
     path_ok = got["path"] in e.get("path_in", [e["path"]])
@@ -167,7 +186,7 @@ def judge(case, got):
     if "path_in" in e and "tool" in e:
         tool_ok = got.get("tool") == e["tool"]
     args = (got.get("args") or "").lower()
-    args_ok = all(a.lower() in args for a in e.get("args_contain", []))
+    args_ok = all(arg_matches(a, args) for a in e.get("args_contain", []))
     success_ok = e.get("ok") is None or got.get("ok") == e["ok"]
     detail = str(got.get("detail") or "").lower()
     if "detail_contains" in e:
@@ -187,7 +206,12 @@ def brain_turn(case, brain, tracker, system):
     )
     before, t0 = sum(tracker.today_by_tier().values()), time.perf_counter()
     try:
-        r = brain.chat(msgs, tools=jt.select_schemas(case["text"]), options={"num_predict": 256})
+        options = {
+            "num_predict": 256,
+            "force_planner": jt.planner_required(case["text"]),
+            "force_tool": jt.weekday_question(case["text"]),
+        }
+        r = brain.chat(msgs, tools=jt.select_schemas(case["text"]), options=options)
         calls = r.message.tool_calls or []
         c = calls[0].function if calls else None
         names = [x.function.name for x in calls]

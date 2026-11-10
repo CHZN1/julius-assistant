@@ -22,6 +22,7 @@ import re
 import shutil
 import signal
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -128,7 +129,7 @@ ALLOWED = [
     "Glob",
     "Bash(python:*)",
     "Bash(python3:*)",
-    "Bash(/opt/miniconda3/envs/torch/bin/python:*)",
+    f"Bash({sys.executable}:*)",
     "Bash(pytest:*)",
     "Bash(ls:*)",
     "Bash(mkdir:*)",
@@ -448,7 +449,7 @@ def build_command(
     if sandbox:
         argv = ["/usr/bin/sandbox-exec", "-f", str(profile)] + argv
     env = {
-        "PATH": "/opt/miniconda3/envs/torch/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+        "PATH": f"{Path(sys.executable).parent}:/usr/bin:/bin:/usr/sbin:/sbin",
         "HOME": str(task.dir / "home"),
         "TMPDIR": str(task.dir / "tmp"),
         "CLAUDE_CODE_TMPDIR": str(task.dir / "tmp"),

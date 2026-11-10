@@ -20,7 +20,7 @@ from typing import Any
 from julius.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
-PY = "/opt/miniconda3/envs/torch/bin/python"
+PY = sys.executable
 LABEL = "com.julius.postsoak"
 PLIST = Path("~/Library/LaunchAgents").expanduser() / f"{LABEL}.plist"
 LOG_DIR = Path("~/Library/Logs/Julius").expanduser()
@@ -145,7 +145,7 @@ def plist_dict() -> dict[str, Any]:
         "RunAtLoad": False,
         "LimitLoadToSessionType": "Aqua",
         "EnvironmentVariables": {
-            "PATH": "/opt/miniconda3/envs/torch/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+            "PATH": f"{Path(PY).parent}:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
         },
         "StandardOutPath": str(LOG_DIR / "postsoak.out"),
         "StandardErrorPath": str(LOG_DIR / "postsoak.err"),

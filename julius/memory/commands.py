@@ -81,7 +81,7 @@ FORGET_TOPIC = (
     re.compile(
         "^"
         + PRE
-        + r"(?:forget|delete|remove|erase|wipe)\s+(?:everything |anything |what )?(?:you (?:know|remember|have|saved|stored) )?about\s+(.{3,})$",
+        + r"(?:forget|delete|remove|erase|wipe|get rid of|throw away)\s+(?:everything |anything |what )?(?:you (?:know|remember|have|saved|stored) )?about\s+(.{3,})$",
         re.I,
     ),
     re.compile(

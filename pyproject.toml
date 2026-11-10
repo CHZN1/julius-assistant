@@ -8,7 +8,7 @@ readme = "README.md"
 [project.optional-dependencies]
 # What the free unit tests import (the CI job installs these).
 test = [
-  "numpy", "scipy", "soundfile", "psutil", "requests", "httpx", "pypdf",
+  "numpy", "scipy", "soundfile", "psutil", "requests", "httpx", "pypdf", "reportlab",
   "anthropic", "sounddevice", "livekit", "ollama", "ddgs", "pynput",
   "openwakeword", "mlx-lm", "mlx-whisper",
 ]

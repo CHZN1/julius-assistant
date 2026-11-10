@@ -48,6 +48,15 @@ class StageTests(FlowBase):
         self.assertEqual([t.status for t in ca.all_tasks()], ["staged"])
         self.assertFalse(list(ca.all_tasks()[0].work.glob("*")))
 
+    def test_a_polite_question_to_opus_stages_the_same_preview(self):
+        out = self.s.handle("Can Opus fix FIXIT make the add function work in demo for me?")
+        self.assertEqual(out["code"], "preview")
+        self.assertEqual(ca.running(), [])
+
+    def test_questions_to_opus_that_are_not_coding_requests_are_left_alone(self):
+        self.assertIsNone(self.s.handle("Can Opus see me?"))
+        self.assertEqual(ca.all_tasks(), [])
+
     def test_the_yes_must_be_a_separate_turn(self):
         out = self.s.handle("have the coding agent FIXIT make add work in demo and yes start it")
         self.assertEqual(out["code"], "preview")

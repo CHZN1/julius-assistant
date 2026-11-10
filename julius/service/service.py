@@ -27,7 +27,7 @@ from julius.paths import REPO_ROOT
 ROOT = REPO_ROOT
 LABEL = "com.julius.assistant"
 PLIST = Path("~/Library/LaunchAgents").expanduser() / f"{LABEL}.plist"
-PY = "/opt/miniconda3/envs/torch/bin/python"
+PY = sys.executable
 
 
 def plist_dict(root: Path = ROOT, log_dir: str | None = None) -> dict[str, Any]:
@@ -47,7 +47,7 @@ def plist_dict(root: Path = ROOT, log_dir: str | None = None) -> dict[str, Any]:
             "JULIUS_SERVICE": "1",
             "JULIUS_PROFILE": "cloud",
             "TMPDIR": str(state.tmp_dir()) + "/",
-            "PATH": "/opt/miniconda3/envs/torch/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+            "PATH": f"{Path(PY).parent}:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin",
         },
         "StandardOutPath": str(log_dir / "launchd.out"),
         "StandardErrorPath": str(log_dir / "launchd.err"),
