@@ -71,6 +71,27 @@ def clean(value: Any, cap: int) -> str:
     return s if len(s) <= cap else s[: cap - 1].rstrip() + "…"
 
 
+def clean_text(value: Any, cap: int) -> str:
+    """Like `clean`, but keeps line breaks (at most one blank line in a row) so the panel's markdown subset can show lists and paragraphs."""
+    raw = (
+        unicodedata.normalize("NFC", str(value if value is not None else ""))
+        .replace("\r\n", "\n")
+        .replace("\r", "\n")
+    )
+    lines: list[str] = []
+    for line in raw.split("\n"):
+        line = "".join(
+            " " if ch.isspace() else ch
+            for ch in line
+            if ch not in _BIDI and (ch.isspace() or unicodedata.category(ch)[0] != "C")
+        )
+        line = " ".join(line.split())
+        if line or (lines and lines[-1]):
+            lines.append(line)
+    s = "\n".join(lines).strip("\n")
+    return s if len(s) <= cap else s[: cap - 1].rstrip() + "…"
+
+
 def clean_url(value: Any) -> str:
     """http(s) URLs only (no credentials, no spaces); anything else becomes an empty string."""
     s = str(value or "").strip()
@@ -168,7 +189,7 @@ def research_card(result: dict, images: list[dict] | None = None) -> dict:
         )
     findings = []
     for f in (result.get("findings") or [])[:MAX_FINDINGS]:
-        claim = clean(f.get("claim"), CAPS["claim"])
+        claim = clean_text(f.get("claim"), CAPS["claim"])
         n = index.get(clean_url(f.get("url")))
         if claim:
             findings.append({"n": len(findings) + 1, "claim": claim, "cite": [n] if n else []})
@@ -186,7 +207,7 @@ def research_card(result: dict, images: list[dict] | None = None) -> dict:
             )
     return {
         "question": clean(result.get("question"), CAPS["question"]),
-        "summary": clean(result.get("summary"), CAPS["summary"]),
+        "summary": clean_text(result.get("summary"), CAPS["summary"]),
         "findings": findings,
         "sources": sources,
         "images": imgs,

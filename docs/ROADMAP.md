@@ -123,6 +123,8 @@ Built: the animated orb (states asleep/quiet/offline/listening/thinking/speaking
 
 Next: side-panel media (5a charts and images, 5b vision, 5c pixel art), starting when the user has tried the modes, typing and drops; 5d image generation deferred (no provider yet). The research agent already saves the images and sources the panel will show.
 
+In progress: the research and workflow side panel (step 5): `panel.*` events, a localhost-only image server, and cards in the UI that are resizable, can sit on either side of the orb, and can be detached into their own window. Later: **switchable panel views**. The panel is a host for card and view types registered in one place, so a live chart or a sports slate can be added as a plugin without changing the panel shell.
+
 Note on `native/apple/bridge.js`: it is not UI. It is the JavaScript-for-Automation bridge that `julius_apple.py` pipes JSON into (via `osascript`) to read Calendar and Reminders inventories and to create, complete and cancel tokenised events and reminders.
 
 ## Phase H: Senses (later; plan only, nothing built)

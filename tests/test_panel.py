@@ -49,6 +49,12 @@ class Cleaning(unittest.TestCase):
         self.assertNotIn("‮", s)
         self.assertTrue(s.startswith("abc d"))
 
+    def test_clean_text_keeps_lines_but_nothing_else(self):
+        s = pn.clean_text("**a**\x00\n\n\n\n- one\r\n- two\u202e\t x", 100)
+        self.assertEqual(s, "**a**\n\n- one\n- two x")
+        self.assertEqual(len(pn.clean_text("x\n" * 500, 20)), 20)
+        self.assertEqual(pn.clean_text(None, 10), "")
+
     def test_urls(self):
         self.assertTrue(pn.clean_url("https://example.org/a?b=1"))
         for bad in (
@@ -104,6 +110,12 @@ class Cards(unittest.TestCase):
         self.assertLessEqual(len(m["summary"]), pn.CAPS["summary"])
         self.assertLessEqual(len(m["sources"][0]["title"]), pn.CAPS["title"])
         self.assertNotIn("‮", m["summary"])
+
+    def test_summary_and_claims_keep_markdown_lines(self):
+        r = dict(RESULT, summary="Intro **bold**\n\n- a\n- b")
+        self.panel.research(r)
+        self.assertEqual(self.msgs()[0]["summary"], "Intro **bold**\n\n- a\n- b")
+        self.assertNotIn("\n", self.msgs()[0]["sources"][0]["title"])
 
     def test_remote_image_refs_rejected(self):
         bad = dict(IMG, image="https://evil.example/x.png")

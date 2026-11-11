@@ -29,6 +29,8 @@ Data for a side panel (research results first; file previews, diffs, charts and 
 | `panel.update` | `target` (a card's `panel_id`), `images?` (more images, numbered after the card's existing ones), `note?` | pieces that arrive late, such as fetched images |
 | `panel.clear` | `scope` (`all` or `card`), `target|null`, `reason` (`new_topic`, `dismissed`, `expired`, `done`) | remove one card or all |
 
+`summary` and each finding's `claim` may use a tiny markdown subset, which a UI renders as text nodes (never as HTML): `**bold**`, `*italic*`, `` `code` ``, `- ` bullet lines and `1. ` numbered lines; paragraphs are separated by a blank line, and everything else is plain text. Line breaks are kept in those two fields only.
+
 Citation numbers are 1-based and the same in `findings[].cite`, `sources[].n` and the typed command "open source 3". `image` is `/p/<id>.<png|jpg|webp|gif>`, to be fetched from `hello.panel.base` + that path (a localhost-only, token-protected file server; clients must not load any other image URL). Source links are shown as text; opening one is done by typing "open source N" to the write channel, so Julius opens it, not the UI.
 
 `hello` gains `panel`: `{"cards": [last 10 panel.research messages, oldest first, with updates already folded in], "base": "<file server origin and token path>"}`, so a UI that reconnects restores its panel. Example `panel.research`:
