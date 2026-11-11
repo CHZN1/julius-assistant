@@ -219,9 +219,28 @@ def setup_events_feed(s: Session) -> None:
                 f"  [ui event feed: ws://127.0.0.1:{server.port} (read-only, this machine only)]",
                 flush=True,
             )
+        setup_panel(s)
     except Exception as exc:
         s.events_hub = None
         log.console(f"  [ui event feed unavailable: {type(exc).__name__}: {exc}]", flush=True)
+
+
+def setup_panel(s: Session) -> None:
+    """The side panel: card data on the event feed, images from a small local file server. Research results go to it."""
+    from julius.agents import research
+    from julius.agents.research import HOME
+    from julius.ui_bridge import panel_emit
+
+    started = panel_emit.start_panel(
+        s.events_hub, config.load_config().get("ui") or {}, HOME / "panel"
+    )
+    if started is None:
+        return
+    s.panel_hub, s.panel_files, server = started
+    research.set_panel_sink(panel_emit.make_sink(s.panel_hub, s.panel_files, lambda: s.turn))
+    log.console(
+        f"  [side panel: images on http://127.0.0.1:{server.port} (this machine only)]", flush=True
+    )
 
 
 def setup_stop_hotkey(s: Session) -> None:

@@ -82,6 +82,20 @@ def memory_autocapture(s: Session, text: str) -> None:
         threading.Thread(target=_capture_facts, args=(s, text), daemon=True).start()
 
 
+def handle_panel(s: Session, text: str) -> str | None:
+    """Side-panel commands (open source N, save this card, close the panel): deterministic, no model call; they act on the stored card."""
+    if getattr(s, "panel_hub", None) is None:
+        return None
+    try:
+        from julius.ui_bridge import panel_emit
+
+        saved = (config.load_config().get("ui") or {}).get("saved_dir")
+        return panel_emit.handle(s.panel_hub, s.panel_files, text, saved)
+    except Exception as exc:
+        log.console(f"  [panel command failed: {type(exc).__name__}: {exc}]", flush=True)
+        return None
+
+
 def handle_memory(s: Session, text: str) -> str | None:
     """remember / forget / what do you remember: deterministic, no model call."""
     try:

@@ -51,6 +51,10 @@ port = 8765
 enabled = true                   # write channel for the orb app, 127.0.0.1 only, per-install token in ~/.julius/ui_token (docs/UI_CHANNEL.md)
 port = 8775
 typed_reply = "both"            # text typed in the orb: "both" = he answers aloud and in text, "text" = text only
+panel = true                    # the side panel's data: research cards on the event feed, plus a small file server for the images (docs/PANEL.md)
+panel_port = 8785               # that file server (127.0.0.1 only)
+panel_max_mb = 200              # image cache size in ~/.julius/panel (also dropped after 24 hours)
+saved_dir = "~/Julius Saved"    # where "save this card" writes (a local folder; a path inside iCloud Drive is refused)
 
 [audio]
 duplex = true                   # DEFAULT since 11-07: one stream for mic + speakers with echo cancellation; the mic gate is off while Julius talks and speaking over him stops him (julius_duplex.py). Falls back to the gate by itself if echo leaks. JULIUS_DUPLEX=0 turns it off for one run

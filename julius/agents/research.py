@@ -15,6 +15,7 @@ Plan / guarantees (all enforced in code, all covered by test_julius_research.py)
                  the call that would start past the cap is not made). On any limit the partial, honestly labelled result is returned.
 Haiku does the work; nothing here uses Sonnet."""
 
+import contextlib
 import html.parser
 import http.client
 import ipaddress
@@ -573,6 +574,15 @@ class ResearchAgent:
             return ""
 
 
+_panel_sink: Callable[[dict], None] | None = None
+
+
+def set_panel_sink(fn: Callable[[dict], None] | None) -> None:
+    """The side panel registers here; each finished research result is handed to it (it never raises into the turn)."""
+    global _panel_sink
+    _panel_sink = fn
+
+
 def research_task(args: list[str], brain: Any | None = None) -> Any:
     """Planner tool body: returns text for the planner (the planner then speaks)."""
     import anthropic
@@ -597,6 +607,9 @@ def research_task(args: list[str], brain: Any | None = None) -> Any:
         anthropic.InternalServerError,
     ):
         return "I couldn't reach the research service right now."
+    if _panel_sink is not None:
+        with contextlib.suppress(Exception):  # a panel problem must never cost the spoken answer
+            _panel_sink(res)
     srcs = ", ".join(
         s["title"] or urllib.parse.urlsplit(s["url"]).hostname for s in res["sources"][:3]
     )

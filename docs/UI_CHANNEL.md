@@ -53,7 +53,17 @@ A handler bug answers 500 with no details.
 enabled = true
 port = 8775
 typed_reply = "both"   # or "text"
+panel = true           # the side panel data and its image server (docs/PANEL.md)
+panel_port = 8785
+panel_max_mb = 200
+saved_dir = "~/Julius Saved"
 ```
+
+## Panel commands (typed or spoken)
+The side panel's buttons send these as ordinary typed text, so voice and buttons behave the same. They are recognised before the model is asked and act on the stored card, never on a URL or path in the words:
+- `open source N` opens the Nth source of the newest research card in the default browser (http/https only). For an older card: `open source N from the research on <words of its question>` (the card whose question overlaps those words most; otherwise Julius says he can't find it). Spoken numbers work ("open source three").
+- `save this card` writes the newest research card to a new folder under `[ui] saved_dir` (default `~/Julius Saved`): `card.md` plus an `images/` folder. A path inside iCloud Drive or a relative path is refused. See docs/PANEL.md.
+- `close the panel` publishes `panel.clear` for all cards.
 
 ## Log events for typed input
 

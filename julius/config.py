@@ -55,6 +55,10 @@ DEFAULTS = {
         "enabled": True,
         "port": 8775,
         "typed_reply": "both",
+        "panel": True,
+        "panel_port": 8785,
+        "panel_max_mb": 200,
+        "saved_dir": "~/Julius Saved",
     },  # write channel for the orb app (julius_uichannel.py): typed text and dropped files. typed_reply: both = speak and show, text = show only
     "audio": {"duplex": True, "duplex_rate": 48000, "fallback_seconds": 3.0, "raw_backfill": False},
     "wake": {
@@ -160,6 +164,15 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
         raise ValueError("spend.offline_at_multiple must be greater than 1")
     if config["ui"]["typed_reply"] not in ("both", "text"):
         raise ValueError("ui.typed_reply must be 'both' or 'text'")
+    ui = config["ui"]
+    if not isinstance(ui["panel"], bool):
+        raise ValueError("ui.panel must be true or false")
+    if not (isinstance(ui["panel_port"], int) and 1024 <= ui["panel_port"] <= 65535):
+        raise ValueError("ui.panel_port must be a port number from 1024 to 65535")
+    if not (isinstance(ui["panel_max_mb"], int) and 1 <= ui["panel_max_mb"] <= 5000):
+        raise ValueError("ui.panel_max_mb must be a whole number of megabytes, 1 to 5000")
+    if not (isinstance(ui["saved_dir"], str) and ui["saved_dir"].strip()):
+        raise ValueError("ui.saved_dir must be a folder path, for example ~/Julius Saved")
     code = config["code"]
     if not (0 < code["default_cap_usd"] <= code["max_cap_usd"]):
         raise ValueError("code.default_cap_usd must be positive and not above code.max_cap_usd")

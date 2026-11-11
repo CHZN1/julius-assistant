@@ -28,6 +28,7 @@ from julius.runtime.handlers import (
     handle_code,
     handle_files,
     handle_memory,
+    handle_panel,
     memory_autocapture,
 )
 from julius.runtime.session import Session
@@ -147,7 +148,12 @@ def _command_reply(s: Session, text: str) -> str | None:
     discussion = authority_discussion_reply(text)
     if discussion or incomplete_fragment(text):
         return discussion or NOT_CAUGHT
-    return handle_memory(s, text) or handle_code(s, text) or handle_files(s, text)
+    return (
+        handle_panel(s, text)
+        or handle_memory(s, text)
+        or handle_code(s, text)
+        or handle_files(s, text)
+    )
 
 
 # --- the answer ----------------------------------------------------------------------------------

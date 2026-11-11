@@ -81,6 +81,10 @@ class Session:
     duplex_voice: CleanTalkOver | None = None
     talkover: TalkOver | None = None
     events_hub: EventHub | None = None
+    panel_hub: Any | None = (
+        None  # the side panel (ui_bridge/panel.py) and its image store; None when it is off
+    )
+    panel_files: Any | None = None
     ui_level_tap: LevelTap | None = None
     ui_channel: Channel | None = None
     drop_stage: DropStage | None = None
