@@ -89,6 +89,9 @@ def make_sink(
                 ).start()
         except Exception as e:
             log.event("panel_emit_failed", error=type(e).__name__)
+            log.console(
+                f"  [side panel: could not show the research card ({type(e).__name__})]", flush=True
+            )
 
     return sink
 

@@ -80,6 +80,14 @@ class Base(unittest.TestCase):
 
 
 class Emitter(Base):
+    def test_dropped_findings_may_be_a_count_as_the_real_agent_reports_it(self):
+        for dropped, want in ((3, 3), ([1, 2], 2), (0, 0), (None, 0), (True, 0)):
+            self.sent.clear()
+            self.assertIsNotNone(
+                self.panel.research(dict(RESULT, dropped_findings=dropped)), dropped
+            )
+            self.assertEqual(self.sent[0]["dropped"], want)
+
     def test_card_goes_out_at_once_and_images_arrive_as_an_update(self):
         sink = pe.make_sink(self.panel, self.files, lambda: 7, FakeFetcher)
         sink(RESULT)

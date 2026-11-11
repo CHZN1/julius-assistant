@@ -168,6 +168,15 @@ def validate(msg: Any) -> list[str]:
     return errors
 
 
+def _count(value: Any) -> int:
+    """The research agent reports dropped findings as a count; older results and the synthetic feed use a list."""
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int):
+        return max(0, value)
+    return len(value) if isinstance(value, list | tuple) else 0
+
+
 def research_card(result: dict, images: list[dict] | None = None) -> dict:
     """A panel.research body from the research agent's result dict. `images` are already-cached [{image, alt, page_url, page_title}]."""
     sources = []
@@ -211,7 +220,7 @@ def research_card(result: dict, images: list[dict] | None = None) -> dict:
         "findings": findings,
         "sources": sources,
         "images": imgs,
-        "dropped": len(result.get("dropped_findings") or []),
+        "dropped": _count(result.get("dropped_findings")),
         "stopped": clean(result["stopped"], CAPS["stopped"]) if result.get("stopped") else None,
     }
 
@@ -250,6 +259,9 @@ class PanelHub:
             from julius import log
 
             log.event("panel_dropped", problems=problems[:5])
+            log.console(
+                f"  [side panel: a card was not shown ({'; '.join(problems[:3])})]", flush=True
+            )
         except Exception:  # logging must never break a turn
             pass
 
