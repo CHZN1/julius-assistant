@@ -37,7 +37,7 @@ def text(t):
     return SimpleNamespace(message=SimpleNamespace(content=t, tool_calls=None))
 
 
-def turn(prompt, responses, cloud=True, out="tool output", carry=False):
+def turn(prompt, responses, cloud=True, out="tool output", carry=False, many=False):
     """Run ask_streaming with scripted non-streaming responses; returns (model calls, spoken, result)."""
     h = TurnHarness()
     h.session.cloud_brain = object() if cloud else None
@@ -54,7 +54,12 @@ def turn(prompt, responses, cloud=True, out="tool output", carry=False):
         return as_parts(r) if kw.get("stream") else r
 
     h.llm_chat = llm
-    with patch.object(jt, "call", return_value=out):
+    many_patch = (
+        patch.object(jt, "call_many", side_effect=lambda cs: [(out, True) for _ in cs])
+        if many
+        else patch.object(jt, "call_many", wraps=jt.call_many)
+    )
+    with patch.object(jt, "call", return_value=out), many_patch:
         jt.dispatcher().last_result = {"ok": True}
         result = h.ask(prompt, "", speak_fn=spoken.append)
     return calls, spoken, result
@@ -150,6 +155,7 @@ class CallCountTests(unittest.TestCase):
                 text("Both are fine."),
             ],
             out=WEATHER,
+            many=True,
         )
         self.assertEqual(calls, [True, True])
 
