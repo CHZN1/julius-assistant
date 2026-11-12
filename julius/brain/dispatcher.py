@@ -41,13 +41,21 @@ OWNERS = {
     "list_files": "files",
     "read_file": "files",
     "find_files": "files",
+    "render_chart": "charts",
 }
 
 # Read-only network lookups with no shared state may run side by side; files, planning, reminders and documents stay one at a time.
 PARALLEL_SAFE = {"time", "weather", "sports", "markets", "calculator", "news", "research"}
 
 
-_JSON_TYPES = {"string": str, "integer": int, "boolean": bool, "number": (int, float)}
+_JSON_TYPES = {
+    "string": str,
+    "integer": int,
+    "boolean": bool,
+    "number": (int, float),
+    "array": list,
+    "object": dict,
+}
 
 
 def _check_value(key: str, value: str | bool | float | int, typ: str) -> None:

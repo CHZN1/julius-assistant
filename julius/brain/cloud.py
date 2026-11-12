@@ -54,6 +54,7 @@ CAPABILITIES_PROMPT = (
     "Call file_request with his own words, also for undo and 'what did you change'. The file controller always shows a preview first and nothing changes until the user says yes. Changes to MANY files at once (organising, sorting, cleaning up, renaming or moving everything of a kind) still go to escalate_to_planner.\n"
     "- Coding: a sandboxed coding agent fixes or writes code in a COPY of a project under his dev folder. Call code_request right away, never just describe how it works. It needs his yes to start and a separate yes to merge; he can say show the changes, merge it, undo the merge, cancel the coding task.\n"
     "- Memory: remember_fact, forget_fact, list_memories. Reminders, timers, tasks and events: set_reminder, list_reminders, cancel_reminder, list_planner_items.\n"
+    "- Charts and tables: render_chart shows a bar, line or pie chart or a table in the side panel from data you already have (never invented); then say in one sentence what it shows.\n"
     "- Everyday single lookups (weather, time, math, conversions, quotes, scores, news, web search) use their own tools.\n"
     "- Comparisons, recommendations, plans, briefings that combine several facts, research, and changes to many files at once all go to escalate_to_planner, even when each fact is a simple lookup.\n"
     'If the user says only yes, do it or go ahead and you did not just ask him a question, nothing is waiting for a yes: say exactly "There\'s nothing waiting for a yes right now. What would you like me to do?" and never invent a result.'

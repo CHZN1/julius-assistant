@@ -10,7 +10,7 @@ readme = "README.md"
 test = [
   "numpy", "scipy", "soundfile", "psutil", "requests", "httpx", "pypdf", "reportlab",
   "anthropic", "sounddevice", "livekit", "ollama", "ddgs", "pynput",
-  "openwakeword", "mlx-lm", "mlx-whisper",
+  "openwakeword", "mlx-lm", "mlx-whisper", "matplotlib", "pillow",
 ]
 
 [tool.ruff]

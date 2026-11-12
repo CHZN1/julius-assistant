@@ -1,6 +1,6 @@
 # Side panel (backend)
 
-The panel is a client-side feature: cards are data on the read-only event feed (`panel.research`, `panel.files`, `panel.update`, `panel.clear`; see EVENT_FEED.md), and a client such as the orb app draws them. This page is the security model and how the pieces connect.
+The panel is a client-side feature: cards are data on the read-only event feed (`panel.research`, `panel.files`, `panel.chart`, `panel.table`, `panel.images`, `panel.update`, `panel.clear`; see EVENT_FEED.md), and a client such as the orb app draws them. This page is the security model and how the pieces connect.
 
 ## What produces a card
 When the research agent finishes (`research_task`), the result is handed to the panel (`julius/ui_bridge/panel_emit.py`) after it is built and before the spoken answer is returned, so the card never delays speech and a failure in the panel never changes what Julius says. The card carries the question, summary, numbered findings with citation chips, and the sources. Images from the pages that backed a finding are fetched afterwards in the background (the same SSRF-checked, GET-only fetcher as research), decoded and re-encoded with Pillow, stored, and arrive later as a `panel.update`.
@@ -11,11 +11,15 @@ When the research agent finishes (`research_task`), the result is handed to the 
 
 **Images.** Pictures are skipped before download when the file name or alt text says logo, icon, favicon, sprite, avatar, emoji, badge, button, pixel, spacer or placeholder, and after download when either side is under 200 px or the shape is wider or taller than 3:1. Up to 16 candidates are tried so skipped ones do not use up the eight places.
 
+**Charts and tables.** The model calls `render_chart` with DATA (kind `bar`, `hbar`, `line`, `pie` or `table`, a title, labels and series, or columns and rows), never code. `julius/ui_bridge/charts.py` validates and bounds everything (30 labels, 5 series, 12 pie slices, 8 table columns, 50 rows, 80 characters a cell, finite numbers only), draws with matplotlib's Agg backend in the orb's colours on a transparent background, re-encodes the PNG through the same Pillow pipeline as every panel image, and publishes a `panel.chart` card (picture plus the data behind it). A table is sent as data and laid out by the UI. A bad spec comes back to the model as a spoken reason; matplotlib missing or a drawing failure never raises into the turn. The tool is only offered to the model when the request mentions a chart, graph, plot, table, visualisation or pie chart.
+
+**Image galleries.** The research card keeps its small picture strip. "Show the images" (also "show me the pictures from the research on ...") opens the newest research card's pictures as a `panel.images` gallery card of their own: larger, pinnable, and each picture links back to its page.
+
 ## Images: the file server
 `127.0.0.1:8785` (`[ui] panel_port`), GET only, `/<token>/p/<id>.<png|jpg|webp|gif>`: a random per-run token in the path, opaque ids, one private directory (`~/.julius/panel`, mode 0700), no listing, no symlinks, Host and Origin checks, `nosniff`, `Content-Security-Policy: default-src 'none'`, `Cache-Control: no-store`. Remote images are never passed through: each is re-encoded (metadata and anything appended is dropped; at most 5 MB in, 8000 px a side, 1280 px out, SVG refused). The cache is bounded by `panel_max_mb` (LRU) and 24 hours.
 
 ## What the panel can make Julius do
-Only typed text, through the write channel and the usual typed-text rules (UI_CHANNEL.md): `open source N`, `save this card`, `close the panel`, `show more`. The URL for "open source" is read from the stored card (already limited to http/https without credentials), never from the words. Panel content is never fed back to a model as instructions.
+Only typed text, through the write channel and the usual typed-text rules (UI_CHANNEL.md): `open source N`, `save this card`, `close the panel`, `show more`, `show the images`. The URL for "open source" is read from the stored card (already limited to http/https without credentials), never from the words. Panel content is never fed back to a model as instructions.
 
 ## Saved cards
 `save this card` creates a folder `YYYY-MM-DD HHMM <question-slug>` under `[ui] saved_dir` (default `~/Julius Saved`, local on purpose; a path inside iCloud Drive is refused) with `card.md` (question, summary, findings with `[n]` citations, sources as links, image captions) and `images/`. Names are letters, digits and dashes only, and an earlier save is never overwritten.

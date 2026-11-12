@@ -220,6 +220,11 @@ MORE_RE = re.compile(
     r"(?:\s+(?:files?|items?|results?|rows?))?[\s.!?]*$",
     re.I,
 )
+IMAGES_RE = re.compile(
+    r"^\W*(?:please\s+|can you\s+|could you\s+)?(?:show|open|pull up|bring up)(?:\s+me)?\s+(?:the\s+)?(?:(?:research|card|search)\s+)?(?:images|pictures|photos)"
+    r"(?:\s+(?:from|of|in)\s+(?:the\s+)?(?:research|search|card|results?)(?:\s+(?:on|about|for|into)\s+(.+?))?)?[\s.!?]*$",
+    re.I,
+)
 CLOSE_RE = re.compile(
     r"^\W*(?:please\s+)?(?:close|hide|dismiss|clear)\s+the\s+(?:side\s+)?panel[\s.!?]*$", re.I
 )
@@ -372,6 +377,41 @@ def save_card(
     return f"Saved to {base.name}, in a folder called {folder.name}."
 
 
+def show_images(panel: Any, question: str | None = None) -> str:
+    """ "Show the images": the images of a research card as a gallery card of their own (larger, pinnable, openable)."""
+    card = find_card(panel, question)
+    if card is not None and card.get("type") != "panel.research" and not question:
+        with (
+            panel._lock
+        ):  # the newest card is a chart or a gallery: the images belong to the newest research card
+            research = [c for c in panel.cards.values() if c.get("type") == "panel.research"]
+        card = research[-1] if research else None
+    if card is None or card.get("type") != "panel.research":
+        return "I don't have a research card to show images from."
+    imgs = card.get("images") or []
+    if not imgs:
+        return "That research has no images."
+    pid = panel.images(
+        "Images: " + (card.get("question") or "research"),
+        card.get("question", ""),
+        [
+            {
+                "image": i["image"],
+                "alt": i.get("alt", ""),
+                "page_url": i.get("page_url", ""),
+                "page_title": i.get("page_title", ""),
+            }
+            for i in imgs
+        ],
+        turn=card.get("turn"),
+    )
+    return (
+        f"Showing {len(imgs)} image{'s' if len(imgs) != 1 else ''}."
+        if pid
+        else "I couldn't show the images."
+    )
+
+
 def show_more(panel: Any, lister: Callable[[str, int], dict] | None = None) -> str | None:
     """ "Show more" on the newest file card: reveal its next rows, or ask the file agent to list further. None when the newest card is not a file card."""
     card = find_card(panel)
@@ -433,4 +473,7 @@ def handle(
         return close_panel(panel)
     if MORE_RE.match(t):
         return show_more(panel)
+    m = IMAGES_RE.match(t)
+    if m:
+        return show_images(panel, m.group(1))
     return None

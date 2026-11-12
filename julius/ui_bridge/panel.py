@@ -71,6 +71,24 @@ SCHEMAS: dict[str, dict[str, str]] = {
         "skipped": "int",
         "more": "bool",
     },
+    "panel.chart": {
+        "title": "str",
+        "kind": "str",
+        "unit": "str",
+        "image": "str",
+        "alt": "str",
+        "labels": "list",
+        "series": "list",
+        "note": "str?",
+    },
+    "panel.table": {
+        "title": "str",
+        "unit": "str",
+        "columns": "list",
+        "rows": "list",
+        "note": "str?",
+    },
+    "panel.images": {"title": "str", "question": "str", "images": "list"},
     "panel.update": {
         "target": "str",
         "images": "list?",
@@ -95,6 +113,7 @@ ITEM_FIELDS = {
     "kind": "str",
     "was": "str?",
 }
+SERIES_FIELDS = {"name": "str", "values": "list"}
 IMAGE_FIELDS = {"n": "int", "image": "str", "alt": "str", "page_url": "str", "page_title": "str"}
 
 
@@ -181,6 +200,68 @@ def _check(fields: dict[str, str], obj: Any, where: str, errors: list[str]) -> N
             errors.append(f"{where}.{k}: expected {kind}")
 
 
+def _v_research(msg: dict, errors: list[str]) -> None:
+    for i, f in enumerate(msg["findings"]):
+        _check(FINDING_FIELDS, f, f"findings[{i}]", errors)
+    for i, s in enumerate(msg["sources"]):
+        _check(SOURCE_FIELDS, s, f"sources[{i}]", errors)
+        if isinstance(s, dict) and not clean_url(s.get("url")):
+            errors.append(f"sources[{i}].url: not http(s)")
+    _v_images(msg["images"], errors)
+
+
+def _v_images(images: list, errors: list[str]) -> None:
+    for i, im in enumerate(images):
+        _check(IMAGE_FIELDS, im, f"images[{i}]", errors)
+        if isinstance(im, dict) and not IMAGE_REF.match(str(im.get("image"))):
+            errors.append(f"images[{i}].image: not a panel file reference")
+
+
+def _v_files(msg: dict, errors: list[str]) -> None:
+    if msg["status"] not in FILE_STATUSES:
+        errors.append("panel.files: bad status")
+    for i, it in enumerate(msg["items"]):
+        _check(ITEM_FIELDS, it, f"items[{i}]", errors)
+
+
+def _v_update(msg: dict, errors: list[str]) -> None:
+    for i, it in enumerate(msg.get("items") or []):
+        _check(ITEM_FIELDS, it, f"items[{i}]", errors)
+    if msg.get("status") is not None and msg["status"] not in FILE_STATUSES:
+        errors.append("panel.update: bad status")
+
+
+def _v_chart(msg: dict, errors: list[str]) -> None:
+    if not IMAGE_REF.match(str(msg["image"])):
+        errors.append("panel.chart.image: not a panel file reference")
+    if msg["kind"] not in ("bar", "hbar", "line", "pie"):
+        errors.append("panel.chart: bad kind")
+    for i, s in enumerate(msg["series"]):
+        _check(SERIES_FIELDS, s, f"series[{i}]", errors)
+
+
+def _v_table(msg: dict, errors: list[str]) -> None:
+    for i, r in enumerate(msg["rows"]):
+        if not isinstance(r, list) or len(r) != len(msg["columns"]):
+            errors.append(f"rows[{i}]: wrong width")
+
+
+def _v_clear(msg: dict, errors: list[str]) -> None:
+    if msg["scope"] not in CLEAR_SCOPES or msg["reason"] not in CLEAR_REASONS:
+        errors.append("panel.clear: bad scope or reason")
+
+
+_EXTRA_CHECKS: dict[str, Callable[[dict, list[str]], None]] = {
+    "panel.research": _v_research,
+    "panel.files": _v_files,
+    "panel.update": _v_update,
+    "panel.chart": _v_chart,
+    "panel.table": _v_table,
+    "panel.images": lambda m, e: _v_images(m["images"], e),
+    "panel.clear": _v_clear,
+}
+
+
 def validate(msg: Any) -> list[str]:
     """Schema check of one published message; returns a list of problems (empty = conformant)."""
     errors: list[str] = []
@@ -189,31 +270,7 @@ def validate(msg: Any) -> list[str]:
     _check({**COMMON, **SCHEMAS[msg["type"]]}, msg, "msg", errors)
     if errors:
         return errors
-    if msg["type"] == "panel.research":
-        for i, f in enumerate(msg["findings"]):
-            _check(FINDING_FIELDS, f, f"findings[{i}]", errors)
-        for i, s in enumerate(msg["sources"]):
-            _check(SOURCE_FIELDS, s, f"sources[{i}]", errors)
-            if isinstance(s, dict) and not clean_url(s.get("url")):
-                errors.append(f"sources[{i}].url: not http(s)")
-        for i, im in enumerate(msg["images"]):
-            _check(IMAGE_FIELDS, im, f"images[{i}]", errors)
-            if isinstance(im, dict) and not IMAGE_REF.match(str(im.get("image"))):
-                errors.append(f"images[{i}].image: not a panel file reference")
-    if msg["type"] == "panel.files":
-        if msg["status"] not in FILE_STATUSES:
-            errors.append("panel.files: bad status")
-        for i, it in enumerate(msg["items"]):
-            _check(ITEM_FIELDS, it, f"items[{i}]", errors)
-    if msg["type"] == "panel.update":
-        for i, it in enumerate(msg.get("items") or []):
-            _check(ITEM_FIELDS, it, f"items[{i}]", errors)
-        if msg.get("status") is not None and msg["status"] not in FILE_STATUSES:
-            errors.append("panel.update: bad status")
-    if msg["type"] == "panel.clear" and (
-        msg["scope"] not in CLEAR_SCOPES or msg["reason"] not in CLEAR_REASONS
-    ):
-        errors.append("panel.clear: bad scope or reason")
+    _EXTRA_CHECKS[msg["type"]](msg, errors)
     return errors
 
 
@@ -479,6 +536,74 @@ class PanelHub:
             while len(self.cards) > HISTORY:
                 self.cards.popitem(last=False)
         return pid
+
+    # ---- chart, table and image-gallery cards -----------------------------------------------------
+    def _publish(self, type_: str, body: dict, turn: int | None) -> str | None:
+        seq, pid = self._next()
+        msg = {
+            "type": type_,
+            "t": round(self.clock(), 3),
+            "panel_id": pid,
+            "turn": turn,
+            "seq": seq,
+            **body,
+        }
+        if not self._emit(msg):
+            return None
+        with self._lock:
+            self.cards[pid] = msg
+            while len(self.cards) > HISTORY:
+                self.cards.popitem(last=False)
+        return pid
+
+    def chart(self, card: dict, turn: int | None = None) -> str | None:
+        """A chart card: `image` is a panel file reference to the drawn PNG, `labels` / `series` the data behind it (shown as a table on demand)."""
+        body = {
+            "title": clean(card.get("title"), CAPS["title"]),
+            "kind": str(card.get("kind") or ""),
+            "unit": clean(card.get("unit"), 20),
+            "image": str(card.get("image") or ""),
+            "alt": clean(card.get("alt"), CAPS["alt"]),
+            "labels": [clean(x, 40) for x in (card.get("labels") or [])[:30]],
+            "series": [
+                {
+                    "name": clean(s.get("name"), 40),
+                    "values": [float(v) for v in s.get("values", [])[:30]],
+                }
+                for s in (card.get("series") or [])[:5]
+            ],
+        }
+        return self._publish("panel.chart", body, turn)
+
+    def table(self, card: dict, turn: int | None = None) -> str | None:
+        body = {
+            "title": clean(card.get("title"), CAPS["title"]),
+            "unit": clean(card.get("unit"), 20),
+            "columns": [clean(c, 60) for c in (card.get("columns") or [])[:8]],
+            "rows": [[clean(c, 80) for c in r] for r in (card.get("rows") or [])[:50]],
+        }
+        return self._publish("panel.table", body, turn)
+
+    def images(
+        self, title: str, question: str, images: list[dict], turn: int | None = None
+    ) -> str | None:
+        """A gallery card from already-cached images [{image, alt, page_url, page_title}] (the research images, shown larger)."""
+        body = {
+            "title": clean(title, CAPS["title"]),
+            "question": clean(question, CAPS["question"]),
+            "images": [
+                {
+                    "n": i + 1,
+                    "image": im["image"],
+                    "alt": clean(im.get("alt"), CAPS["alt"]),
+                    "page_url": clean_url(im.get("page_url")),
+                    "page_title": clean(im.get("page_title"), CAPS["title"]),
+                }
+                for i, im in enumerate(images[:MAX_IMAGES])
+                if IMAGE_REF.match(str(im.get("image")))
+            ],
+        }
+        return self._publish("panel.images", body, turn) if body["images"] else None
 
     # ---- file cards (previews of file plans, folder listings) ------------------------------------
     def files(self, card: dict, turn: int | None = None) -> str | None:

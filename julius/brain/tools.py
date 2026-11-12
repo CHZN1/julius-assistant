@@ -779,12 +779,37 @@ def code_request(request: str = "", goal: str = "", project: str = "") -> str:
     )
 
 
+def render_chart(
+    kind: str = "",
+    title: str = "",
+    labels: list | None = None,
+    series: list | None = None,
+    unit: str = "",
+    columns: list | None = None,
+    rows: list | None = None,
+) -> str:
+    from julius.ui_bridge import charts
+
+    return charts.render_chart(
+        {
+            "kind": kind,
+            "title": title,
+            "labels": labels,
+            "series": series,
+            "unit": unit,
+            "columns": columns,
+            "rows": rows,
+        }
+    )
+
+
 REGISTRY.update(
     remember_fact=remember_fact,
     forget_fact=forget_fact,
     list_memories=list_memories,
     file_request=file_request,
     code_request=code_request,
+    render_chart=render_chart,
 )
 SCHEMAS += [
     _utility_schema(
@@ -817,6 +842,39 @@ SCHEMAS += [
         {"request": "string", "goal": "string", "project": "string"},
         [],
     ),
+    {
+        "type": "function",
+        "function": {
+            "name": "render_chart",
+            "description": "Show a chart or a table in the side panel from DATA you give it (never code). Use it when the user asks to chart, graph, plot, compare numbers visually or show a table, with numbers you already have from the conversation or a tool; never invent the numbers. kind: bar, hbar (long labels), line (over time), pie (parts of a whole) or table. Charts: 'labels' (the x-axis or slice names) and 'series' [{name, values}] with one value per label. Tables: 'columns' and 'rows' (each row one cell per column). Then say in one sentence what it shows; do not read the numbers out.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "kind": {"type": "string", "enum": ["bar", "hbar", "line", "pie", "table"]},
+                    "title": {"type": "string"},
+                    "unit": {"type": "string", "description": "axis unit, e.g. 'metres' or '$'"},
+                    "labels": {"type": "array", "items": {"type": "string"}},
+                    "series": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {"type": "string"},
+                                "values": {"type": "array", "items": {"type": "number"}},
+                            },
+                            "required": ["name", "values"],
+                        },
+                    },
+                    "columns": {"type": "array", "items": {"type": "string"}},
+                    "rows": {
+                        "type": "array",
+                        "items": {"type": "array", "items": {"type": "string"}},
+                    },
+                },
+                "required": ["kind", "title"],
+            },
+        },
+    },
 ]
 
 _dispatcher = None
@@ -888,6 +946,10 @@ _SCHEMA_GROUPS = (
     (
         r"trash|\bbin\b|delete|remove|\bmove\b|\bcopy\b|rename|undo|empty the|get rid|throw away|folder|\bfiles?\b|sandbox|downloads|desktop|documents|what did you change",
         ("file_request",),
+    ),
+    (
+        r"chart|graph|\bplot\b|\btable\b|visuali[sz]|pie chart",
+        ("render_chart",),
     ),
     (
         r"\bcod(?:e|ing)\b|\bbugs?\b|\btests?\b|refactor|\bscripts?\b|opus|merge|\bprojects?\b|programming|\bfix (?:the|my|this)\b",

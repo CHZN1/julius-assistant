@@ -241,6 +241,9 @@ def setup_panel(s: Session) -> None:
     from julius.agents import file_common
 
     file_common.set_panel_sink(panel_emit.make_file_sink(s.panel_hub, lambda: s.turn))
+    from julius.ui_bridge import charts
+
+    charts.set_panel(s.panel_hub, s.panel_files, lambda: s.turn)
     log.console(
         f"  [side panel: images on http://127.0.0.1:{server.port} (this machine only)]", flush=True
     )

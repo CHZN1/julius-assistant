@@ -21,12 +21,15 @@ Every message has `type` and `t` (Unix seconds, float).
 States: `idle` (awake, ready), `listening` (the user is speaking), `thinking`, `speaking`, `asleep` (ordinary sleep: wakes on "Julius"), `quiet` (microphone off until the wake hotkey).
 
 ## Side panel: `panel.*` messages
-Data for a side panel (research results and file previews; diffs, charts and tables follow in later versions). Every panel message also has `panel_id` (unique per card), `turn` (the transcript turn, or `null`) and `seq` (increasing). Messages carry **data only, never HTML**: all text is control-character and bidi-stripped and length-capped, URLs are http(s) only, and images are references to the panel file server, never remote URLs. A message over 48 kB is trimmed (`truncated: true`) or dropped.
+Data for a side panel (research results, file previews, charts, tables and image galleries; diffs follow in a later version). Every panel message also has `panel_id` (unique per card), `turn` (the transcript turn, or `null`) and `seq` (increasing). Messages carry **data only, never HTML**: all text is control-character and bidi-stripped and length-capped, URLs are http(s) only, and images are references to the panel file server, never remote URLs. A message over 48 kB is trimmed (`truncated: true`) or dropped.
 
 | `type` | Fields | When |
 |---|---|---|
 | `panel.research` | `question`, `summary`, `findings` `[{n, claim, cite:[source n]}]`, `sources` `[{n, title, site, date|null, url}]`, `images` `[{n, image, alt, page_url, page_title}]`, `dropped`, `stopped|null`, `truncated?` | a research answer is ready |
 | `panel.files` | `title`, `kind` (`plan` or `listing`), `action|null` (`move`, `copy`, `rename`, `create`, `trash`, `purge`), `status` (`pending`, `completed`, `cancelled`, `undone`, `partial`, `expired`, `listing`), `plan_id|null`, `where` (folder, or `from → to`, with `~`), `summary`, `items` `[{n, name, dir, size|null, kind, was?}]`, `shown`, `total`, `total_bytes|null`, `skipped`, `more` | a file plan is waiting for yes (the preview), or a folder listing / find result is ready; the first 25 rows are sent |
+| `panel.chart` | `title`, `kind` (`bar`, `hbar`, `line`, `pie`), `unit`, `image` (the drawn PNG, a panel file reference), `alt`, `labels` `[str]`, `series` `[{name, values:[num]}]`, `note?` | the `render_chart` tool drew a chart; the data behind it is included so a UI can show it as a table |
+| `panel.table` | `title`, `unit`, `columns` `[str]`, `rows` `[[str]]` (one cell per column), `note?` | the `render_chart` tool with kind `table`: plain text cells, laid out by the UI |
+| `panel.images` | `title`, `question`, `images` `[{n, image, alt, page_url, page_title}]` | "show the images": the pictures of a research card as a gallery of their own |
 | `panel.update` | `target` (a card's `panel_id`), `images?` (more images, numbered after the card's existing ones), `note?`, `items?` (more file rows, numbered after the existing ones), `shown?`, `more?`, `status?` (a file card's new status), `summary?` | pieces that arrive late: fetched images, the rows revealed by "show more", a plan being completed, cancelled or undone |
 | `panel.clear` | `scope` (`all` or `card`), `target|null`, `reason` (`new_topic`, `dismissed`, `expired`, `done`) | remove one card or all |
 
@@ -34,7 +37,7 @@ Data for a side panel (research results and file previews; diffs, charts and tab
 
 Citation numbers are 1-based and the same in `findings[].cite`, `sources[].n` and the typed command "open source 3". `image` is `/p/<id>.<png|jpg|webp|gif>`, to be fetched from `hello.panel.base` + that path (a localhost-only, token-protected file server; clients must not load any other image URL). Source links are shown as text; opening one is done by typing "open source N" to the write channel, so Julius opens it, not the UI.
 
-`hello` gains `panel`: `{"cards": [last 10 panel cards (`panel.research` and `panel.files`), oldest first, with updates already folded in], "base": "<file server origin and token path>"}`, so a UI that reconnects restores its panel. Example `panel.research`:
+`hello` gains `panel`: `{"cards": [last 10 panel cards (any `panel.*` card type), oldest first, with updates already folded in], "base": "<file server origin and token path>"}`, so a UI that reconnects restores its panel. Example `panel.research`:
 
 ```json
 {"type":"panel.research","t":1.0,"panel_id":"c1-1","turn":4,"seq":1,"question":"How tall is it?","summary":"It is 830 m tall.","findings":[{"n":1,"claim":"The tower is 830 m tall.","cite":[1]}],"sources":[{"n":1,"title":"The Tower","site":"example.org","date":null,"url":"https://example.org/tower"}],"images":[],"dropped":0,"stopped":null}
