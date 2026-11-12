@@ -96,6 +96,64 @@ def make_sink(
     return sink
 
 
+def make_file_sink(panel: Any, turn_fn: Callable[[], int] = lambda: 0) -> Callable[[dict], None]:
+    """What the file agent calls with each reply (`file_common.set_panel_sink`): a pending file plan becomes a card, a finished /
+    cancelled / undone plan updates its card's status, a folder listing or find result becomes a list card. Never raises."""
+
+    def card_for(plan_id: str | None) -> dict | None:
+        if not plan_id:
+            return None
+        with panel._lock:
+            cards = list(panel.cards.values())
+        for c in reversed(cards):
+            if c.get("type") == "panel.files" and c.get("plan_id") == plan_id:
+                return c
+        return None
+
+    def mark(card: dict | None, status: str, summary: str | None = None) -> None:
+        if card is not None and card.get("status") != status:
+            panel.set_status(card["panel_id"], status, summary)
+
+    def sink(res: dict) -> None:
+        if getattr(
+            panel, "quiet", False
+        ):  # "show more" re-lists through the agent: that answer extends a card, it is not a new one
+            return
+        try:
+            code, data = res.get("code"), res.get("data") or {}
+            plan, msg = data.get("plan"), res.get("message") or ""
+            if code == "preview" and plan and plan.get("ops"):
+                for old in [c for c in _cards(panel) if c.get("status") == "pending"]:
+                    mark(old, "expired")  # a newer plan replaces the one still waiting
+                body = pn.files_card_from_plan(plan, msg, skipped=len(data.get("skipped") or []))
+                panel.files(body, turn=turn_fn())
+            elif code in ("completed", "purged") and plan:
+                mark(card_for(plan.get("id")), "completed", msg)
+            elif code == "partial" and plan:
+                mark(card_for(plan.get("id")), "partial", msg)
+            elif code == "undone" and plan:
+                mark(card_for(plan.get("id")), "undone", msg)
+            elif code == "undo_partial" and plan:
+                mark(card_for(plan.get("id")), "partial", msg)
+            elif code == "cancelled":
+                pending = [c for c in _cards(panel) if c.get("status") == "pending"]
+                mark(pending[-1] if pending else None, "cancelled")
+            elif code in ("listed", "found") and data.get("items"):
+                body = pn.files_card_from_listing(data, msg)
+                pid = panel.files(body, turn=turn_fn())
+                if pid and data.get("path") and data.get("truncated"):
+                    panel.list_ctx[pid] = {"path": str(data["path"]), "limit": len(data["items"])}
+        except Exception as e:  # a panel problem must never cost the spoken answer
+            log.event("panel_files_failed", error=type(e).__name__)
+
+    return sink
+
+
+def _cards(panel: Any) -> list[dict]:
+    with panel._lock:
+        return [c for c in panel.cards.values() if c.get("type") == "panel.files"]
+
+
 # ---- finding a card ------------------------------------------------------------------------------
 _WORD = re.compile(r"[a-z0-9]+")
 _STOP = {
@@ -155,6 +213,11 @@ OPEN_RE = re.compile(
 )
 SAVE_RE = re.compile(
     r"^\W*(?:please\s+|can you\s+|could you\s+)?save\s+(?:this|that|the\s+(?:latest|last|current|research))?\s*(?:card|research|panel)[\s.!?]*$",
+    re.I,
+)
+MORE_RE = re.compile(
+    r"^\W*(?:please\s+|can you\s+|could you\s+)?(?:show|give|see|list)(?:\s+me)?\s+(?:some\s+|a\s+few\s+)?(?:more|the\s+rest|the\s+remaining|the\s+other\s+ones|the\s+next\s+(?:few|ones|batch)|everything(?:\s+else)?)"
+    r"(?:\s+(?:files?|items?|results?|rows?))?[\s.!?]*$",
     re.I,
 )
 CLOSE_RE = re.compile(
@@ -309,6 +372,45 @@ def save_card(
     return f"Saved to {base.name}, in a folder called {folder.name}."
 
 
+def show_more(panel: Any, lister: Callable[[str, int], dict] | None = None) -> str | None:
+    """ "Show more" on the newest file card: reveal its next rows, or ask the file agent to list further. None when the newest card is not a file card."""
+    card = find_card(panel)
+    if card is None or card.get("type") != "panel.files":
+        return None
+    pid = card["panel_id"]
+    if panel.has_more(pid):
+        k = panel.show_more(pid)
+        left = card["total"] - card["shown"] if card.get("kind") == "plan" else None
+        if k and left:
+            return f"Showing {k} more. {left} still to show."
+        return f"Showing {k} more." if k else "That's everything."
+    ctx = getattr(panel, "list_ctx", {}).get(pid)
+    if card.get("more") and ctx:
+        new_limit = min(200, max(ctx["limit"], 40) * 2)
+        if new_limit <= ctx["limit"]:
+            return "That's the most I can list from one folder."
+        if lister is None:
+            from julius.agents import files as jf
+
+            def lister(path: str, limit: int) -> dict:
+                return jf.agent().list(path, limit=limit)
+
+        panel.quiet = True
+        try:
+            res = lister(ctx["path"], new_limit)
+        finally:
+            panel.quiet = False
+        data = res.get("data") or {}
+        body = pn.files_card_from_listing(data)
+        rows = body["all_items"][ctx["limit"] :]
+        k = panel.append_rows(pid, rows, bool(data.get("truncated")))
+        ctx["limit"] = len(data.get("items") or [])
+        if not data.get("truncated"):
+            panel.list_ctx.pop(pid, None)
+        return f"Showing {k} more." if k else "That's everything."
+    return "That's everything on the card."
+
+
 def handle(
     panel: Any,
     files: Any,
@@ -329,4 +431,6 @@ def handle(
         return save_card(panel, files, saved_cfg)
     if CLOSE_RE.match(t):
         return close_panel(panel)
+    if MORE_RE.match(t):
+        return show_more(panel)
     return None

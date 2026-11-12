@@ -576,7 +576,7 @@ class ResearchAgent:
             for p in uniq
             if p["final_url"] in cited
             for i in p["images"]
-        ][:8]
+        ][:16]
         result = {
             "id": f"{int(self.clock())}-{re.sub(r'[^a-z0-9]+', '-', question.lower())[:40].strip('-') or 'task'}",
             "question": question,

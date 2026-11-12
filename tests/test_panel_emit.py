@@ -18,7 +18,7 @@ import julius.ui_bridge.panelfiles as pf
 
 def png(color=(10, 120, 200)):
     b = io.BytesIO()
-    Image.new("RGB", (60, 40), color).save(b, "PNG")
+    Image.new("RGB", (400, 300), color).save(b, "PNG")
     return b.getvalue()
 
 

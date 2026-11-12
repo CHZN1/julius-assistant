@@ -26,6 +26,9 @@ MAX_SIDE = 8000  # decoded pixels per side we are willing to open
 MAX_PIXELS = 40_000_000
 OUT_SIDE = 1280
 MAX_IMAGES = 8
+MAX_CANDIDATES = (
+    16  # fetch attempts per card: filtered-out logos and icons do not use up the eight places
+)
 MAX_TOTAL_INPUT = 20_000_000
 ALLOWED = {
     "PNG": "png",
@@ -41,8 +44,34 @@ class ImageRefused(ValueError):
     pass
 
 
-def ingest_image(raw: bytes) -> tuple[bytes, str]:
-    """-> (re-encoded bytes, extension). Raises ImageRefused for anything that is not a sane raster image."""
+MIN_SIDE = 200  # research pictures: anything smaller on either side is an icon, a button or a tracking pixel
+MAX_ASPECT = 3.0  # and anything wider or taller than 3:1 is a banner, a divider or a sprite strip
+LOGO_HINT = re.compile(
+    r"(?<![a-z])(logos?|icons?|favicons?|sprites?|avatars?|emoji|badges?|buttons?|spacer|pixel|tracking|placeholder|wordmark|masthead)(?![a-z])",
+    re.I,
+)
+
+
+def looks_like_chrome(url: str, alt: str = "") -> bool:
+    """True when the URL's file name or the alt text says logo / icon / sprite / avatar, etc. (checked before fetching)."""
+    from urllib.parse import unquote, urlsplit
+
+    path = unquote(urlsplit(url or "").path or "")
+    return bool(LOGO_HINT.search(path.rsplit("/", 1)[-1]) or LOGO_HINT.search(alt or ""))
+
+
+def too_small_or_odd(width: int, height: int) -> str | None:
+    """Why a decoded picture is not worth a card (or None when it is fine)."""
+    if min(width, height) < MIN_SIDE:
+        return "small"
+    if max(width, height) / max(1, min(width, height)) > MAX_ASPECT:
+        return "aspect"
+    return None
+
+
+def ingest_image(raw: bytes, content_filter: bool = False) -> tuple[bytes, str]:
+    """-> (re-encoded bytes, extension). Raises ImageRefused for anything that is not a sane raster image; with content_filter
+    also for pictures under MIN_SIDE px or with an extreme aspect ratio (logos, icons, banners)."""
     from PIL import Image, UnidentifiedImageError
 
     if not raw or len(raw) > MAX_INPUT_BYTES:
@@ -55,6 +84,9 @@ def ingest_image(raw: bytes) -> tuple[bytes, str]:
             w, h = im.size
             if w < 1 or h < 1 or w > MAX_SIDE or h > MAX_SIDE or w * h > MAX_PIXELS:
                 raise ImageRefused("image dimensions out of range")
+            why = too_small_or_odd(w, h) if content_filter else None
+            if why:
+                raise ImageRefused(f"not a content picture ({why})")
             im.seek(0)
             im.load()
             frame = im.copy()
@@ -237,13 +269,18 @@ def cache_images(
     dicts `{image, alt, page_url, page_title}`; any image that fails is skipped. Candidates are `{url, alt, page, page_title}`."""
     out: list[dict] = []
     total = 0
-    for c in candidates[:MAX_IMAGES]:
-        if total >= MAX_TOTAL_INPUT:
+    tried = 0
+    for c in candidates:
+        if len(out) >= MAX_IMAGES or total >= MAX_TOTAL_INPUT or tried >= MAX_CANDIDATES:
             break
+        if looks_like_chrome(c.get("url", ""), c.get("alt", "")):
+            log("panel_image_skipped", reason="logo_hint")
+            continue
+        tried += 1
         try:
             _, _, raw = fetcher.fetch_image(c["url"], max_bytes=MAX_INPUT_BYTES)
             total += len(raw)
-            data, ext = ingest_image(raw)
+            data, ext = ingest_image(raw, content_filter=True)
             out.append(
                 {
                     "image": files.put(data, ext),

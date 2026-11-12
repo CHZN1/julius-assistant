@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 from collections.abc import Callable
@@ -190,13 +191,29 @@ def result(ok: bool, code: str, message: str, **data: Any) -> AgentResult:
     return {"agent": "files", "ok": ok, "code": code, "message": message, "data": data}
 
 
+_panel_sink: Callable[[AgentResult], None] | None = None
+
+
+def set_panel_sink(fn: Callable[[AgentResult], None] | None) -> None:
+    """The side panel registers here; each file-agent reply is handed to it (it never raises into the turn)."""
+    global _panel_sink
+    _panel_sink = fn
+
+
+def _to_panel(out: Any) -> Any:
+    if _panel_sink is not None and isinstance(out, dict):
+        with contextlib.suppress(Exception):
+            _panel_sink(out)
+    return out
+
+
 def response(method: Callable) -> Callable:
     @wraps(method)
     def wrapped(self, *args, **kwargs) -> Any:
         try:
-            return method(self, *args, **kwargs)
+            return _to_panel(method(self, *args, **kwargs))
         except FileProblem as exc:
-            return result(False, exc.code, str(exc), **exc.data)
+            return _to_panel(result(False, exc.code, str(exc), **exc.data))
         except (OSError, ValueError, json.JSONDecodeError) as exc:
             return result(False, "io_error", f"I couldn't complete that file request: {exc}")
 

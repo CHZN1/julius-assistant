@@ -155,7 +155,7 @@ class Cache(unittest.TestCase):
                     raise OSError("nope")
                 if "junk" in url:
                     return url, "image/png", b"junk"
-                return url, "image/png", png()
+                return url, "image/png", png((400, 300))
 
         with tempfile.TemporaryDirectory() as d:
             files = pf.PanelFiles(Path(d) / "p")
@@ -176,6 +176,55 @@ class Cache(unittest.TestCase):
             self.assertEqual(len(got), 1)
             self.assertEqual(got[0]["alt"], "A")
             self.assertIsNotNone(files.local_path(got[0]["image"]))
+
+
+class ContentFilter(unittest.TestCase):
+    def test_small_and_extreme_aspect_are_refused_only_with_the_filter(self):
+        pf.ingest_image(png((40, 30)))  # file previews keep small pictures
+        for size in ((199, 400), (400, 120), (1500, 400), (300, 1000)):
+            with self.subTest(size=size), self.assertRaises(pf.ImageRefused):
+                pf.ingest_image(png(size), content_filter=True)
+        for size in ((200, 200), (600, 300), (900, 300)):
+            with self.subTest(size=size):
+                pf.ingest_image(png(size), content_filter=True)
+
+    def test_logo_and_icon_names_are_recognised(self):
+        for url, alt in (
+            ("https://a/static/site-logo.png", ""),
+            ("https://a/img/ICON_32.png", ""),
+            ("https://a/favicon.ico", ""),
+            ("https://a/x/hero.jpg", "Company logo"),
+            ("https://a/sprite.png?v=3", ""),
+        ):
+            self.assertTrue(pf.looks_like_chrome(url, alt), url)
+        for url, alt in (
+            ("https://a/silicon-valley.jpg", "Silicon Valley at dawn"),
+            ("https://a/skyline.jpg", "The tower"),
+            ("https://a/logos/../photo.jpg", ""),
+        ):
+            self.assertFalse(pf.looks_like_chrome(url, alt), url)
+
+    def test_cache_skips_chrome_and_keeps_going_until_eight_good_ones(self):
+        calls = []
+
+        class F:
+            def fetch_image(self, url, max_bytes):
+                calls.append(url)
+                if "tiny" in url:
+                    return url, "image/png", png((48, 48))
+                return url, "image/png", png((500, 400))
+
+        cands = [
+            {"url": "https://a/logo.png"},
+            {"url": "https://a/tiny1.png"},
+            {"url": "https://a/tiny2.png"},
+        ]
+        cands += [{"url": f"https://a/p{i}.png", "alt": f"photo {i}"} for i in range(10)]
+        with tempfile.TemporaryDirectory() as d:
+            got = pf.cache_images(F(), pf.PanelFiles(Path(d) / "p"), cands)
+        self.assertEqual(len(got), 8)
+        self.assertNotIn("https://a/logo.png", calls)  # not even fetched
+        self.assertEqual([g["alt"] for g in got][:2], ["photo 0", "photo 1"])
 
 
 class FetchImage(unittest.TestCase):
