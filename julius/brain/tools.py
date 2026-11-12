@@ -846,7 +846,7 @@ SCHEMAS += [
         "type": "function",
         "function": {
             "name": "render_chart",
-            "description": "Show a chart or a table in the side panel from DATA you give it (never code). Use it when the user asks to chart, graph, plot, compare numbers visually or show a table, with numbers you already have from the conversation or a tool; never invent the numbers. kind: bar, hbar (long labels), line (over time), pie (parts of a whole) or table. Charts: 'labels' (the x-axis or slice names) and 'series' [{name, values}] with one value per label. Tables: 'columns' and 'rows' (each row one cell per column). Then say in one sentence what it shows; do not read the numbers out.",
+            "description": "Show a chart or a table in the side panel from DATA you give it (never code). Use it when the user asks to chart, graph, plot, compare numbers visually or show a table, with numbers you already have from the conversation or a tool; never invent the numbers. kind: bar, hbar (long labels), line (over time), pie (parts of a whole) or table. Charts: 'labels' (the x-axis or slice names) and 'series' [{name, values}] with one value per label. Tables: 'columns' and 'rows' (each row one cell per column). Call it as your only tool this turn (convert units or do arithmetic yourself first), then say in one sentence what it shows; do not read the numbers out.",
             "parameters": {
                 "type": "object",
                 "properties": {
