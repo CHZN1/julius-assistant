@@ -227,7 +227,7 @@ def find_files(pattern: Any, source: str = ".", recursive: bool = True, **_) -> 
     return jf.render(jf.agent().find(pattern=pattern, source=source, recursive=recursive))
 
 
-def get_quote(symbol: str, **_) -> str:
+def get_quote(symbol: str, days: int = 0, **_) -> str:
     """Live price for a stock or crypto. Accepts a ticker or a company/crypto name (julius_tickers); crypto uses BTC-USD style tickers."""
     import julius.brain.tickers as tk
 
@@ -240,10 +240,15 @@ def get_quote(symbol: str, **_) -> str:
     if s in tk.CRYPTO_CODES:
         s = f"{s}-USD"
 
+    try:
+        days = max(0, min(int(days or 0), 30))
+    except (TypeError, ValueError):
+        days = 0
+
     def chart(sym: Any) -> Any:
         r = requests.get(
             f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}",
-            params={"range": "2d", "interval": "1d"},
+            params={"range": "3mo" if days else "2d", "interval": "1d"},
             headers={"User-Agent": "Mozilla/5.0"},
             timeout=10,
         ).json()
@@ -262,6 +267,8 @@ def get_quote(symbol: str, **_) -> str:
     if not res:
         return f"No data for {s}."
     meta = res[0]["meta"]
+    if days:
+        return _closing_prices(s, meta, res[0], days)
     price = meta.get("regularMarketPrice")
     prev = meta.get("chartPreviousClose") or meta.get("previousClose")
     if price is None:
@@ -282,6 +289,24 @@ def get_quote(symbol: str, **_) -> str:
     else:
         line += " Quote time unavailable."
     return line + " Source: Yahoo Finance; quotes may be delayed."
+
+
+def _closing_prices(symbol: str, meta: dict, result: dict, days: int) -> str:
+    """The last `days` daily closes, newest last, one line each (for a chart or a table)."""
+    closes = ((result.get("indicators") or {}).get("quote") or [{}])[0].get("close") or []
+    rows = [
+        (datetime.fromtimestamp(t, UTC).strftime("%Y-%m-%d"), c)
+        for t, c in zip(result.get("timestamp") or [], closes, strict=False)
+        if c is not None
+    ][-days:]
+    if not rows:
+        return f"No closing prices for {symbol}."
+    cur = meta.get("currency", "currency unknown")
+    lines = "\n".join(f"{d}: {c:,.2f}" for d, c in rows)
+    return (
+        f"{meta.get('shortName', symbol)} ({symbol}) daily closing prices, last {len(rows)} trading days ({cur}):\n{lines}\n"
+        "Source: Yahoo Finance; quotes may be delayed."
+    )
 
 
 def get_news(query: str, **_) -> dict[str, Any]:
@@ -475,6 +500,7 @@ SCHEMAS = [
             "description": "Latest available, possibly delayed price for a stock or cryptocurrency. Pass the ticker (AAPL, TSLA, SPY, BTC, ETH) "
             "or just the company or coin name as the user said it (Apple, Home Depot, Bitcoin): names are resolved for you. "
             "If the result starts with AMBIGUOUS, ask the user which company he means. "
+            "For a price history (a chart or table over the last N days) pass days: you get that many daily closing prices. "
             "ALWAYS use this for prices — never web_search, never guess.",
             "parameters": {
                 "type": "object",
@@ -482,7 +508,11 @@ SCHEMAS = [
                     "symbol": {
                         "type": "string",
                         "description": "Ticker or company/crypto name, e.g. 'AAPL', 'Apple' or 'Bitcoin'",
-                    }
+                    },
+                    "days": {
+                        "type": "integer",
+                        "description": "Optional: return the last N daily closing prices (1-30) instead of the latest quote",
+                    },
                 },
                 "required": ["symbol"],
             },
@@ -803,7 +833,14 @@ def render_chart(
     )
 
 
+def research_task(question: str = "") -> str:
+    import julius.agents.research as research
+
+    return research.research_task({"question": question})
+
+
 REGISTRY.update(
+    research_task=research_task,
     remember_fact=remember_fact,
     forget_fact=forget_fact,
     list_memories=list_memories,
@@ -837,6 +874,12 @@ SCHEMAS += [
         ["request"],
     ),
     _utility_schema(
+        "research_task",
+        "Run the web research agent: it searches, opens and reads pages and returns an answer with sources that appear on the side panel. ALWAYS use it when the user says research, look up, find sources on, or search the web for something. Pass the full question. Its result is your answer: say its summary in your own voice, briefly; never add facts it did not state, and if it says it could not verify something, say so.",
+        {"question": "string"},
+        ["question"],
+    ),
+    _utility_schema(
         "code_request",
         "Use the sandboxed coding agent. For a new task pass 'goal' and 'project' (a folder under the dev folder); for show the changes, merge it, undo the merge, status or cancel the coding task pass 'request' with the user's words. Call it immediately when the user asks for code work; never just describe it. It needs the user's yes to start and a separate yes to merge. You CAN do this: never say you cannot code.",
         {"request": "string", "goal": "string", "project": "string"},
@@ -846,7 +889,7 @@ SCHEMAS += [
         "type": "function",
         "function": {
             "name": "render_chart",
-            "description": "Show a chart or a table in the side panel from DATA you give it (never code). Use it when the user asks to chart, graph, plot, compare numbers visually or show a table, with numbers you already have from the conversation or a tool; never invent the numbers. kind: bar, hbar (long labels), line (over time), pie (parts of a whole) or table. Charts: 'labels' (the x-axis or slice names) and 'series' [{name, values}] with one value per label. Tables: 'columns' and 'rows' (each row one cell per column). Call it as your only tool this turn (convert units or do arithmetic yourself first), then say in one sentence what it shows; do not read the numbers out.",
+            "description": "Show a chart or a table in the side panel from DATA you give it (never code). Use it when the user asks to chart, graph, plot, compare numbers visually or show a table, with numbers you already have from the conversation or a tool; never invent the numbers. kind: bar, hbar (long labels), line (over time), pie (parts of a whole) or table. Charts: 'labels' (the x-axis or slice names) and 'series' [{name, values}] with one value per label. Tables: 'columns' and 'rows' (each row one cell per column). Get the numbers first (call the price, weather or research tool if you do not have them), then call this, then say in one sentence what it shows; do not read the numbers out.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -915,6 +958,8 @@ def call_many(calls: list[Any]) -> list[tuple[str, bool]]:
 
 # Tool schemas cost ~1.2k prompt tokens. Offer the model only the tools a request could use;
 # unmatched requests keep the full catalogue, so this never removes a capability.
+CHART_WORDS = r"chart|graph|\bplot\b|\btable\b|visuali[sz]|pie chart"
+
 _SCHEMA_GROUPS = (
     (
         r"weather|forecast|rain|temperature|degrees|\bhot\b|\bcold\b|snow|sunny|humid",
@@ -924,7 +969,10 @@ _SCHEMA_GROUPS = (
         r"\btime\b|clock|timezone|time zone|what day|\bdate\b|days? (?:until|from|between|ago)|weeks? (?:until|from)|hours? (?:ahead|behind)",
         ("get_datetime", "date_calculate"),
     ),
-    (r"price|worth|trading|stock|crypto|bitcoin|\bbtc\b|\beth\b|ticker|market", ("get_quote",)),
+    (
+        r"price|worth|trading|stock|crypto|bitcoin|\bbtc\b|\beth\b|ticker|market|clos(?:e|ing)",
+        ("get_quote",),
+    ),
     (r"score|scores|\bgames?\b|\bwon\b|\bbeat\b|standings|playing", ("get_scores",)),
     (
         r"calculate|\btimes\b|\bplus\b|\bminus\b|divided|multipl|squared|sqrt|percent|%|\d\s*[-+*/x]\s*\d",
@@ -935,6 +983,7 @@ _SCHEMA_GROUPS = (
         ("convert_units",),
     ),
     (r"search|look up|google|\bnews\b|latest|recent|headline", ("web_search", "get_news")),
+    (r"research|look up|find sources|search the web", ("research_task",)),
     (r"\bfiles?\b|folder|director|\blist\b|downloads|desktop", ("list_files",)),
     (r"\bread\b|\bopen\b|contents|\bfile\b", ("read_file",)),
     (r"\bfind\b|where|locate|named|search for", ("find_files",)),
@@ -947,10 +996,7 @@ _SCHEMA_GROUPS = (
         r"trash|\bbin\b|delete|remove|\bmove\b|\bcopy\b|rename|undo|empty the|get rid|throw away|folder|\bfiles?\b|sandbox|downloads|desktop|documents|what did you change",
         ("file_request",),
     ),
-    (
-        r"chart|graph|\bplot\b|\btable\b|visuali[sz]|pie chart",
-        ("render_chart",),
-    ),
+    (CHART_WORDS, ("render_chart",)),
     (
         r"\bcod(?:e|ing)\b|\bbugs?\b|\btests?\b|refactor|\bscripts?\b|opus|merge|\bprojects?\b|programming|\bfix (?:the|my|this)\b",
         ("code_request",),
@@ -972,6 +1018,18 @@ _ASKING = re.compile(
 _PLANNER_REQUEST = re.compile(
     r"^\W*(?:julius\W+)?(?:(?:please|can you|could you)\W+)*(?:plan|compare)\b|\bitinerary\b", re.I
 )
+
+
+_RESEARCH_REQUEST = re.compile(
+    r"^\W*(?:julius\W+)?(?:(?:please|can you|could you|go ahead and)\W+)*(?:do (?:some )?research\b|research\b|look up\b|find (?:me )?sources? (?:on|for|about)\b|search the web for\b)",
+    re.I,
+)
+
+
+def research_required(user_text: str) -> bool:
+    """True when the request opens with research, look up, find sources on or search the web for: those always go to the
+    research agent, so the first model call must be research_task."""
+    return bool(_RESEARCH_REQUEST.search(user_text or ""))
 
 
 def planner_required(user_text: str) -> bool:

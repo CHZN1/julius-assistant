@@ -2,6 +2,8 @@
 
 [brain]
 mode = "cloud"              # "cloud" (Haiku front end + Sonnet planner) or "local" (Ollama only)
+max_tool_rounds = 3        # tool rounds Haiku may chain in one turn ("look up X, then chart it")
+turn_max_usd = 0.15        # hard cap on one turn's model spend; no further tool round starts past it
 
 [models]
 haiku  = "claude-haiku-5-5"   # voice front end: every turn starts here
@@ -16,8 +18,8 @@ max_steps = 8               # Sonnet planner tool-loop limit per escalation
 subagent_max_steps = 6      # sub-agent tool-loop limit
 
 [research]                  # web research sub-agent (Haiku), dispatched by the planner; read-only, GET only (julius_research.py)
-max_steps = 8               # model calls per research task
-max_pages = 5               # pages it may open per task
+max_steps = 10              # model calls per research task
+max_pages = 6               # pages it may open per task
 max_usd = 0.10              # hard dollar cap per task; no call is started past it
 max_bytes = 500000          # largest page it will read
 max_page_chars = 6000       # page text shown to the model

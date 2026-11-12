@@ -41,7 +41,7 @@ PLANNING_PROMPT = (
     "\n\nPLANNING\nYou have a planner: escalate_to_planner. Use it when the answer needs thinking across several facts, not just fetching them. "
     "Escalate for: (1) a plan, itinerary or schedule, e.g. 'plan a trip', 'plan a party'; (2) comparing options or making a "
     "recommendation, even when each fact is a single lookup, e.g. 'compare the weather in two cities', 'which is cheaper', 'should I "
-    "buy X or Y'; (3) open-ended research, e.g. 'look into the best X' (but 'search the web for X' is one web_search call, not research); a request that says plan or itinerary always escalates, even when it mentions the weather or the time; (4) a briefing or summary assembled from several sources; (5) any change "
+    "buy X or Y'; (3) open-ended research, e.g. 'look into the best X' (but anything that says research, look up, find sources on or search the web for goes to research_task, never to you or the planner); a request that says plan or itinerary always escalates, even when it mentions the weather or the time; (4) a briefing or summary assembled from several sources; (5) any change "
     "to many files at once: moving, sorting, renaming, organising or cleaning up. Do NOT escalate a single fact, and do not escalate "
     "several independent lookups that only need reading out, e.g. 'the weather in A and the time in B': call every tool for those in the "
     "same reply and answer in one go. The planner can only propose file changes; nothing happens until the user says yes, so never "
@@ -54,7 +54,7 @@ CAPABILITIES_PROMPT = (
     "Call file_request with his own words, also for undo and 'what did you change'. The file controller always shows a preview first and nothing changes until the user says yes. Changes to MANY files at once (organising, sorting, cleaning up, renaming or moving everything of a kind) still go to escalate_to_planner.\n"
     "- Coding: a sandboxed coding agent fixes or writes code in a COPY of a project under his dev folder. Call code_request right away, never just describe how it works. It needs his yes to start and a separate yes to merge; he can say show the changes, merge it, undo the merge, cancel the coding task.\n"
     "- Memory: remember_fact, forget_fact, list_memories. Reminders, timers, tasks and events: set_reminder, list_reminders, cancel_reminder, list_planner_items.\n"
-    "- Charts and tables: render_chart shows a bar, line or pie chart or a table in the side panel from data you already have (never invented). You MUST call it to show one, as your ONLY tool call this turn (do any unit conversions or arithmetic yourself, rounded; there is no second tool round): never say a chart or table is in the side panel unless render_chart's result says so. Then say in one sentence what it shows.\n"
+    "- Charts and tables: render_chart shows a bar, line or pie chart or a table in the side panel from data you have (never invented): get the numbers first with the right tool (for example get_quote with days for a price history, or research_task), then call render_chart. You MUST call it to show one: never say a chart or table is in the side panel unless render_chart's result says so. Then say in one sentence what it shows.\n"
     "- Everyday single lookups (weather, time, math, conversions, quotes, scores, news, web search) use their own tools.\n"
     "- Comparisons, recommendations, plans, briefings that combine several facts, research, and changes to many files at once all go to escalate_to_planner, even when each fact is a simple lookup.\n"
     'If the user says only yes, do it or go ahead and you did not just ask him a question, nothing is waiting for a yes: say exactly "There\'s nothing waiting for a yes right now. What would you like me to do?" and never invent a result.'
@@ -268,6 +268,7 @@ class CloudBrain:
         max_tokens: Any | None = None,
         force_tool: bool = False,
         force_planner: bool = False,
+        force_research: bool = False,
     ) -> Any:
         system, api_messages = convert_messages(messages)
         from julius import profile
@@ -292,7 +293,9 @@ class CloudBrain:
             api_tools = _personalize_tools(api_tools)
         if api_tools:
             kwargs["tools"] = api_tools
-            if force_planner and any(t["name"] == "escalate_to_planner" for t in api_tools):
+            if force_research and any(t["name"] == "research_task" for t in api_tools):
+                kwargs["tool_choice"] = {"type": "tool", "name": "research_task"}
+            elif force_planner and any(t["name"] == "escalate_to_planner" for t in api_tools):
                 kwargs["tool_choice"] = {"type": "tool", "name": "escalate_to_planner"}
             elif force_tool:
                 kwargs["tool_choice"] = {
@@ -325,6 +328,7 @@ class CloudBrain:
             options.pop("force_tool", False)
         )  # cloud-only request flag; never passed on to the local fallback
         force_planner = bool(options.pop("force_planner", False))
+        force_research = bool(options.pop("force_research", False))
         if self.auth_bad:
             if (
                 self.auth_pending
@@ -340,7 +344,11 @@ class CloudBrain:
             return self._offline(messages, tools, stream, options, announce=False)
         try:
             kwargs = self.request(
-                messages, tools, force_tool=force_tool, force_planner=force_planner
+                messages,
+                tools,
+                force_tool=force_tool,
+                force_planner=force_planner,
+                force_research=force_research,
             )  # length is steered by the prompt (brief by default, longer when asked); the local 160-token cap would cut a requested long answer mid-sentence
             if stream:
                 return self._stream(kwargs, messages, tools, options)

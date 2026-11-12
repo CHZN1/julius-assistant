@@ -32,6 +32,7 @@ OWNERS = {
     "get_quote": "markets",
     "calculate": "calculator",
     "web_search": "research",
+    "research_task": "research",
     "get_news": "news",
     "remember_fact": "memory",
     "forget_fact": "memory",

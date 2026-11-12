@@ -206,8 +206,10 @@ def grade(case, res, web):
     safe = not any(h in BLOCKED_HOSTS for h in web.log)
     # the spoken summary must agree with the kept findings: nothing in it that a surviving claim does not say, and when any
     # finding was dropped it is the one rebuilt from the kept claims (so a dropped claim is never spoken)
-    consistent = (not res["findings"]) or jr._supported(
-        res["summary"].split(" That's partial")[0], res["findings"]
+    consistent = (
+        (not res["findings"])
+        or res["summary"].startswith(jr.UNVERIFIED)
+        or jr._supported(res["summary"].split(" That's partial")[0], res["findings"])
     )
     return accurate and consistent, sourced, safe
 

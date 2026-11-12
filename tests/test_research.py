@@ -42,6 +42,8 @@ class Web:
 
     def __call__(self, parsed, ip, max_bytes):
         self.log.append((parsed.geturl(), ip))
+        if parsed.geturl() not in self.pages:
+            raise OSError("404 not found")
         status, headers, body = self.pages[parsed.geturl()]
         return status, headers, body.encode() if isinstance(body, str) else body
 
@@ -172,8 +174,11 @@ def agent(brain, pages=None, **cfg):
     )
 
 
-def finish(i, summary, findings):
-    return resp([use(i, "research_finish", summary=summary, findings=findings)], "tool_use")
+def finish(i, summary, findings, answered=True):
+    return resp(
+        [use(i, "research_finish", summary=summary, findings=findings, answered=answered)],
+        "tool_use",
+    )
 
 
 class Agent(unittest.TestCase):
@@ -231,12 +236,68 @@ class Agent(unittest.TestCase):
                 "Sharks play on the moon.",
                 [{"claim": "moon", "url": "https://example.com/never-opened"}],
             ),
+            finish("d", "I could not verify it.", [], answered=False),
         )
         r = agent(brain).run("q")
         self.assertEqual(r["findings"], [])
-        self.assertEqual(r["dropped_findings"], 1)
         self.assertIn("couldn't confirm", r["summary"])
         self.assertNotIn("moon", r["summary"])
+
+    def test_cited_but_unopened_page_is_fetched_before_citing(self):
+        brain, api = make(
+            resp([use("a", "research_search", query="q")], "tool_use"),
+            finish(
+                "c",
+                "The Sharks play at SAP Center.",
+                [
+                    {
+                        "claim": "Sharks play at SAP Center",
+                        "url": "https://example.com/a",
+                        "quote": "The San Jose Sharks play at SAP Center.",
+                    }
+                ],
+            ),
+        )
+        r = agent(brain).run("q")
+        self.assertEqual(r["dropped_findings"], 0)
+        self.assertTrue(r["findings"][0]["verified"])
+        self.assertEqual(len(api.calls), 2)
+
+    def test_unopenable_citation_is_sent_back_once_then_model_recovers(self):
+        good = {
+            "claim": "Sharks play at SAP Center",
+            "url": "https://example.com/a",
+            "quote": "The San Jose Sharks play at SAP Center.",
+        }
+        brain, api = make(
+            finish("c", "x", [{"claim": "m", "url": "https://example.com/nope"}]),
+            resp([use("b", "research_open", url="https://example.com/a")], "tool_use"),
+            finish("d", "The Sharks play at SAP Center.", [good]),
+        )
+        r = agent(brain).run("q")
+        self.assertTrue(api.calls[1]["messages"][-1]["content"][0]["is_error"])
+        self.assertTrue(r["findings"][0]["verified"])
+        self.assertEqual(r["stopped"], "done")
+
+    def test_answered_false_says_plainly_it_could_not_verify(self):
+        brain, api = make(
+            resp([use("b", "research_open", url="https://example.com/a")], "tool_use"),
+            finish(
+                "c",
+                "The Sharks play at SAP Center and it is 828 metres tall.",
+                [
+                    {
+                        "claim": "Sharks play at SAP Center",
+                        "url": "https://example.com/a",
+                        "quote": "The San Jose Sharks play at SAP Center.",
+                    }
+                ],
+                answered=False,
+            ),
+        )
+        r = agent(brain).run("q")
+        self.assertTrue(r["summary"].startswith(jr.UNVERIFIED))
+        self.assertNotIn("828", r["summary"])
 
     def test_summary_only_states_surviving_findings_and_cites_the_cards_sources(self):
         brain, api = make(
@@ -304,6 +365,7 @@ class Agent(unittest.TestCase):
                 "tool_use",
             ),
             finish("c", "no", []),
+            finish("c2", "no", []),
         )
         agent(brain, pages).run("q")
         out = [x["content"] for x in api.calls[1]["messages"][-1]["content"]]
@@ -369,6 +431,7 @@ class Agent(unittest.TestCase):
         brain, api = make(
             resp([use("a", "write_file", path="/x"), use("b", "delegate", task="t")], "tool_use"),
             finish("f", "ok", []),
+            finish("f2", "ok", []),
         )
         agent(brain).run("q")
         self.assertTrue(
@@ -389,7 +452,7 @@ class Agent(unittest.TestCase):
         d.mkdir()
         for i in range(5):
             (d / f"{i}.json").write_text("{}")
-        brain, api = make(finish("f", "x", []))
+        brain, api = make(finish("f", "x", []), finish("f2", "x", []))
         a = agent(brain)
         a.dir, a.keep = d, 3
         a.run("q")

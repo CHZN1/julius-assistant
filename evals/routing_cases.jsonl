@@ -62,8 +62,8 @@
 {"id": "r062", "cat": "tool", "text": "How many ounces are in 3.5 pounds?", "expect": {"path": "tool", "tool": "convert_units"}}
 {"id": "r063", "cat": "tool", "text": "Convert 72 degrees Fahrenheit into Celsius please", "expect": {"path": "tool", "tool": "convert_units"}}
 {"id": "r064", "cat": "tool", "text": "What time is it in Sydney?", "expect": {"path": "shortcut", "tool": "get_datetime", "args_contain": ["sydney"]}}
-{"id": "r065", "cat": "tool", "text": "Look up the current price of gold.", "expect": {"path": "tool", "tool_in": ["get_quote", "web_search"]}}
-{"id": "r066", "cat": "tool", "text": "Search the web for the best Ollama models for 16 gigabytes of memory.", "expect": {"path": "tool", "tool": "web_search"}}
+{"id": "r065", "cat": "research", "text": "Look up the current price of gold.", "expect": {"path": "tool", "tool": "research_task"}}
+{"id": "r066", "cat": "research", "text": "Search the web for the best Ollama models for 16 gigabytes of memory.", "expect": {"path": "tool", "tool": "research_task"}}
 {"id": "r067", "cat": "tool", "text": "Find my tax return pdf.", "expect": {"path": "shortcut", "tool": "files:find", "ok": true}}
 {"id": "r068", "cat": "tool", "text": "What files are in my Desktop folder?", "expect": {"path": "tool", "tool_in": ["list_files"]}}
 {"id": "r069", "cat": "tool", "text": "Show me what's in my todo.txt file.", "expect": {"path": "tool", "tool_in": ["read_file", "find_files"]}}
@@ -96,7 +96,7 @@
 {"id": "r096", "cat": "escalate", "text": "Plan a three day trip to Tokyo, including the weather and what time it is there.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
 {"id": "r097", "cat": "escalate", "text": "Compare today's weather in Springfield and Tokyo and tell me which is warmer.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
 {"id": "r098", "cat": "escalate", "text": "Plan my weekend in San Francisco and check the forecast for both days.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
-{"id": "r099", "cat": "escalate", "text": "Research the best laptops under a thousand dollars and compare the top three.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
+{"id": "r099", "cat": "research", "text": "Research the best laptops under a thousand dollars and compare the top three.", "expect": {"path": "tool", "tool": "research_task"}}
 {"id": "r100", "cat": "escalate", "text": "Give me an itinerary for two days in Lisbon with the weather each day.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
 {"id": "r101", "cat": "escalate", "text": "Summarize the three most important things I should look at before tonight: the NHL schedule, the NFL injury report, and an Ethereum price chart.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
 {"id": "r102", "cat": "escalate", "text": "Compare the weather in Springfield and Shelbyville.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
@@ -111,7 +111,7 @@
 {"id": "r111", "cat": "escalate_heldout", "text": "Rename every photo in my Pictures folder to include the year it was taken.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
 {"id": "r112", "cat": "escalate_heldout", "text": "Compare the price of Bitcoin and Ethereum today and tell me which one is doing better this week.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
 {"id": "r113", "cat": "escalate_heldout", "text": "Plan a birthday dinner for six people next Saturday and figure out what the weather will be so we can pick indoor or outdoor.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
-{"id": "r114", "cat": "escalate_heldout", "text": "Research how the Oilers and the Panthers have done this season and tell me who has the better chance at the cup.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
+{"id": "r114", "cat": "research", "text": "Research how the Oilers and the Panthers have done this season and tell me who has the better chance at the cup.", "expect": {"path": "tool", "tool": "research_task"}}
 {"id": "r115", "cat": "escalate_heldout", "text": "Clean up my downloads by moving old installers and zip files into an Archive folder.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
 {"id": "r116", "cat": "parallel", "text": "What's the weather in Shelbyville and what time is it in London?", "expect": {"path": "tool", "tools_all": ["get_weather", "get_datetime"]}}
 {"id": "r117", "cat": "parallel", "text": "Give me the price of Ethereum and the NFL scores.", "expect": {"path": "tool", "tools_all": ["get_quote", "get_scores"]}}
@@ -133,3 +133,11 @@
 {"id": "r133", "cat": "bare_yes", "text": "Go ahead.", "expect": {"path": "shortcut", "tool": "files:?", "ok": true, "detail_contains": "nothing waiting for a yes"}}
 {"id": "r134", "cat": "bare_yes", "text": "Do it", "expect": {"path": "shortcut", "tool": "files:?", "ok": true, "detail_contains": "nothing waiting for a yes"}}
 {"id": "r135", "cat": "bare_yes", "text": "Yes please", "history": [{"role": "user", "content": "Who won the Giants game?"}, {"role": "assistant", "content": "I can look that up. Want me to search the web?"}], "expect": {"path": "tool", "path_in": ["direct", "tool"], "tool_in": ["web_search", "get_scores", ""], "no_denial": true}}
+{"id": "r136", "cat": "research", "text": "Research the history of the Golden Gate Bridge.", "expect": {"path": "tool", "tool": "research_task"}}
+{"id": "r137", "cat": "research", "text": "Look up how tall the Burj Khalifa is.", "expect": {"path": "tool", "tool": "research_task"}}
+{"id": "r138", "cat": "research", "text": "Find sources on intermittent fasting and heart health.", "expect": {"path": "tool", "tool": "research_task"}}
+{"id": "r139", "cat": "research", "text": "Search the web for the best hiking trails near Denver.", "expect": {"path": "tool", "tool": "research_task"}}
+{"id": "r140", "cat": "research", "text": "Can you look up who invented the telephone?", "expect": {"path": "tool", "tool": "research_task"}}
+{"id": "r141", "cat": "research", "text": "Please research whether electric cars are cheaper to own.", "expect": {"path": "tool", "tool": "research_task"}}
+{"id": "r142", "cat": "research", "text": "Look up the population of Iceland, then chart it against Norway and Denmark.", "expect": {"path": "tool", "tool": "research_task"}}
+{"id": "r143", "cat": "chain", "text": "Chart Apple's closing price over the last 5 days.", "expect": {"path": "tool", "tool": "get_quote", "chain": ["get_quote", "render_chart"]}}

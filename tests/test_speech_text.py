@@ -296,7 +296,12 @@ class OneRoundTripTests(unittest.TestCase):
     def test_tools_whose_output_needs_interpreting_keep_the_two_call_path(self):
         result, spoken, calls = self.run_turn(
             "List the files in my Downloads folder",
-            [self.tool_call("list_files", directory="Downloads"), self.no_call()],
+            [
+                self.tool_call("list_files", directory="Downloads"),
+                SimpleNamespace(
+                    message=SimpleNamespace(content="Second call answer.", tool_calls=None)
+                ),
+            ],
             cloud=True,
             out="a.txt\nb.txt",
         )
@@ -326,7 +331,12 @@ class OneRoundTripTests(unittest.TestCase):
         ) as many:
             result, spoken, calls = self.run_turn(
                 "What is the weather in A and B?",
-                [two, self.no_call()],
+                [
+                    two,
+                    SimpleNamespace(
+                        message=SimpleNamespace(content="Second call answer.", tool_calls=None)
+                    ),
+                ],
                 cloud=True,
                 out="Springfield: 76°F, clear, feels like 76. High 77, low 50.",
             )

@@ -133,7 +133,7 @@ class CallCountTests(unittest.TestCase):
     def test_a_lookup_that_needs_the_model_summary_is_exactly_two_calls(self):
         calls, spoken, result = turn(
             "List the files in my Downloads folder",
-            [tool_call(("list_files", {"directory": "Downloads"}))],
+            [tool_call(("list_files", {"directory": "Downloads"})), text("Spoken summary.")],
             out="a.txt\nb.txt",
         )
         self.assertEqual(calls, [True, True])
@@ -146,7 +146,8 @@ class CallCountTests(unittest.TestCase):
                 tool_call(
                     ("get_weather", {"location": "Springfield"}),
                     ("get_weather", {"location": "Tokyo"}),
-                )
+                ),
+                text("Both are fine."),
             ],
             out=WEATHER,
         )
@@ -166,10 +167,10 @@ class CallCountTests(unittest.TestCase):
         )
         self.assertEqual(calls, [False, True])
 
-    def test_a_tool_turn_never_exceeds_two_model_calls(self):
+    def test_a_tool_turn_never_exceeds_three_rounds_and_a_final_answer(self):
         endless = [tool_call(("list_files", {"directory": "x"})) for _ in range(5)]
         calls, _, _ = turn("List the files in my Downloads folder", endless, out="a\nb")
-        self.assertLessEqual(len(calls), 2)
+        self.assertLessEqual(len(calls), 4)
 
     def test_a_cloud_plain_chat_turn_starts_speaking_before_the_reply_has_finished(self):
         h = TurnHarness()
@@ -232,3 +233,72 @@ class CallCountTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ChainTests(unittest.TestCase):
+    """Up to [brain] max_tool_rounds (3) tool rounds per turn: 'look up X, then chart it'."""
+
+    def run_chain(self, prompt, script):
+        h = TurnHarness()
+        h.session.cloud_brain = object()
+        names, queue, spoken = [], list(script), []
+
+        def llm(**kw):
+            r = queue.pop(0) if queue else text("")
+            return as_parts(r) if kw.get("stream") else r
+
+        h.llm_chat = llm
+
+        def call(name, args):
+            names.append(name)
+            return "chart shown" if name == "render_chart" else "AAPL closes: 1, 2, 3"
+
+        with patch.object(jt, "call", side_effect=call):
+            jt.dispatcher().last_result = {"ok": True}
+            result = h.ask(prompt, "", speak_fn=spoken.append)
+        return names, spoken, result, queue
+
+    def test_price_tool_then_render_chart(self):
+        names, spoken, _, left = self.run_chain(
+            "chart Apple's closing price over the last 5 days",
+            [
+                tool_call(("get_quote", {"symbol": "Apple", "days": 5})),
+                tool_call(
+                    (
+                        "render_chart",
+                        {"kind": "line", "title": "AAPL", "labels": ["a"], "series": []},
+                    )
+                ),
+                text("It shows Apple's last five closes."),
+            ],
+        )
+        self.assertEqual(names, ["get_quote", "render_chart"])
+        self.assertEqual(spoken, ["It shows Apple's last five closes."])
+        self.assertEqual(left, [])
+
+    def test_rounds_are_capped_at_three(self):
+        script = [tool_call(("get_quote", {"symbol": "Apple"})) for _ in range(5)] + [text("done")]
+        names, _, _, left = self.run_chain(
+            "what is Apple worth, then Tesla, then Ford, then GM", script
+        )
+        self.assertEqual(len(names), 3)
+
+    def test_turn_budget_stops_further_rounds(self):
+        with patch("julius.runtime.brain_turn.BrainTurn.turn_over_budget", return_value=True):
+            names, _, _, _ = self.run_chain(
+                "chart Apple's closing price",
+                [tool_call(("get_quote", {"symbol": "Apple"})) for _ in range(3)] + [text("ok")],
+            )
+        self.assertEqual(len(names), 1)
+
+    def test_research_phrases_force_the_research_agent(self):
+        for t in (
+            "Research the history of the bridge",
+            "look up how tall the Burj Khalifa is",
+            "Can you find sources on fasting",
+            "search the web for hiking trails",
+            "Please do some research on heat pumps",
+        ):
+            self.assertTrue(jt.research_required(t), t)
+        for t in ("What's the weather", "plan a trip", "Tell me about research funding"):
+            self.assertFalse(jt.research_required(t), t)

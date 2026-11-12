@@ -96,6 +96,15 @@ def _schedule_answer(user_text: str, out: str, args: dict) -> tuple[str, dict]:
     )
 
 
+def _brain_config() -> dict:
+    try:
+        import julius.brain.cloud as jc
+
+        return dict(jc.get_brain().config.get("brain", {}))
+    except Exception:
+        return {}
+
+
 @dataclass
 class StreamState:
     """What one streamed reply has produced so far."""
@@ -128,6 +137,8 @@ class BrainTurn:
         self.stream_calls: list = []
         self.stalled = False
         self.long_tool_result = False
+        self.rounds_done = 0
+        self.chain_done = False
         self.dropped_ungrounded: list[int] = []
         # "On it." when a tool call outlasts 1.5 s with nothing said yet (streamed speech only).
         self.ack = ack.Acknowledger(speak_fn, enabled=s.cloud)
@@ -235,6 +246,7 @@ class BrainTurn:
         tools: list[Any] | None = None,
         force_tool: bool = False,
         force_planner: bool = False,
+        force_research: bool = False,
     ) -> str | None:
         """Stream one reply; sentences are spoken as they complete. None means it stalled."""
         s = self.s
@@ -248,6 +260,8 @@ class BrainTurn:
             options["force_tool"] = True
         if force_planner:
             options["force_planner"] = True
+        if force_research:
+            options["force_research"] = True
         parts = llm_chat(messages=messages, think=False, stream=True, **kwargs, options=options)
         try:
             for part in parts:
@@ -280,13 +294,18 @@ class BrainTurn:
         schemas = jt.select_schemas(self.user_text)
         if s.cloud:
             fresh = not livedata.tool_result_this_turn(self.messages)
-            planner = jt.planner_required(self.user_text) and fresh
+            research = jt.research_required(self.user_text) and fresh
+            planner = jt.planner_required(self.user_text) and fresh and not research
             needs_tool = jt.live_tool_required(self.user_text) or jt.weekday_question(
                 self.user_text
             )
-            force = needs_tool and fresh and not planner
+            force = needs_tool and fresh and not planner and not research
             text = self.stream(
-                self.messages, tools=schemas, force_tool=force, force_planner=planner
+                self.messages,
+                tools=schemas,
+                force_tool=force,
+                force_planner=planner,
+                force_research=research,
             )
             if text is None:
                 return None
@@ -364,6 +383,8 @@ class BrainTurn:
         """One simple lookup (weather, time, calculator, price): a sentence ready to speak."""
         if len(calls) != 1 or _is_schedule_question(name, self.user_text):
             return None
+        if re.search(jt.CHART_WORDS, self.user_text, re.I):
+            return None  # "chart X": the lookup is only the first step, the model still has to call render_chart
         exact = bool(EXACT_REQUEST.search(self.user_text))
         ready = speakable(name, out, args, exact=exact)
         if not ready:
@@ -372,6 +393,22 @@ class BrainTurn:
         if self.speak_fn:
             self.speak_fn(ready)
         return ready
+
+    def max_rounds(self) -> int:
+        """Tool rounds per turn: the cloud brain may chain up to [brain] max_tool_rounds (3); local models keep one."""
+        if not self.s.cloud:
+            return 1
+        return max(1, int(_brain_config().get("max_tool_rounds", 3)))
+
+    def turn_over_budget(self) -> bool:
+        """True once this turn's model spend (all tiers, research included) reaches [brain] turn_max_usd: no further round starts."""
+        try:
+            import julius.brain.cloud as jc
+
+            spent = sum(jc.get_brain().tracker.turn_costs().values())
+        except Exception:
+            return False
+        return spent >= float(_brain_config().get("turn_max_usd", 0.15))
 
     def tool_round(self) -> str | None:
         """One tool round: a turn that needs the model's summary is two calls (tool, then answer).
@@ -382,6 +419,10 @@ class BrainTurn:
             self.stalled = True
             return None
         if self.s.cloud and not message.tool_calls:
+            if self.rounds_done and not (message.content or "").strip():
+                self.stalled = False
+                self.chain_done = True
+                return None  # nothing said after the tools: fall through to the plain spoken summary
             return message.content
         calls = _unique_calls(message.tool_calls or [])
         if not calls:
@@ -397,6 +438,7 @@ class BrainTurn:
         if not any(ok for _, ok in batch):
             return self.failed_round(calls, batch)
         name, out, args = self.record_results(calls, batch)
+        self.rounds_done += 1
         log.console("  ...thinking", end="", flush=True)
         return self.ready_sentence(calls, name, out, args)
 
@@ -439,9 +481,14 @@ class BrainTurn:
         if answer is not None:
             return answer
         if self.hinted:
-            answer = self.tool_round()
-            if answer is not None:
-                return answer
+            for round_no in range(1, self.max_rounds() + 1):
+                answer = self.tool_round()
+                if answer is not None:
+                    return answer
+                if self.stalled or self.chain_done or round_no == self.max_rounds() or self.turn_over_budget():
+                    break
+                if not self.s.cloud or not livedata.tool_result_this_turn(self.messages):
+                    break
             if self.long_tool_result:
                 self.messages.append({"role": "system", "content": LONG_RESULT_NOTE})
         out = None if self.stalled else self.stream(self.messages)

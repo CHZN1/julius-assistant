@@ -169,6 +169,57 @@ def arg_matches(expected, args_text):
     return False
 
 
+CANNED = {
+    "get_quote": "Apple Inc. (AAPL) daily closing prices, last 5 trading days (USD):\n2026-11-05: 268.47\n2026-11-06: 269.77\n2026-11-07: 271.49\n2026-11-10: 273.40\n2026-11-11: 275.25\nSource: Yahoo Finance; quotes may be delayed.",
+    "research_task": "Iceland has about 380,000 people, Norway 5.5 million and Denmark 5.9 million. [research: 3 cited finding(s)]",
+    "render_chart": "Chart shown in the side panel.",
+}
+
+
+def in_order(chain, seq):
+    """True when `chain` appears in `seq` as an ordered subsequence."""
+    it = iter(seq)
+    return all(name in it for name in chain)
+
+
+def chain_turn(case, brain, system, rounds=3):
+    """A multi-round case: the model's tool calls are answered with canned results until it stops calling tools."""
+    import julius.brain.tools as jt
+
+    msgs = (
+        [{"role": "system", "content": system}]
+        + case.get("history", [])
+        + [{"role": "user", "content": case["text"]}]
+    )
+    seq, args = [], []
+    for _ in range(rounds):
+        r = brain.chat(msgs, tools=jt.select_schemas(case["text"]), options={"num_predict": 256})
+        calls = r.message.tool_calls or []
+        if not calls:
+            break
+        msgs.append(
+            {
+                "role": "assistant",
+                "content": r.message.content or "",
+                "tool_calls": [
+                    {"function": {"name": c.function.name, "arguments": dict(c.function.arguments)}}
+                    for c in calls
+                ],
+            }
+        )
+        for c in calls:
+            seq.append(c.function.name)
+            args.append(json.dumps(dict(c.function.arguments)))
+            msgs.append(
+                {
+                    "role": "tool",
+                    "name": c.function.name,
+                    "content": CANNED.get(c.function.name, "Done."),
+                }
+            )
+    return seq, args
+
+
 def judge(case, got):
     e = case["expect"]
     path_ok = got["path"] in e.get("path_in", [e["path"]])
@@ -181,6 +232,8 @@ def judge(case, got):
         tool_ok = set(e["tools_all"]) <= set(
             got.get("tools") or []
         )  # parallel lookups: every needed tool called in one reply
+    if "chain" in e:
+        tool_ok = in_order(e["chain"], got.get("seq") or [])
     if e["path"] == "direct":
         tool_ok = got["path"] == "direct"
     if "path_in" in e and "tool" in e:
@@ -208,11 +261,25 @@ def brain_turn(case, brain, tracker, system):
     try:
         options = {
             "num_predict": 256,
-            "force_planner": jt.planner_required(case["text"]),
+            "force_planner": jt.planner_required(case["text"])
+            and not jt.research_required(case["text"]),
+            "force_research": jt.research_required(case["text"]),
             "force_tool": jt.weekday_question(case["text"]),
         }
         r = brain.chat(msgs, tools=jt.select_schemas(case["text"]), options=options)
         calls = r.message.tool_calls or []
+        if "chain" in case["expect"]:
+            seq, args = chain_turn(case, brain, system)
+            usd = sum(tracker.today_by_tier().values()) - before
+            return {
+                "path": "tool" if seq else "direct",
+                "tool": seq[0] if seq else "",
+                "seq": seq,
+                "args": " ".join(args),
+                "detail": " -> ".join(seq),
+                "seconds": time.perf_counter() - t0,
+                "usd": usd,
+            }
         c = calls[0].function if calls else None
         names = [x.function.name for x in calls]
         seconds = time.perf_counter() - t0
@@ -230,6 +297,7 @@ def brain_turn(case, brain, tracker, system):
         return {
             "path": path,
             "tool": c.name,
+            "seq": names,
             "tools": names,
             "args": json.dumps(dict(c.arguments)),
             "detail": "",
