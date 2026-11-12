@@ -150,12 +150,17 @@ class ShowMore(Base):
         self.assertEqual(self.panel.lookup()["shown"], 100)
         self.assertFalse(self.panel.lookup()["more"])
 
-    def test_show_more_is_not_ours_when_the_newest_card_is_not_a_file_card(self):
-        self.assertIsNone(pe.handle(self.panel, None, "show more"))
+    def test_show_more_with_no_file_card_says_there_is_nothing_to_show(self):
+        nothing = "There's nothing to show more of right now."
+        self.assertEqual(pe.handle(self.panel, None, "show more"), nothing)
         self.panel.research(
             {"question": "q", "summary": "s", "findings": [], "sources": [], "images": []}
         )
-        self.assertIsNone(pe.handle(self.panel, None, "show more"))
+        self.assertEqual(pe.handle(self.panel, None, "Show more."), nothing)
+        self.assertEqual(pe.handle(self.panel, None, "show me the rest"), nothing)
+        self.assertEqual(
+            [m["type"] for m in self.sent], ["panel.research"]
+        )  # nothing was published
         for t in ("show more cheese", "tell me more", "show"):
             self.assertIsNone(pe.handle(self.panel, None, t))
 

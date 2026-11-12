@@ -104,6 +104,41 @@ ABBREVIATIONS = [
 ]
 
 
+# Acronyms and file types the voice would otherwise say as a word or letter by letter with dots: spelled the way people say them.
+SPOKEN_ACRONYMS = {
+    "pdf": "P D F",
+    "png": "P N G",
+    "jpg": "J P G",
+    "jpeg": "J peg",
+    "csv": "C S V",
+    "url": "U R L",
+    "api": "A P I",
+    "json": "Jason",
+    "html": "H T M L",
+    "xml": "X M L",
+    "sql": "S Q L",
+    "css": "C S S",
+    "http": "H T T P",
+    "https": "H T T P S",
+    "usb": "U S B",
+    "gpu": "G P U",
+    "cpu": "C P U",
+    "ssd": "S S D",
+}
+_ACRO = "|".join(sorted(SPOKEN_ACRONYMS, key=len, reverse=True))
+_ACRO_EXT = re.compile(
+    rf"(?:(?<=\w)|(?<=\s))\.({_ACRO})(?![\w])", re.I
+)  # report.pdf -> report dot P D F
+_ACRO_WORD = re.compile(rf"(?<![\w.])({_ACRO})(s?)(?![\w])", re.I)  # PDF, pdfs, URLs
+
+
+def _spoken_acronyms(t: str) -> str:
+    t = _ACRO_EXT.sub(lambda m: " dot " + SPOKEN_ACRONYMS[m.group(1).lower()], t)
+    return _ACRO_WORD.sub(
+        lambda m: SPOKEN_ACRONYMS[m.group(1).lower()] + ("s" if m.group(2) else ""), t
+    )
+
+
 # Speech-recognition names Whisper spells wrongly on every model tried (diagnostics/asr_real): fixed after transcription, not by prompting the model.
 TRANSCRIPT_FIXES = [
     (
@@ -261,6 +296,7 @@ def normalize_for_speech(text: str) -> str:
     t = re.sub(r"(?<![\w.])[-−](?=\d)", "minus ", t)
     for pattern, replacement in ABBREVIATIONS:
         t = re.sub(pattern, replacement, t)
+    t = _spoken_acronyms(t)
     # decimals last: "0.73" -> "0 point 7 3" (digits read one by one so nothing becomes "seventy-three")
     t = re.sub(
         r"(?<![\d.])(\d[\d,]*)\.(\d+)(?![\d.])",

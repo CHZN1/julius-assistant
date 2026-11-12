@@ -376,7 +376,7 @@ def show_more(panel: Any, lister: Callable[[str, int], dict] | None = None) -> s
     """ "Show more" on the newest file card: reveal its next rows, or ask the file agent to list further. None when the newest card is not a file card."""
     card = find_card(panel)
     if card is None or card.get("type") != "panel.files":
-        return None
+        return "There's nothing to show more of right now."
     pid = card["panel_id"]
     if panel.has_more(pid):
         k = panel.show_more(pid)

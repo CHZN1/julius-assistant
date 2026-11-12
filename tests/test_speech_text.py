@@ -431,5 +431,22 @@ class PolicyPromptTests(unittest.TestCase):
             self.assertNotIn("Want more detail?", said)
 
 
+class Acronyms(unittest.TestCase):
+    def test_file_types_and_acronyms_are_spoken_the_way_people_say_them(self):
+        cases = {
+            "Resume.pdf already exists.": "Resume dot P D F already exists.",
+            "Saved chart.PNG and data.csv": "Saved chart dot P N G and data dot C S V",
+            "Open the URL": "Open the U R L",
+            "The API returns JSON": "The A P I returns Jason",
+            "Moved 3 PDFs and 2 CSVs": "Moved 3 P D Fs and 2 C S Vs",
+            "I read the pdf file": "I read the P D F file",
+            "See the .png then": "See the dot P N G then",
+            "apiary, curly, purl, Jasonville": "apiary, curly, purl, Jasonville",
+        }
+        for text, want in cases.items():
+            with self.subTest(text=text):
+                self.assertEqual(n(text), want)
+
+
 if __name__ == "__main__":
     unittest.main()
