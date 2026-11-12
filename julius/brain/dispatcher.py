@@ -163,12 +163,14 @@ class Dispatcher:
                 )
             else:
                 try:
-                    if task["agent"] == "files" and self.file_agent is not None:
-                        method, kwargs = {
-                            "list_files": ("list", {"directory": args.get("directory", ".")}),
-                            "read_file": ("read", {"path": args.get("path")}),
-                            "find_files": ("find", args),
-                        }[name]
+                    direct = {
+                        "list_files": ("list", {"directory": args.get("directory", ".")}),
+                        "read_file": ("read", {"path": args.get("path")}),
+                        "find_files": ("find", args),
+                    }
+                    # read-only file tools go straight to the file agent; file_request (the human command session) is in the registry
+                    if task["agent"] == "files" and self.file_agent is not None and name in direct:
+                        method, kwargs = direct[name]
                         out = getattr(self.file_agent, method)(**kwargs)
                     else:
                         out = self.registry[name](**(args or {}))

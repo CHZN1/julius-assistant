@@ -20,6 +20,16 @@ class DispatcherTests(unittest.TestCase):
         self.registry["get_weather"] = lambda **kw: "Sunny."
         self.d = Dispatcher(self.registry, tools.SCHEMAS)
 
+    def test_file_request_works_when_the_dispatcher_has_a_file_agent(self):
+        # regression: with a file agent attached, file_request (owner "files") raised KeyError and Julius said the file controller was not responding
+        with tempfile.TemporaryDirectory() as t:
+            agent = FileAgent(Path(t).resolve(), Path(t) / "state")
+            registry = dict(tools.REGISTRY, file_request=lambda request: "Which files?")
+            d = Dispatcher(registry, tools.SCHEMAS, file_agent=agent)
+            d.begin_turn()
+            out = d.dispatch("file_request", {"request": "move text files"})
+            self.assertEqual((out["code"], out["message"]), ("completed", "Which files?"))
+
     def test_every_schema_has_exact_owner(self):
         self.assertEqual(set(self.d.schemas), set(OWNERS))
 
