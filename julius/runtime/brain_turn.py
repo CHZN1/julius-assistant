@@ -422,7 +422,9 @@ class BrainTurn:
             if self.rounds_done and not (message.content or "").strip():
                 self.stalled = False
                 self.chain_done = True
-                return None  # nothing said after the tools: fall through to the plain spoken summary
+                return (
+                    None  # nothing said after the tools: fall through to the plain spoken summary
+                )
             return message.content
         calls = _unique_calls(message.tool_calls or [])
         if not calls:
@@ -485,7 +487,12 @@ class BrainTurn:
                 answer = self.tool_round()
                 if answer is not None:
                     return answer
-                if self.stalled or self.chain_done or round_no == self.max_rounds() or self.turn_over_budget():
+                if (
+                    self.stalled
+                    or self.chain_done
+                    or round_no == self.max_rounds()
+                    or self.turn_over_budget()
+                ):
                     break
                 if not self.s.cloud or not livedata.tool_result_this_turn(self.messages):
                     break
