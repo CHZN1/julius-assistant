@@ -42,6 +42,7 @@ SCHEMAS: dict[str, dict[str, str]] = {
     "panel.research": {
         "question": "str",
         "summary": "str",
+        "summary_cite": "list?",
         "findings": "list",
         "sources": "list",
         "images": "list",
@@ -217,6 +218,8 @@ def research_card(result: dict, images: list[dict] | None = None) -> dict:
     return {
         "question": clean(result.get("question"), CAPS["question"]),
         "summary": clean_text(result.get("summary"), CAPS["summary"]),
+        # the spoken summary is built only from the kept findings, so it cites exactly the sources they cite (card numbering)
+        "summary_cite": sorted({c for f in findings for c in f["cite"]}),
         "findings": findings,
         "sources": sources,
         "images": imgs,

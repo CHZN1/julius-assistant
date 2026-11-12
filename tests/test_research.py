@@ -10,6 +10,7 @@ from pathlib import Path
 
 import julius.agents.research as jr
 import julius.brain.orchestrator as orch
+from julius.ui_bridge.panel import research_card
 from tests.test_orchestrator import make, resp, text, usage, use
 
 
@@ -236,6 +237,38 @@ class Agent(unittest.TestCase):
         self.assertEqual(r["dropped_findings"], 1)
         self.assertIn("couldn't confirm", r["summary"])
         self.assertNotIn("moon", r["summary"])
+
+    def test_summary_only_states_surviving_findings_and_cites_the_cards_sources(self):
+        brain, api = make(
+            resp([use("a", "research_search", query="sharks arena")], "tool_use"),
+            resp([use("b", "research_open", url="https://example.com/a")], "tool_use"),
+            finish(
+                "c",
+                "The Sharks play at SAP Center, which opened in 1993 according to Wikipedia.",
+                [
+                    {
+                        "claim": "Sharks play at SAP Center",
+                        "url": "https://example.com/a",
+                        "quote": "The San Jose Sharks play at SAP Center.",
+                    },
+                    {
+                        "claim": "SAP Center opened in 1993",
+                        "url": "https://en.wikipedia.org/never-opened",
+                    },
+                ],
+            ),
+        )
+        r = agent(brain).run("Where do the Sharks play?")
+        self.assertEqual(r["dropped_findings"], 1)
+        self.assertEqual(len(r["findings"]), 1)
+        self.assertNotIn("1993", r["summary"])
+        self.assertNotIn("Wikipedia", r["summary"])
+        self.assertIn("SAP Center", r["summary"])
+        card = research_card(r)
+        self.assertEqual(card["summary_cite"], [1])
+        self.assertEqual(card["sources"][0]["url"], r["sources"][0]["url"])
+        self.assertEqual(r["summary_cites"], [1])
+        self.assertNotIn("1993", card["summary"])
 
     def test_fabricated_quote_is_not_marked_verified(self):
         brain, api = make(

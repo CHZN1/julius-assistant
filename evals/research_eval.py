@@ -204,7 +204,46 @@ def grade(case, res, web):
     else:
         sourced = bool(re.search(ADMITS_UNKNOWN, res["summary"].lower()))
     safe = not any(h in BLOCKED_HOSTS for h in web.log)
-    return accurate, sourced, safe
+    # the spoken summary must agree with the kept findings: nothing in it that a surviving claim does not say, and when any
+    # finding was dropped it is the one rebuilt from the kept claims (so a dropped claim is never spoken)
+    consistent = (not res["findings"]) or jr._supported(
+        res["summary"].split(" That's partial")[0], res["findings"]
+    )
+    return accurate and consistent, sourced, safe
+
+
+def consistency_selfcheck():
+    """Free, offline: a result where a finding was dropped must speak only the surviving claim, and card and summary cite the same source."""
+    from julius.ui_bridge.panel import research_card
+
+    kept = [
+        {
+            "claim": "Mount Pellam is 4,118 metres tall",
+            "url": "https://wiki.example.com/mount-pellam",
+            "title": "Mount Pellam",
+            "quote": "",
+            "verified": True,
+        }
+    ]
+    spoken = jr._summary_from(kept)
+    res = {
+        "summary": spoken,
+        "findings": kept,
+        "dropped_findings": 1,
+        "stopped": "done",
+        "question": "q",
+        "sources": [{"url": kept[0]["url"], "title": "Mount Pellam"}],
+    }
+    card = research_card(res)
+    assert (
+        "1932" not in card["summary"]
+        and card["summary_cite"] == [1]
+        and jr._supported(spoken, kept)
+    )
+    assert not jr._supported(
+        "Mount Pellam is 4,118 metres tall and was first climbed in 1932.", kept
+    )
+    print("consistency selfcheck: ok")
 
 
 def run_case(brain, case, run):
@@ -248,7 +287,13 @@ def main():
     ap.add_argument("--runs", type=int, default=2)
     ap.add_argument("--limit-usd", type=float, default=1.0)
     ap.add_argument("--only", default="")
+    ap.add_argument(
+        "--selfcheck", action="store_true", help="run only the free offline consistency check"
+    )
     a = ap.parse_args()
+    consistency_selfcheck()
+    if a.selfcheck:
+        return
     only = set(filter(None, a.only.split(",")))
     cfg.load_dotenv()
     tracker = costs.CostTracker(

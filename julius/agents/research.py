@@ -333,6 +333,39 @@ def default_search(query: str, n: int = 5) -> Any:
         ]
 
 
+_NUMTOK = re.compile(r"\d[\d,.]*")
+_WORDTOK = re.compile(r"[a-z]{4,}")
+
+
+def _supported(summary: str, findings: list) -> bool:
+    """True when the model's summary says nothing the kept findings don't: every number appears in a claim, and every sentence
+    shares most of its content words with the claims."""
+    if not summary:
+        return False
+    claims = " ".join(f["claim"] for f in findings).lower()
+    for n in _NUMTOK.findall(summary):
+        if n.strip(".,") and n.strip(".,") not in claims:
+            return False
+    have = set(_WORDTOK.findall(claims))
+    for sent in re.split(r"(?<=[.!?])\s+", summary.lower()):
+        ws = set(_WORDTOK.findall(sent))
+        if ws and len(ws & have) / len(ws) < 0.6:
+            return False
+    return True
+
+
+def _summary_from(findings: list) -> str:
+    out, n = [], 0
+    for f in findings:
+        c = f["claim"].strip()
+        k = len(c.split())
+        if out and n + k > SPOKEN_WORDS:
+            break
+        out.append(c if c[-1:] in ".!?" else c + ".")
+        n += k
+    return " ".join(out)
+
+
 class _CostLoop:
     """Haiku tool loop with per-task step and dollar limits. The call that would begin past the cap is not made."""
 
@@ -516,13 +549,16 @@ class ResearchAgent:
 
     def _result(self, question: Any, final: Any, stopped: Any, loop: Any) -> Any:
         findings, dropped = self._verify((final or {}).get("findings"))
-        summary = " ".join(
+        model_summary = " ".join(
             str((final or {}).get("summary") or "").replace("*", "").replace("#", "").split()
         )
         if not findings:
             summary = "I couldn't confirm that from a source I could read."
-        elif not summary:
-            summary = findings[0]["claim"]
+        elif dropped or not _supported(model_summary, findings):
+            # The spoken answer may only state what survived verification: rebuild it from the kept claims.
+            summary = _summary_from(findings)
+        else:
+            summary = model_summary
         words = summary.split()
         if len(words) > SPOKEN_WORDS:
             summary = " ".join(words[:SPOKEN_WORDS]).rstrip(",;:") + "."
@@ -533,6 +569,8 @@ class ResearchAgent:
                 seen.add(p["final_url"])
                 uniq.append(p)
         cited = {f["url"] for f in findings}
+        order = [p["final_url"] for p in uniq]
+        summary_cites = sorted({order.index(f["url"]) + 1 for f in findings if f["url"] in order})
         images = [
             {"url": i["url"], "alt": i["alt"], "page": p["final_url"]}
             for p in uniq
@@ -544,6 +582,7 @@ class ResearchAgent:
             "question": question,
             "created": int(self.clock()),
             "summary": summary,
+            "summary_cites": summary_cites,
             "findings": findings,
             "dropped_findings": dropped,
             "sources": [{"url": p["final_url"], "title": p["title"]} for p in uniq],
@@ -610,7 +649,10 @@ def research_task(args: list[str], brain: Any | None = None) -> Any:
     if _panel_sink is not None:
         with contextlib.suppress(Exception):  # a panel problem must never cost the spoken answer
             _panel_sink(res)
-    srcs = ", ".join(
-        s["title"] or urllib.parse.urlsplit(s["url"]).hostname for s in res["sources"][:3]
+    cited = set(res.get("summary_cites") or [])
+    srcs = "; ".join(
+        f"{i} {s['title'] or urllib.parse.urlsplit(s['url']).hostname}"
+        for i, s in enumerate(res["sources"], 1)
+        if i in cited
     )
     return f"{res['summary']} [research: {len(res['findings'])} cited finding(s), sources: {srcs or 'none'}; saved as {res['id']}]"
