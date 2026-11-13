@@ -128,7 +128,46 @@ class PanelFiles:
         self.ttl_s = ttl_s
         self.clock = clock
         self._lock = threading.Lock()
+        self._mem: dict[
+            str, tuple[bytes, float]
+        ] = {}  # in-memory images (vision looks): never written to disk
         self.prune()
+
+    def put_memory(self, data: bytes, ext: str, ttl_s: int = 3600, keep: int = 6) -> str:
+        """Hold bytes in memory only and return the same kind of `/p/<id>.<ext>` reference. Gone when the process ends, after
+        `ttl_s`, or when more than `keep` newer ones exist. The only way such an image reaches disk is the user saying save this card."""
+        if ext not in CTYPE:
+            raise ImageRefused("bad extension")
+        name = f"{secrets.token_urlsafe(12)}.{ext}"
+        now = self.clock()
+        with self._lock:
+            for k in [k for k, (_, t) in self._mem.items() if now - t > ttl_s]:
+                del self._mem[k]
+            self._mem[name] = (data, now)
+            while len(self._mem) > keep:
+                del self._mem[next(iter(self._mem))]
+        return f"/p/{name}"
+
+    def read_ref(self, token: str, name: str) -> tuple[bytes, str] | None:
+        """(bytes, extension) for token + name, from memory or disk, or None."""
+        if not hmac.compare_digest(token.encode(), self.token.encode()) or not NAME.match(name):
+            return None
+        with self._lock:
+            held = self._mem.get(name)
+        if held is not None:
+            return held[0], name.rsplit(".", 1)[1]
+        p = self.open_ref(token, name)
+        if p is None:
+            return None
+        try:
+            return p.read_bytes(), p.suffix[1:]
+        except OSError:
+            return None
+
+    def bytes_of(self, ref: str) -> tuple[bytes, str] | None:
+        """The stored bytes behind a panel reference (memory or disk), for saving a card."""
+        m = re.fullmatch(r"/p/([A-Za-z0-9_-]{8,64}\.(?:png|jpg|webp|gif))", ref or "")
+        return self.read_ref(self.token, m.group(1)) if m else None
 
     def put(self, data: bytes, ext: str) -> str:
         """Store bytes and return the reference `/p/<id>.<ext>` that goes into panel messages."""
@@ -207,15 +246,12 @@ class _Handler(BaseHTTPRequestHandler):
         bits = parts.path.split("/")  # ['', token, 'p', name]
         if parts.query or len(bits) != 4 or bits[0] != "" or bits[2] != "p":
             return self._fail(404)
-        p = files.open_ref(bits[1], bits[3])
-        if p is None:
+        got = files.read_ref(bits[1], bits[3])
+        if got is None:
             return self._fail(404)
-        try:
-            data = p.read_bytes()
-        except OSError:
-            return self._fail(404)
+        data, ext = got
         self.send_response(200)
-        self.send_header("Content-Type", CTYPE[p.suffix[1:]])
+        self.send_header("Content-Type", CTYPE[ext])
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")

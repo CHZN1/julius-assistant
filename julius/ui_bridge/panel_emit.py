@@ -339,6 +339,8 @@ def save_card(
 ) -> str:
     """Writes the newest card (markdown plus its images) into its own folder under the saved-cards folder. Returns what Julius says."""
     card = find_card(panel)
+    if card is not None and card.get("type") == "panel.vision":
+        return save_vision_card(card, files, cfg_value, now)
     if card is None or card.get("type") != "panel.research":
         return "I don't have a card to save."
     try:
@@ -374,6 +376,42 @@ def save_card(
         log.event("panel_save_failed", error=type(e).__name__)
         return "I couldn't save that card."
     log.event("panel_card_saved", images=len(kept))
+    return f"Saved to {base.name}, in a folder called {folder.name}."
+
+
+def save_vision_card(
+    card: dict, files: Any, cfg_value: str | None, now: Callable[[], float] = time.time
+) -> str:
+    """The only way a vision picture reaches disk: the picture and a short markdown note in their own folder."""
+    got = files.bytes_of(card.get("image", "")) if files is not None else None
+    if got is None:
+        return "That picture is no longer available, so I can't save it."
+    data, ext = got
+    try:
+        base = saved_dir(cfg_value)
+        base.mkdir(parents=True, exist_ok=True)
+        stamp = time.strftime("%Y-%m-%d %H%M", time.localtime(now()))
+        name = f"{stamp} {_slug(card.get('question') or card.get('title', ''))}"
+        folder = base / name
+        k = 1
+        while folder.exists():
+            k += 1
+            folder = base / f"{name} ({k})"
+        folder.mkdir()
+        (folder / f"look.{ext}").write_bytes(data)
+        (folder / "card.md").write_text(
+            f"# {card.get('title', 'What Julius saw')}\n\n"
+            f"*{card.get('source', 'image')}, {time.strftime('%Y-%m-%d %H:%M', time.localtime(now()))}.*\n\n"
+            f"**Asked:** {card.get('question', '')}\n\n{card.get('answer', '')}\n\n"
+            f"![look](look.{ext})\n",
+            encoding="utf-8",
+        )
+    except SaveRefused as e:
+        return str(e)
+    except OSError as e:
+        log.event("panel_save_failed", error=type(e).__name__)
+        return "I couldn't save that card."
+    log.event("panel_card_saved", images=1, kind="vision")
     return f"Saved to {base.name}, in a folder called {folder.name}."
 
 

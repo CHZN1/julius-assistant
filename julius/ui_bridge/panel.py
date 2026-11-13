@@ -89,6 +89,17 @@ SCHEMAS: dict[str, dict[str, str]] = {
         "note": "str?",
     },
     "panel.images": {"title": "str", "question": "str", "images": "list"},
+    "panel.vision": {
+        "title": "str",
+        "source": "str",
+        "question": "str",
+        "answer": "str",
+        "image": "str",
+        "alt": "str",
+        "model": "str",
+        "cost_usd": "num",
+        "est_cost_usd": "num",
+    },
     "panel.update": {
         "target": "str",
         "images": "list?",
@@ -240,6 +251,16 @@ def _v_chart(msg: dict, errors: list[str]) -> None:
         _check(SERIES_FIELDS, s, f"series[{i}]", errors)
 
 
+VISION_SOURCES = ("camera", "window", "screen", "image")
+
+
+def _v_vision(msg: dict, errors: list[str]) -> None:
+    if not IMAGE_REF.match(str(msg["image"])):
+        errors.append("panel.vision.image: not a panel file reference")
+    if msg["source"] not in VISION_SOURCES:
+        errors.append("panel.vision: bad source")
+
+
 def _v_table(msg: dict, errors: list[str]) -> None:
     for i, r in enumerate(msg["rows"]):
         if not isinstance(r, list) or len(r) != len(msg["columns"]):
@@ -257,6 +278,7 @@ _EXTRA_CHECKS: dict[str, Callable[[dict, list[str]], None]] = {
     "panel.update": _v_update,
     "panel.chart": _v_chart,
     "panel.table": _v_table,
+    "panel.vision": _v_vision,
     "panel.images": lambda m, e: _v_images(m["images"], e),
     "panel.clear": _v_clear,
 }
@@ -574,6 +596,22 @@ class PanelHub:
             ],
         }
         return self._publish("panel.chart", body, turn)
+
+    def vision(self, card: dict, turn: int | None = None) -> str | None:
+        """A vision card: one look (camera, window, screen or dropped image) and Julius's answer. `image` is a panel file reference to an in-memory picture."""
+        source = str(card.get("source") or "")
+        body = {
+            "title": clean(card.get("title") or "What Julius saw", CAPS["title"]),
+            "source": source if source in VISION_SOURCES else "image",
+            "question": clean(card.get("question"), CAPS["question"]),
+            "answer": clean_text(card.get("answer"), CAPS["summary"]),
+            "image": str(card.get("image") or ""),
+            "alt": clean(card.get("alt"), CAPS["alt"]),
+            "model": clean(card.get("model"), 40),
+            "cost_usd": round(float(card.get("cost_usd") or 0.0), 6),
+            "est_cost_usd": round(float(card.get("est_cost_usd") or 0.0), 6),
+        }
+        return self._publish("panel.vision", body, turn)
 
     def table(self, card: dict, turn: int | None = None) -> str | None:
         body = {

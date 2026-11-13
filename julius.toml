@@ -26,6 +26,12 @@ max_page_chars = 6000       # page text shown to the model
 save = true                 # keep the structured result (sources, findings, images) in ~/.julius/research/ for the side panel
 keep = 50                   # how many saved results to keep
 
+[vision]                    # one look on request: camera frame, frontmost window, whole screen or a dropped image (julius/agents/vision.py)
+camera = true               # "what am I holding", "look at me"; the macOS camera indicator is on only while the picture is taken
+screen = true               # "what's on my screen" (frontmost window), "the whole screen"
+max_edge = 1568             # pictures are shrunk to this many pixels on the long edge before they are sent
+exclude_owners = ["Julius Orb", "Julius"]   # windows of these apps are never the "frontmost window"
+
 [offline]
 model = "llama3.2:3b"       # loaded only while the API is unreachable
 retry_seconds = 60          # how long to stay offline before trying the API again

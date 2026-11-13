@@ -96,6 +96,31 @@ def handle_panel(s: Session, text: str) -> str | None:
         return None
 
 
+def handle_vision(s: Session, text: str) -> str | None:
+    """ "What am I holding", "what's on my screen", "look at this image": one picture, only on request, answered by Claude vision and shown in a card."""
+    from julius.agents import vision
+
+    req = vision.parse(text, has_dropped=bool(s.drop_stage and s.drop_stage.pending()))
+    if req is None:
+        return None
+    try:
+        import julius.brain.cloud as jc
+
+        cfg = config.load_config().get("vision") or {}
+        return vision.look(
+            req,
+            brain=jc.get_brain(),
+            panel=getattr(s, "panel_hub", None),
+            files=getattr(s, "panel_files", None),
+            turn=s.turn,
+            drop_stage=s.drop_stage,
+            cfg=cfg,
+        )
+    except Exception as exc:
+        log.console(f"  [vision failed: {type(exc).__name__}: {exc}]", flush=True)
+        return "I couldn't look at that."
+
+
 def handle_memory(s: Session, text: str) -> str | None:
     """remember / forget / what do you remember: deterministic, no model call."""
     try:

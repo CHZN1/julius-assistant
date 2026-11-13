@@ -1,6 +1,6 @@
 # Side panel (backend)
 
-The panel is a client-side feature: cards are data on the read-only event feed (`panel.research`, `panel.files`, `panel.chart`, `panel.table`, `panel.images`, `panel.update`, `panel.clear`; see EVENT_FEED.md), and a client such as the orb app draws them. This page is the security model and how the pieces connect.
+The panel is a client-side feature: cards are data on the read-only event feed (`panel.research`, `panel.files`, `panel.chart`, `panel.table`, `panel.images`, `panel.vision`, `panel.update`, `panel.clear`; see EVENT_FEED.md), and a client such as the orb app draws them. This page is the security model and how the pieces connect.
 
 ## What produces a card
 When the research agent finishes (`research_task`), the result is handed to the panel (`julius/ui_bridge/panel_emit.py`) after it is built and before the spoken answer is returned, so the card never delays speech and a failure in the panel never changes what Julius says. The card carries the question, summary, numbered findings with citation chips, and the sources. Images from the pages that backed a finding are fetched afterwards in the background (the same SSRF-checked, GET-only fetcher as research), decoded and re-encoded with Pillow, stored, and arrive later as a `panel.update`.
@@ -33,3 +33,5 @@ panel_max_mb = 200
 saved_dir = "~/Julius Saved"
 ```
 If the port is taken or the directory is not writable, Julius starts without the panel and says so in the console.
+
+**Looking at things (vision).** `julius/agents/vision.py`. Only an explicit request triggers it ("what am I holding", "look at me", "what's on my screen", "the whole screen", "look at this image"), matched by patterns, never by the model. One picture is taken: a camera frame (the one-shot helper `visiond/visiond.m` opens the camera, grabs a frame and exits, so the macOS camera indicator is on only for that moment), the frontmost window that is not Julius's own, the whole main display, or an image dropped on the orb. Locked screens and active secure password fields are never captured. The picture is shrunk to 1568 px, sent to Claude vision (Haiku; Sonnet for "look closely" and "read this") with the question, priced from real usage and recorded in the ledger, and published as a `panel.vision` card. The picture lives in an in-memory store (`PanelFiles.put_memory`: not on disk, at most 6, gone after an hour or when the service stops), is never put in conversation history or memory, and is written to disk only by "save this card".
