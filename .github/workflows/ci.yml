@@ -31,7 +31,7 @@ jobs:
         run: |
           pip install numpy scipy soundfile psutil requests httpx pypdf reportlab \
             anthropic sounddevice livekit ollama ddgs pynput openwakeword \
-            mlx-lm mlx-whisper matplotlib pillow
+            mlx-lm mlx-whisper matplotlib pillow librosa
       - name: Download the openwakeword base models
         run: python -c "import openwakeword.utils as u; u.download_models()"
       - name: Free unit tests (no network, no API key, no models)

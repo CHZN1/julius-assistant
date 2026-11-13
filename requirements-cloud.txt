@@ -13,3 +13,4 @@ mlx-lm==0.32.2
 sounddevice==0.5.6   # microphone and speakers
 pillow==11.1.0    # side-panel images are decoded and re-encoded
 matplotlib==3.11.1  # render_chart draws charts from data (Agg backend, no window)
+librosa==1.0.0       # BPM and key detection for audio files you name (ISC licence; julius/music/analysis.py)
