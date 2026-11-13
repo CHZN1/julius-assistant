@@ -875,7 +875,7 @@ SCHEMAS += [
     ),
     _utility_schema(
         "research_task",
-        "Run the web research agent: it searches, opens and reads pages and returns an answer with sources that appear on the side panel. ALWAYS use it when the user says research, look up, find sources on, or search the web for something. Pass the full question. Its result is your answer: say its summary in your own voice, briefly; never add facts it did not state, and if it says it could not verify something, say so.",
+        'Run the web research agent: it searches, opens and reads pages and returns an answer with sources that appear on the side panel. ALWAYS use it when the user says research, find sources on, or search the web for something, and for "look up ..." unless a dedicated tool fits (price, weather, scores, time, calculator): then use that tool. Pass the full question. Its result is your answer: say its summary in your own voice, briefly; never add facts it did not state, and if it says it could not verify something, say so.',
         {"question": "string"},
         ["question"],
     ),
@@ -1026,10 +1026,34 @@ _RESEARCH_REQUEST = re.compile(
 )
 
 
+_LOOK_UP = re.compile(
+    r"^\W*(?:julius\W+)?(?:(?:please|can you|could you|go ahead and)\W+)*look up\b", re.I
+)
+_DEDICATED = frozenset(
+    {
+        "get_weather",
+        "get_forecast",
+        "get_datetime",
+        "date_calculate",
+        "get_quote",
+        "get_scores",
+        "calculate",
+        "convert_units",
+    }
+)
+
+
 def research_required(user_text: str) -> bool:
-    """True when the request opens with research, look up, find sources on or search the web for: those always go to the
-    research agent, so the first model call must be research_task."""
-    return bool(_RESEARCH_REQUEST.search(user_text or ""))
+    """True when the first model call must be research_task. Explicit research phrasing (research, find sources on, search the
+    web for) always is. "look up ..." is too, unless a dedicated tool fits (price, weather, scores, time, calculator): then
+    that tool answers it."""
+    text = user_text or ""
+    if _RESEARCH_REQUEST.search(text):
+        if not _LOOK_UP.search(text):
+            return True
+        names = {s["function"]["name"] for s in select_schemas(text)}
+        return not (names & _DEDICATED) or names >= {s["function"]["name"] for s in SCHEMAS}
+    return False
 
 
 def planner_required(user_text: str) -> bool:

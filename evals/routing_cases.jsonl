@@ -62,7 +62,7 @@
 {"id": "r062", "cat": "tool", "text": "How many ounces are in 3.5 pounds?", "expect": {"path": "tool", "tool": "convert_units"}}
 {"id": "r063", "cat": "tool", "text": "Convert 72 degrees Fahrenheit into Celsius please", "expect": {"path": "tool", "tool": "convert_units"}}
 {"id": "r064", "cat": "tool", "text": "What time is it in Sydney?", "expect": {"path": "shortcut", "tool": "get_datetime", "args_contain": ["sydney"]}}
-{"id": "r065", "cat": "research", "text": "Look up the current price of gold.", "expect": {"path": "tool", "tool": "research_task"}}
+{"id": "r065", "cat": "tool", "text": "Look up the current price of gold.", "expect": {"path": "tool", "tool_in": ["get_quote", "web_search"]}}
 {"id": "r066", "cat": "research", "text": "Search the web for the best Ollama models for 16 gigabytes of memory.", "expect": {"path": "tool", "tool": "research_task"}}
 {"id": "r067", "cat": "tool", "text": "Find my tax return pdf.", "expect": {"path": "shortcut", "tool": "files:find", "ok": true}}
 {"id": "r068", "cat": "tool", "text": "What files are in my Desktop folder?", "expect": {"path": "tool", "tool_in": ["list_files"]}}
@@ -141,3 +141,12 @@
 {"id": "r141", "cat": "research", "text": "Please research whether electric cars are cheaper to own.", "expect": {"path": "tool", "tool": "research_task"}}
 {"id": "r142", "cat": "research", "text": "Look up the population of Iceland, then chart it against Norway and Denmark.", "expect": {"path": "tool", "tool": "research_task"}}
 {"id": "r143", "cat": "chain", "text": "Chart Apple's closing price over the last 5 days.", "expect": {"path": "tool", "tool": "get_quote", "chain": ["get_quote", "render_chart"]}}
+{"id": "r144", "cat": "lookup_dedicated", "text": "Look up the price of gold.", "expect": {"path": "tool", "tool": "get_quote"}}
+{"id": "r145", "cat": "lookup_dedicated", "text": "Look up the weather in Tokyo.", "expect": {"path": "tool", "tool_in": ["get_weather", "get_forecast"], "path_in": ["tool", "shortcut"]}}
+{"id": "r146", "cat": "lookup_dedicated", "text": "Look up the Warriors score from last night.", "expect": {"path": "tool", "tool_in": ["get_scores"]}}
+{"id": "r147", "cat": "lookup_dedicated", "text": "Look up what time it is in London.", "expect": {"path": "tool", "tool_in": ["get_datetime"], "path_in": ["tool", "shortcut"]}}
+{"id": "r148", "cat": "lookup_dedicated", "text": "Look up 15% of 240.", "expect": {"path": "tool", "path_in": ["tool", "shortcut"], "tool_in": ["calculate", "convert_units"]}}
+{"id": "r149", "cat": "research", "text": "Look up who designed the Burj Khalifa.", "expect": {"path": "tool", "tool": "research_task"}}
+{"id": "r150", "cat": "research", "text": "Look up the history of the Eiffel Tower.", "expect": {"path": "tool", "tool": "research_task"}}
+{"id": "r151", "cat": "research", "text": "Find sources on the price of housing in Denver over the last decade.", "expect": {"path": "tool", "tool": "research_task"}}
+{"id": "r152", "cat": "research", "text": "Research the price of gold since 1970.", "expect": {"path": "tool", "tool": "research_task"}}

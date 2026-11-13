@@ -23,18 +23,24 @@ class FlowBase(RunnerBase):
             projects_root=str(self.dev),
         )
 
-    def tearDown(self):
-        ca.cancel()
-        [r.wait(10) for r in list(ca._RUNNING.values())]
-        ca._RUNNING.clear()
-        super().tearDown()
+    def settle(self, timeout=30):
+        """Every run finished and its on_done callback delivered (on_done fires just after the run's done flag)."""
+        for r in list(ca._RUNNING.values()):
+            r.wait(timeout)
+        end = time.time() + 5
+        while not self.done and time.time() < end:
+            time.sleep(0.02)
+
+    def started(self):
+        end = time.time() + 20
+        while not any(r.proc for r in ca._RUNNING.values()) and time.time() < end:
+            time.sleep(0.02)
 
     def run_task(self, goal="FIXIT make add work in demo"):
         self.assertEqual(self.s.handle(f"have the coding agent {goal}")["code"], "preview")
         out = self.s.handle("yes")
         self.assertEqual(out["code"], "started")
-        ca.running()[0].wait(30)
-        time.sleep(0.2)
+        self.settle()
 
 
 class StageTests(FlowBase):
@@ -155,16 +161,16 @@ class RunTests(FlowBase):
     def test_status_and_cancel_while_running(self):
         self.s.handle("have the coding agent SLOW work in demo")
         self.s.handle("yes")
-        time.sleep(0.5)
+        self.started()
         self.assertIn("still running", self.s.handle("how is the coding task going")["message"])
         self.assertEqual(self.s.handle("cancel the coding task")["code"], "cancelled")
-        ca.running() and ca.running()[0].wait(15)
+        self.settle(15)
         self.assertEqual(self.done[0].status, "cancelled")
 
     def test_only_one_task_at_a_time_from_voice(self):
         self.s.handle("have the coding agent SLOW work in demo")
         self.s.handle("yes")
-        time.sleep(0.3)
+        self.started()
         self.assertEqual(self.s.handle("have the coding agent FIXIT again in demo")["code"], "busy")
 
 

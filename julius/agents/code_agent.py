@@ -753,6 +753,10 @@ def _execute(
                 text=True,
                 start_new_session=True,
             )
+            if (
+                run.cancelled
+            ):  # cancel() arrived before the process existed: it had nothing to kill then
+                _kill(run)
 
             def watchdog() -> None:
                 if not run.done.wait(task.timeout_s) and run.proc.poll() is None:

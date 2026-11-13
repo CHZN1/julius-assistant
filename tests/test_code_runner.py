@@ -45,6 +45,23 @@ class RunnerBase(Base):
         self.fake.chmod(self.fake.stat().st_mode | stat.S_IEXEC)
         self.tracker = CostTracker(self.tmp / "costs.jsonl", 5.0)
 
+    def tearDown(self):
+        # _RUNNING is process-wide: a run left over from one test makes the next one fail with "busy".
+        ca.cancel()
+        for r in list(ca._RUNNING.values()):
+            r.wait(30)
+        with ca._LOCK:
+            ca._RUNNING.clear()
+        super().tearDown()
+
+    @staticmethod
+    def started(run, timeout=20):
+        """Wait until the task's process exists (cancel before that has nothing to stop)."""
+        end = time.time() + timeout
+        while run.proc is None and time.time() < end:
+            time.sleep(0.02)
+        return run.proc is not None
+
     def go(self, goal, *, cap=None, sandbox=False, timeout=None, **kw):
         t = ca.create_task(goal, str(self.proj), cap_usd=cap, config=self.cfg)
         if timeout:
@@ -107,7 +124,7 @@ class RunnerTests(RunnerBase):
 
     def test_cancel_stops_the_task(self):
         t, run, _ = self.go("SLOW forever")
-        time.sleep(1)
+        self.assertTrue(self.started(run))
         self.assertTrue(ca.cancel())
         self.assertTrue(run.wait(15))
         self.assertEqual(t.status, "cancelled")
@@ -115,7 +132,7 @@ class RunnerTests(RunnerBase):
 
     def test_only_one_task_runs_at_a_time(self):
         t, run, _ = self.go("SLOW forever")
-        time.sleep(0.5)
+        self.assertTrue(self.started(run))
         with self.assertRaises(ca.CodeProblem) as cm:
             self.go("FIXIT another")
         self.assertEqual(cm.exception.code, "busy")

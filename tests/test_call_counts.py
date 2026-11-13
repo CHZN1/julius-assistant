@@ -306,5 +306,14 @@ class ChainTests(unittest.TestCase):
             "Please do some research on heat pumps",
         ):
             self.assertTrue(jt.research_required(t), t)
+        for t in (
+            "look up the price of gold",
+            "look up the weather in Tokyo",
+            "look up the Warriors score",
+            "look up 15% of 240",
+        ):
+            self.assertFalse(jt.research_required(t), t)  # a dedicated tool answers these
+        self.assertTrue(jt.research_required("look up who designed the Burj Khalifa"))
+        self.assertTrue(jt.research_required("research the price of gold since 1970"))
         for t in ("What's the weather", "plan a trip", "Tell me about research funding"):
             self.assertFalse(jt.research_required(t), t)
