@@ -1,0 +1,4 @@
+# Fixed test profile for the routing eval (set as JULIUS_LOCAL_CONFIG by evals/routing_eval.py), so results never depend on the real user's name or home city.
+[profile]
+name = "Alex"
+home_city = "Denver, Colorado"

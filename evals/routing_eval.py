@@ -220,8 +220,21 @@ def chain_turn(case, brain, system, rounds=3):
     return seq, args
 
 
+CLARIFY = re.compile(
+    r"\b(?:which|where|what (?:state|city|place|location)|do you mean|ambiguous|several|many|more than one|specify)\b"
+)
+
+
+def clarifies(got):
+    """A direct reply that asks where: correct for a place name that many towns share."""
+    detail = str(got.get("detail") or "").lower()
+    return got["path"] == "direct" and "?" in detail and bool(CLARIFY.search(detail))
+
+
 def judge(case, got):
     e = case["expect"]
+    if e.get("clarify_ok") and clarifies(got):
+        return True, True, True, True
     path_ok = got["path"] in e.get("path_in", [e["path"]])
     tool_ok = True
     if "tool" in e:
@@ -486,6 +499,9 @@ def main():
     ap.add_argument("--runs", type=int, default=3)
     a = ap.parse_args()
     os.environ["JULIUS_BACKEND"] = "cloud"
+    os.environ["JULIUS_LOCAL_CONFIG"] = str(
+        Path(__file__).parent / "routing_profile.toml"
+    )  # fixed test name and home city: "will it rain tomorrow?" always means Denver here
     os.environ["JULIUS_COSTS_FILE"] = str(
         Path(tempfile.mkdtemp(prefix="julius_eval_costs_")) / "costs.jsonl"
     )
