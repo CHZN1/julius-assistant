@@ -99,3 +99,6 @@ benchmarks/
 # Voice reference clips (AI-generated, see julius_1301_tuning/README.md)
 !julius_1301_tuning/*.wav
 !julius_1301_tuning/codec_prompts/*
+
+# Music eval: personal labelled files are printed only, never stored in the repo
+evals/results/music_analysis_local*

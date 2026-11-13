@@ -848,6 +848,23 @@ REGISTRY.update(
     code_request=code_request,
     render_chart=render_chart,
 )
+
+
+def analyze_audio(path: str = "") -> str:
+    from julius.music import tool as music_tool
+
+    return music_tool.analyze_audio(path)
+
+
+REGISTRY["analyze_audio"] = analyze_audio
+SCHEMAS.append(
+    _utility_schema(
+        "analyze_audio",
+        "Measure the tempo (BPM), musical key and length of an audio file (wav, aiff, mp3, flac, m4a), on this computer, read-only. Use it for 'what's the BPM of X', 'what key is X in', 'analyze this track' or 'how long is this song file'. 'path' is the file name or full path the user said; pass 'dropped' for a file he just dropped on the orb. It shows a card and returns the facts: say the BPM and key briefly, and mention it if the confidence is low or another tempo is possible. This tool finds the file itself from a bare name (Downloads, Documents, Desktop), so call it directly: never call find_files or list_files first. Never for identifying a song, and never invent a BPM or key.",
+        {"path": "string"},
+        ["path"],
+    )
+)
 SCHEMAS += [
     _utility_schema(
         "remember_fact",
@@ -997,6 +1014,10 @@ _SCHEMA_GROUPS = (
         ("file_request",),
     ),
     (CHART_WORDS, ("render_chart",)),
+    (
+        r"\bbpm\b|\btempo\b|beats per minute|what key|\bkey of\b|\bkey is\b|\banaly[sz]e (?:this|the|that|my)\b.*\b(?:track|song|file|audio|loop|sample|wav|mp3)|\.(?:wav|aiff?|mp3|flac|m4a)\b",
+        ("analyze_audio",),
+    ),
     (
         r"\bcod(?:e|ing)\b|\bbugs?\b|\btests?\b|refactor|\bscripts?\b|opus|merge|\bprojects?\b|programming|\bfix (?:the|my|this)\b",
         ("code_request",),

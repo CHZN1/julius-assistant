@@ -159,3 +159,11 @@
 {"id": "r159", "cat": "calc", "text": "What's 18.5 percent of 240?", "expect": {"path": "tool", "answer_contains": ["44\\.4|forty-four point four"], "path_in": ["tool", "shortcut"]}}
 {"id": "r160", "cat": "calc", "text": "What's 347 times 29?", "expect": {"path": "tool", "answer_contains": ["10,?063"], "path_in": ["tool", "shortcut"]}}
 {"id": "r161", "cat": "calc", "text": "What's 7 times 8?", "expect": {"path": "direct", "path_in": ["direct", "tool", "shortcut"], "answer_contains": ["\\b56\\b"]}}
+{"id": "r162", "cat": "music", "text": "What's the BPM of kick_loop.wav?", "expect": {"path": "tool", "tool": "analyze_audio", "args_contain": ["kick_loop"]}}
+{"id": "r163", "cat": "music", "text": "What key is pad_take2.wav in?", "expect": {"path": "tool", "tool": "analyze_audio", "args_contain": ["pad_take2"]}}
+{"id": "r164", "cat": "music", "text": "Analyze this track for me, I just dropped it on the orb.", "expect": {"path": "tool", "tool": "analyze_audio"}}
+{"id": "r165", "cat": "music", "text": "How long and how fast is the file demo_mix.mp3 in my Downloads?", "expect": {"path": "tool", "tool": "analyze_audio", "args_contain": ["demo_mix"]}}
+{"id": "r166", "cat": "music", "text": "Can you tell me the tempo and key of ~/Downloads/bassline.aiff?", "expect": {"path": "tool", "tool": "analyze_audio", "args_contain": ["bassline"]}}
+{"id": "r167", "cat": "music", "text": "What's a typical BPM range for house music?", "expect": {"path": "direct"}}
+{"id": "r168", "cat": "music", "text": "What does it mean when a song is in a minor key?", "expect": {"path": "direct"}}
+{"id": "r169", "cat": "music", "text": "What's the key to a good night's sleep?", "expect": {"path": "direct"}}
