@@ -78,8 +78,9 @@ Numbers come from the author's Mac (M-series, 16 GB) and the suites in `evals/`.
 5. First run: `python -m julius.profile setup` asks your name, home city and any words Whisper should know (team names, product names), and writes them to `julius.local.toml`, which is gitignored. Skip it and Julius asks for a city the first time you want the weather.
 6. Run in the foreground: `python -m julius`, or install as a login service: `python -m julius.service.service on`. Type a request at the prompt or say "Julius".
 7. Check it: `python -m julius.service.service doctor`, then `python -m julius.service.service smoke`.
+8. Optional, for "look at" requests (what am I holding, what's on my screen): macOS asks for two permissions, once each, the first time you use them. **Screen Recording**: System Settings, Privacy & Security, Screen & System Audio Recording, switch on the Python the service runs (for example `python3.12`), then restart the service (`python -m julius.service.service restart`). **Camera**: allow the prompt that appears on the first camera look (System Settings, Privacy & Security, Camera, `julius-visiond`). Neither is needed for anything else. Details in [docs/PANEL.md](docs/PANEL.md).
 
-Vision is off and ships without an implementation. To add one, point `JULIUS_VISION_MODULE` at a module exposing `Perception` and `describe`; [Julius Vision](https://github.com/CHZN1/julius-vision) is the companion module (facial-expression recognition today, more senses later).
+Looking at things on request is built in (a camera frame, the frontmost window, the whole screen or a dropped image; see docs/PANEL.md). The always-on perception below is a separate, optional module: it is off and ships without an implementation. To add one, point `JULIUS_VISION_MODULE` at a module exposing `Perception` and `describe`; [Julius Vision](https://github.com/CHZN1/julius-vision) is the companion module (facial-expression recognition today, more senses later).
 
 ## Security model
 
