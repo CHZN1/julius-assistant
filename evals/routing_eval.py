@@ -170,9 +170,13 @@ def arg_matches(expected, args_text):
 
 
 CANNED = {
-    "get_quote": "Apple Inc. (AAPL) daily closing prices, last 5 trading days (USD):\n2026-11-05: 268.47\n2026-11-06: 269.77\n2026-11-07: 271.49\n2026-11-10: 273.40\n2026-11-11: 275.25\nSource: Yahoo Finance; quotes may be delayed.",
+    "get_quote_history": "Apple Inc. (AAPL) daily closing prices, last 5 trading days (USD):\n2026-11-05: 268.47\n2026-11-06: 269.77\n2026-11-07: 271.49\n2026-11-10: 273.40\n2026-11-11: 275.25\nSource: Yahoo Finance; quotes may be delayed.",
     "research_task": "Iceland has about 380,000 people, Norway 5.5 million and Denmark 5.9 million. [research: 3 cited finding(s)]",
     "render_chart": "Chart shown in the side panel.",
+    "get_weather": "Springfield: 46°F, clear, feels like 37. High 47, low 26.",
+    "get_quote": "Bitcoin USD (BTC-USD): 68,183.01 USD, down 4.43% versus previous close. Source: Yahoo Finance; quotes may be delayed.",
+    "get_scores": "NHL (today) — 2 games:\nSCHEDULED: New York Rangers at Vancouver Canucks, 9:00 PM EST\nSCHEDULED: Nashville Predators at Vegas Golden Knights, 10:00 PM EST",
+    "get_news": "News search results (headlines and snippets, articles not verified):\nCity council approves new budget — Local Times (2026-11-13)",
 }
 
 
@@ -191,11 +195,17 @@ def chain_turn(case, brain, system, rounds=3):
         + case.get("history", [])
         + [{"role": "user", "content": case["text"]}]
     )
-    seq, args = [], []
-    for _ in range(rounds):
-        r = brain.chat(msgs, tools=jt.select_schemas(case["text"]), options={"num_predict": 256})
+    seq, args, final = [], [], ""
+    for round_no in range(rounds):
+        options = {"num_predict": 256}
+        if round_no == 0:  # the runtime forces the first call for these requests
+            options["force_research"] = jt.research_required(case["text"])
+            if jt.calculation_required(case["text"]):
+                options["force_name"] = "calculate"
+        r = brain.chat(msgs, tools=jt.select_schemas(case["text"]), options=options)
         calls = r.message.tool_calls or []
         if not calls:
+            final = r.message.content or ""
             break
         msgs.append(
             {
@@ -214,10 +224,24 @@ def chain_turn(case, brain, system, rounds=3):
                 {
                     "role": "tool",
                     "name": c.function.name,
-                    "content": CANNED.get(c.function.name, "Done."),
+                    "content": tool_result(c.function.name, dict(c.function.arguments)),
                 }
             )
-    return seq, args
+    return seq, args, final
+
+
+def tool_result(name, args):
+    """What a tool says in a chain case: the real calculator (free and deterministic), canned text for the rest."""
+    if name == "calculate":
+        import julius.brain.tools as jt
+
+        try:
+            return str(jt.call("calculate", args))
+        except Exception as e:
+            return f"calculate failed: {e}"
+    if name == "get_quote" and args.get("days"):
+        return CANNED["get_quote_history"]
+    return CANNED.get(name, "Done.")
 
 
 CLARIFY = re.compile(
@@ -233,6 +257,11 @@ def clarifies(got):
 
 def judge(case, got):
     e = case["expect"]
+    if (
+        "any_of" in e
+    ):  # several acceptable outcomes (the planner, or a direct chain that calls every needed tool)
+        tries = [judge({**case, "expect": alt}, got) for alt in e["any_of"]]
+        return next((t for t in tries if all(t)), tries[0])
     if e.get("clarify_ok") and clarifies(got):
         return True, True, True, True
     path_ok = got["path"] in e.get("path_in", [e["path"]])
@@ -245,10 +274,20 @@ def judge(case, got):
         tool_ok = set(e["tools_all"]) <= set(
             got.get("tools") or []
         )  # parallel lookups: every needed tool called in one reply
+    if "chain_all" in e:  # every needed tool called within the round cap, in any order
+        tool_ok = set(e["chain_all"]) <= set(got.get("seq") or [])
     if "chain" in e:
         tool_ok = in_order(e["chain"], got.get("seq") or [])
+    if (
+        "answer_contains" in e and "final" in got
+    ):  # the model called the right tool(s) AND its final answer states the correct result (a deterministic shortcut has no model answer)
+        tool_ok = (
+            tool_ok
+            and in_order(e.get("chain", []), got.get("seq") or [])
+            and all(re.search(p, (got.get("final") or "").lower()) for p in e["answer_contains"])
+        )
     if e["path"] == "direct":
-        tool_ok = got["path"] == "direct"
+        tool_ok = got["path"] in e.get("path_in", ["direct"])
     if "path_in" in e and "tool" in e:
         tool_ok = got.get("tool") == e["tool"]
     args = (got.get("args") or "").lower()
@@ -277,19 +316,25 @@ def brain_turn(case, brain, tracker, system):
             "force_planner": jt.planner_required(case["text"])
             and not jt.research_required(case["text"]),
             "force_research": jt.research_required(case["text"]),
+            "force_name": "calculate" if jt.calculation_required(case["text"]) else "",
             "force_tool": jt.weekday_question(case["text"]),
         }
         r = brain.chat(msgs, tools=jt.select_schemas(case["text"]), options=options)
         calls = r.message.tool_calls or []
-        if "chain" in case["expect"]:
-            seq, args = chain_turn(case, brain, system)
+        if any(k in case["expect"] for k in ("chain", "chain_all", "answer_contains")) or any(
+            "chain_all" in alt for alt in case["expect"].get("any_of", [])
+        ):
+            seq, args, final = chain_turn(case, brain, system)
             usd = sum(tracker.today_by_tier().values()) - before
             return {
-                "path": "tool" if seq else "direct",
+                "path": ("escalate" if seq[0] == "escalate_to_planner" else "tool")
+                if seq
+                else "direct",
                 "tool": seq[0] if seq else "",
                 "seq": seq,
                 "args": " ".join(args),
-                "detail": " -> ".join(seq),
+                "detail": " -> ".join(seq) + (" | " + final if final else ""),
+                "final": final,
                 "seconds": time.perf_counter() - t0,
                 "usd": usd,
             }

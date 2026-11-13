@@ -269,6 +269,7 @@ class CloudBrain:
         force_tool: bool = False,
         force_planner: bool = False,
         force_research: bool = False,
+        force_name: str = "",
     ) -> Any:
         system, api_messages = convert_messages(messages)
         from julius import profile
@@ -295,6 +296,8 @@ class CloudBrain:
             kwargs["tools"] = api_tools
             if force_research and any(t["name"] == "research_task" for t in api_tools):
                 kwargs["tool_choice"] = {"type": "tool", "name": "research_task"}
+            elif force_name and any(t["name"] == force_name for t in api_tools):
+                kwargs["tool_choice"] = {"type": "tool", "name": force_name}
             elif force_planner and any(t["name"] == "escalate_to_planner" for t in api_tools):
                 kwargs["tool_choice"] = {"type": "tool", "name": "escalate_to_planner"}
             elif force_tool:
@@ -329,6 +332,7 @@ class CloudBrain:
         )  # cloud-only request flag; never passed on to the local fallback
         force_planner = bool(options.pop("force_planner", False))
         force_research = bool(options.pop("force_research", False))
+        force_name = str(options.pop("force_name", "") or "")
         if self.auth_bad:
             if (
                 self.auth_pending
@@ -349,6 +353,7 @@ class CloudBrain:
                 force_tool=force_tool,
                 force_planner=force_planner,
                 force_research=force_research,
+                force_name=force_name,
             )  # length is steered by the prompt (brief by default, longer when asked); the local 160-token cap would cut a requested long answer mid-sentence
             if stream:
                 return self._stream(kwargs, messages, tools, options)

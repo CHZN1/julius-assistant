@@ -317,3 +317,17 @@ class ChainTests(unittest.TestCase):
         self.assertTrue(jt.research_required("research the price of gold since 1970"))
         for t in ("What's the weather", "plan a trip", "Tell me about research funding"):
             self.assertFalse(jt.research_required(t), t)
+
+
+class CalculationRule(unittest.TestCase):
+    def test_non_trivial_arithmetic_must_use_the_calculator(self):
+        for t in (
+            "What's 15 plus 8 divided by 2 squared?",
+            "What's 18.5 percent of 240?",
+            "What's 347 times 29?",
+            "what is 15% of 80",
+            "What's 12 times 12 plus 5?",
+        ):
+            self.assertTrue(jt.calculation_required(t), t)
+        for t in ("What's 7 times 8?", "What's 2 plus 2?", "What's the weather?", "tell me a joke"):
+            self.assertFalse(jt.calculation_required(t), t)

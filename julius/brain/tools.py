@@ -370,7 +370,7 @@ SCHEMAS = [
             "name": "get_datetime",
             "description": "Current date and time. Give a location for time elsewhere, "
             "otherwise returns local time. Omit location for local time; never use a placeholder. Only for what time or date it is NOW; "
-            "never for when a game, show or event starts or is scheduled (use get_scores for games).",
+            "never for when a game, show or event starts or is scheduled (use get_scores for games), and never for calendar, meeting, schedule or reminder questions (use list_planner_items).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -485,7 +485,7 @@ SCHEMAS = [
         "type": "function",
         "function": {
             "name": "calculate",
-            "description": "Calculate bounded arithmetic with +, -, *, /, **, parentheses, sqrt, abs, pi and e. For percentages write 'X% of Y' (for example '17.5% of 2480'); a bare % is modulo. Algebra and calculus are not supported.",
+            "description": "Calculate bounded arithmetic with +, -, *, /, **, parentheses, sqrt, abs, pi and e. MUST be used for anything beyond trivial mental math: decimals, percentages, several operations, or any number over two digits (only a single small whole-number operation like 7 times 8 may be answered without it). For percentages write 'X% of Y' (for example '17.5% of 2480'); a bare % is modulo. Algebra and calculus are not supported.",
             "parameters": {
                 "type": "object",
                 "properties": {"expression": {"type": "string"}},
@@ -618,7 +618,7 @@ REGISTRY.update(
 SCHEMAS += [
     _utility_schema(
         "list_planner_items",
-        "Read active local tasks, reminders or events. Only explicit human commands can add, complete or cancel items.",
+        "The user's calendar and to-do list: read their active events, meetings, tasks and reminders. ALWAYS use this for any question about what is on the calendar, scheduled, planned, due or coming up (what's on my calendar tomorrow, anything scheduled Friday, do I have meetings, what's my day look like); it returns every active item with its date, so pick the ones that match the day asked. Never answer those from get_datetime. Only explicit human commands can add, complete or cancel items.",
         {"kind": "string"},
         [],
     ),
@@ -1054,6 +1054,28 @@ def research_required(user_text: str) -> bool:
         names = {s["function"]["name"] for s in select_schemas(text)}
         return not (names & _DEDICATED) or names >= {s["function"]["name"] for s in SCHEMAS}
     return False
+
+
+_MATH_OPS = re.compile(
+    r"\bplus\b|\bminus\b|\btimes\b|\bdivided\b|\bmultipl\w*|\bsquared\b|\bcubed\b|\bpercent\b|\bsquare root\b|\bto the power\b|%|\d\s*[-+*/x^]\s*\d",
+    re.I,
+)
+_MATH_ASK = re.compile(
+    r"^\W*(?:julius\W+)?(?:(?:please|can you|could you)\W+)*(?:what(?:'s| is)|calculate|compute|work out|how much is|figure out)\b",
+    re.I,
+)
+
+
+def calculation_required(user_text: str) -> bool:
+    """True for an arithmetic question that is not trivial mental math (decimals, percentages, several operations, or any number over
+    two digits): the first model call must be calculate, because a recalled or mentally computed answer is a guess."""
+    text = user_text or ""
+    if not _MATH_ASK.search(text) or not _MATH_OPS.search(text):
+        return False
+    ops = len(_MATH_OPS.findall(text))
+    nums = re.findall(r"\d[\d,]*\.?\d*", text)
+    big = any(len(re.sub(r"\D", "", n.split(".")[0])) > 2 for n in nums)
+    return ops >= 2 or big or "." in "".join(nums) or "%" in text or "percent" in text.lower()
 
 
 def planner_required(user_text: str) -> bool:
