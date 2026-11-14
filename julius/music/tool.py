@@ -131,15 +131,20 @@ def analyze_audio(path: str = "", **_) -> str:
 
 
 def music_theory(
-    key: str = "", progression: str = "", chord: str = "", scale: str = "", **_
+    key: str = "", progression: str = "", chord: str = "", scale: str = "", style: str = "", **_
 ) -> str:
     """Compute theory for a key, scale or mode, chord or chord progression; show the piano card; return the exact facts for Julius to explain."""
-    from julius.music import theory
+    from julius.music import styles, theory
 
     try:
-        res = theory.theory(
-            str(key or ""), str(progression or ""), str(chord or ""), str(scale or "")
-        )
+        if str(style or "").strip():
+            res = styles.styled(
+                str(style), str(key or ""), str(progression or ""), str(chord or "")
+            )
+        else:
+            res = theory.theory(
+                str(key or ""), str(progression or ""), str(chord or ""), str(scale or "")
+            )
     except theory.TheoryProblem as exc:
         return str(exc)
     except Exception as exc:

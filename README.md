@@ -82,7 +82,7 @@ Numbers come from the author's Mac (M-series, 16 GB) and the suites in `evals/`.
 
 Looking at things on request is built in (a camera frame, the frontmost window, the whole screen or a dropped image; see docs/PANEL.md). The always-on perception below is a separate, optional module: it is off and ships without an implementation. To add one, point `JULIUS_VISION_MODULE` at a module exposing `Perception` and `describe`; [Julius Vision](https://github.com/CHZN1/julius-vision) is the companion module (facial-expression recognition today, more senses later).
 
-Music helpers (`julius/music/`, see docs/MUSIC.md) assist with craft and busywork and never generate music or imitate an artist. Today: "what's the BPM / key of kick_loop.wav" (or a file dropped on the orb) measures tempo, key and length on this computer, read-only, and shows a card. Theory help ("what chords go with A minor", "voicings for Cmaj9") computes the notes exactly and shows a piano card. Logic, GarageBand, `/Library/Audio` and plug-in folders are never read.
+Music helpers (`julius/music/`, see docs/MUSIC.md) assist with craft and busywork and never generate music or imitate an artist. Today: "what's the BPM / key of kick_loop.wav" (or a file dropped on the orb) measures tempo, key and length on this computer, read-only, and shows a card. Theory help ("what chords go with A minor", "voicings for Cmaj9", "one drop reggae progression", "neo-soul voicings for Dm9", altered dominants like 7#9) computes the notes exactly and shows a piano card. Logic, GarageBand, `/Library/Audio` and plug-in folders are never read.
 
 ## Security model
 

@@ -859,18 +859,26 @@ def analyze_audio(path: str = "") -> str:
 REGISTRY["analyze_audio"] = analyze_audio
 
 
-def music_theory(key: str = "", progression: str = "", chord: str = "", scale: str = "") -> str:
+def music_theory(
+    key: str = "", progression: str = "", chord: str = "", scale: str = "", style: str = ""
+) -> str:
     from julius.music import tool as music_tool
 
-    return music_tool.music_theory(key, progression, chord, scale)
+    return music_tool.music_theory(key, progression, chord, scale, style)
 
 
 REGISTRY["music_theory"] = music_theory
 SCHEMAS.append(
     _utility_schema(
         "music_theory",
-        "Music theory help, computed exactly (note names are never guessed): the notes of a key, scale or mode and its chords; the notes, inversions and voicings of a chord; or the analysis and smooth voicing of a chord progression, with a piano and chord chart in the side panel. Give ONE of: 'key' alone for 'what chords go with A minor' / 'chords in Bb major'; 'scale' for a scale or mode ('D dorian', 'A blues', 'G harmonic minor'); 'chord' for a chord ('Cmaj9', 'F#m7b5') with optional 'key'; 'progression' ('ii V I', 'Am F C G', 'i VI III VII') with 'key' (required for Roman numerals, optional for chord names). ALWAYS call it when the user names specific chords or a progression (even 'is Am F C G a good progression?'), a scale or mode, or asks what chords or notes belong to a key: never answer those from memory, and never give note names that did not come from this tool. Say the result briefly and musically, using only the notes it returned. Suggestions only: you never write to the user's projects and never imitate a named artist's style.",
-        {"key": "string", "scale": "string", "chord": "string", "progression": "string"},
+        "Music theory help, computed exactly (note names are never guessed): the notes of a key, scale or mode and its chords; the notes, inversions and voicings of a chord; or the analysis and smooth voicing of a chord progression, with a piano and chord chart in the side panel. Give ONE of: 'key' alone for 'what chords go with A minor' / 'chords in Bb major'; 'scale' for a scale or mode ('D dorian', 'A blues', 'G harmonic minor'); 'chord' for a chord ('Cmaj9', 'F#m7b5') with optional 'key'; 'progression' ('ii V I', 'Am F C G', 'i VI III VII') with 'key' (required for Roman numerals, optional for chord names). Add 'style' for a genre or era (reggae or one drop, dub, neo-soul or lo-fi, Motown or soul, jazz, blues): 'one drop reggae progression' = style 'one drop reggae'; 'dub bassline chords' = style 'dub'; 'neo-soul voicings for Dm9' = style 'neo-soul' + chord 'Dm9'; 'Motown-style ii-V' = style 'Motown' + progression 'ii V'. Genre and era requests are normal requests: ALWAYS answer them with this tool. Extended and altered chords work (9, 11, 13, maj9, 6/9, 7b9, 7#9, 7#11, 7b13, 7alt, m7b5). ALWAYS call it when the user names specific chords or a progression (even 'is Am F C G a good progression?'), a scale or mode, or asks what chords or notes belong to a key: never answer those from memory, and never give note names that did not come from this tool. Say the result briefly and musically, using only the notes it returned. Suggestions only: you never write to the user's projects and never imitate a named artist's style.",
+        {
+            "key": "string",
+            "scale": "string",
+            "chord": "string",
+            "progression": "string",
+            "style": "string",
+        },
         [],
     )
 )
@@ -1036,7 +1044,7 @@ _SCHEMA_GROUPS = (
         ("analyze_audio",),
     ),
     (
-        r"\bchords?\b|\bscales?\b|dorian|phrygian|lydian|mixolydian|locrian|pentatonic|progression|voicing|inversion|arpeggio|\bdiatonic\b|circle of fifths|\bii[- ]?v[- ]?i\b|roman numeral|\bin the key of\b|\b[a-g][#b]? (?:major|minor)\b",
+        r"\bchords?\b|\bscales?\b|dorian|phrygian|lydian|mixolydian|locrian|pentatonic|progression|voicing|inversion|arpeggio|\bdiatonic\b|circle of fifths|\bii[- ]?v(?:[- ]?i)?\b|roman numeral|reggae|\bdub\b|one[- ]?drop|neo[- ]?soul|motown|rocksteady|\bska\b|lo-?fi (?:chords|progression)|(?:jazz|blues|soul|gospel) (?:chords|progression|voicings)|12[- ]bar|\bin the key of\b|\b[a-g][#b]? (?:major|minor)\b",
         ("music_theory",),
     ),
     (

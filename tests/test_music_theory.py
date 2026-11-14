@@ -145,6 +145,139 @@ class Chords(unittest.TestCase):
         self.assertEqual(t.roman_for(t.parse_chord("G7"), c), "V7")
 
 
+class Extensions(unittest.TestCase):
+    ROOTS = ("C", "C#", "Db", "D", "Eb", "E", "F", "F#", "Gb", "G", "Ab", "A", "Bb", "B")
+    NEW = (
+        "9",
+        "11",
+        "13",
+        "m11",
+        "m13",
+        "maj13",
+        "6/9",
+        "maj7#11",
+        "7b9",
+        "7#9",
+        "7#11",
+        "7b13",
+        "7#5",
+        "7b5",
+        "7alt",
+    )
+
+    def test_extended_and_altered_spelling(self):
+        for sym, expect in {
+            "C9": "C E G Bb D",
+            "C11": "C E G Bb D F",
+            "Dm11": "D F A C E G",
+            "G13": "G B D F A E",
+            "Cmaj13": "C E G B D A",
+            "Am13": "A C E G B F#",
+            "C6/9": "C E G A D",
+            "G7b9": "G B D F Ab",
+            "G7#9": "G B D F A#",
+            "G7#11": "G B D F C#",
+            "G7b13": "G B D F Eb",
+            "G7alt": "G B F Ab A# Eb",
+            "C7#5": "C E G# Bb",
+            "C7b5": "C E Gb Bb",
+            "Cmaj7#11": "C E G B F#",
+            "F#7b9": "F# A# C# E G",
+            "Eb7#9": "Eb G Bb Db F#",
+            "Ab7b13": "Ab C Eb Gb Fb",
+        }.items():
+            self.assertEqual(" ".join(t.parse_chord(sym).notes), expect, sym)
+
+    def test_every_new_type_is_spelled_by_letter_in_every_root(self):
+        for root in self.ROOTS:
+            letter, pc = t.parse_note(root)
+            for q in self.NEW:
+                c = t.build_chord(root, q)
+                for note, deg, semi in zip(c.notes, c.degrees, c.offsets, strict=False):
+                    self.assertEqual(note[0], t.LETTERS[(letter + deg - 1) % 7], (root, q, c.notes))
+                    self.assertEqual(t.parse_note(note)[1], (pc + semi) % 12, (root, q, note))
+                self.assertEqual(c.symbol, root + q)
+
+    def test_aliases(self):
+        for text, symbol in {
+            "Dm7-5": "Dm7b5",
+            "Dm7(b5)": "Dm7b5",
+            "Cmin7b5": "Cm7b5",
+            "C-7b5": "Cm7b5",
+            "Cø": "Cm7b5",
+            "G7alt": "G7alt",
+            "Galt": "G7alt",
+            "G7(b9)": "G7b9",
+            "G7(#9)": "G7#9",
+            "G7+5": "G7#5",
+            "Caug7": "C7#5",
+            "C69": "C6/9",
+            "Cmin11": "Cm11",
+            "Cmin13": "Cm13",
+            "C-9": "Cm9",
+            "CM13": "Cmaj13",
+        }.items():
+            self.assertEqual(t.parse_chord(text).symbol, symbol, text)
+        # a hyphen between chords is a separator, but a trailing 7-5 style spelling inside a symbol stays one chord when written Dm7-5 on its own
+        self.assertEqual(t.parse_chord("Dm7-5").notes, ["D", "F", "Ab", "C"])
+
+    def test_roman_numerals_with_extensions(self):
+        key = t.parse_key("C major")
+        got = {
+            r: t.chord_from_roman(r, key).symbol
+            for r in (
+                "ii9",
+                "V13",
+                "Imaj9",
+                "V7alt",
+                "V7b9",
+                "ii11",
+                "IVmaj13",
+                "V7#9",
+                "V7#11",
+                "V7b13",
+                "I6/9",
+                "iiø",
+                "vi9",
+            )
+        }
+        self.assertEqual(
+            got,
+            {
+                "ii9": "Dm9",
+                "V13": "G13",
+                "Imaj9": "Cmaj9",
+                "V7alt": "G7alt",
+                "V7b9": "G7b9",
+                "ii11": "Dm11",
+                "IVmaj13": "Fmaj13",
+                "V7#9": "G7#9",
+                "V7#11": "G7#11",
+                "V7b13": "G7b13",
+                "I6/9": "C6/9",
+                "iiø": "Dm7b5",
+                "vi9": "Am9",
+            },
+        )
+        for sym in ("Dm9", "G13", "G7alt", "G7b9", "Cmaj13", "C6/9", "Dm11"):
+            roman = t.roman_for(t.parse_chord(sym), key)
+            self.assertEqual(t.chord_from_roman(roman, key).symbol, sym, (sym, roman))
+
+    def test_compact_voice_leading_for_tensions(self):
+        key = t.parse_key("C major")
+        chords = [t.chord_from_roman(r, key) for r in ("ii9", "V13", "Imaj9")]
+        for rootless in (False, True):
+            voiced = t.smooth(chords, rootless_voicings=rootless)
+            for c, v in zip(chords, voiced, strict=False):
+                self.assertLessEqual({m % 12 for m in v.midi}, set(c.pcs))
+                if rootless:
+                    self.assertNotIn(c.root_pc, {m % 12 for m in v.midi})
+                else:
+                    self.assertEqual({m % 12 for m in v.midi}, set(c.pcs))
+            for a, b in zip(voiced, voiced[1:], strict=False):
+                self.assertLessEqual(sum(min(abs(n - p) for p in a.midi) for n in b.midi), 12)
+
+
 class Progressions(unittest.TestCase):
     def test_roman_input_needs_a_key(self):
         with self.assertRaises(t.TheoryProblem) as cm:
@@ -191,19 +324,38 @@ class Progressions(unittest.TestCase):
             self.assertEqual({m % 12 for m in v.midi}, set(c.pcs))
 
     def test_voicings_contain_exactly_the_chord_tones(self):
-        for sym in ("C", "Am7", "G7", "Cmaj9", "Bdim", "Dsus4"):
+        for sym in ("C", "Am7", "G7", "Bdim", "Dsus4"):
             c = t.parse_chord(sym)
             for v in t.voicings(c):
                 got = {m % 12 for m in v.midi}
-                if v.label == "shell":
+                if v.label.startswith("shell"):
                     self.assertLessEqual(got, set(c.pcs))
                 else:
                     self.assertEqual(got, set(c.pcs), (sym, v.label))
                 self.assertEqual(v.midi, sorted(v.midi), (sym, v.label))
             labels = [v.label for v in t.voicings(c)]
             self.assertEqual(labels[0], "root position")
-            if len(c.offsets) >= 4:
+            if len(c.offsets) == 4:
                 self.assertIn("drop 2", labels)
+
+    def test_big_chords_get_rootless_voicings_that_leave_out_the_root(self):
+        for sym in ("Dm9", "G13", "Cmaj9", "G7alt", "Em11", "C6/9", "G7b9"):
+            c = t.parse_chord(sym)
+            vs = {v.label: v for v in t.voicings(c)}
+            self.assertTrue(vs["root position (spread)"].midi[0] % 12 == c.root_pc, sym)
+            for name in ("rootless A", "rootless B"):
+                if name in vs:
+                    got = {m % 12 for m in vs[name].midi}
+                    self.assertNotIn(c.root_pc, got, (sym, name))
+                    self.assertLessEqual(got, set(c.pcs), (sym, name))
+                    self.assertTrue(
+                        all(48 <= m <= 79 for m in vs[name].midi), (sym, name, vs[name].midi)
+                    )
+            self.assertIn("rootless A", vs, sym)
+        a = t.voicings(t.parse_chord("Dm9"))
+        self.assertEqual(t.names_for(a[1], a[1].midi), ["F", "A", "C", "E"])  # 3-5-7-9
+        b = next(v for v in a if v.label == "rootless B")
+        self.assertEqual(t.names_for(b, b.midi), ["C", "E", "F", "A"])  # 7-9-3-5
 
 
 class Results(unittest.TestCase):
@@ -255,6 +407,113 @@ class Results(unittest.TestCase):
     def test_nothing_asked(self):
         with self.assertRaises(t.TheoryProblem):
             t.theory()
+
+
+class Styles(unittest.TestCase):
+    def test_style_lookup(self):
+        from julius.music import styles as st
+
+        for text, name in {
+            "one drop reggae": "reggae (one drop)",
+            "Reggae": "reggae (one drop)",
+            "rocksteady": "reggae (one drop)",
+            "dub bassline chords": "dub",
+            "neo-soul": "neo-soul / lo-fi",
+            "Neo Soul": "neo-soul / lo-fi",
+            "lo-fi": "neo-soul / lo-fi",
+            "Motown-style": "Motown / soul",
+            "northern soul": "Motown / soul",
+            "bebop": "jazz",
+            "12 bar blues": "blues",
+        }.items():
+            self.assertEqual(st.find_style(text).name, name, text)
+        self.assertIsNone(st.find_style("polka"))
+        self.assertIsNone(st.find_style("the double bass"))  # 'dub' must be a whole word
+
+    def test_every_style_progression_parses_in_every_key_and_fits_a_card(self):
+        from julius.music import styles as st
+
+        for style in st.STYLES:
+            for key in ("C major", "A minor", "F# major", "Bb minor", "Eb major", "D dorian"):
+                res = st.styled(style.aliases[0], key)
+                card = {"type": "panel.theory", "t": 0.0, "panel_id": "p", "seq": 1, **res.card}
+                self.assertEqual(pn.validate(card), [], (style.name, key))
+            for lib in (style.major, style.minor):
+                for _, romans in lib:
+                    self.assertLessEqual(len(romans), 16)
+
+    def test_one_drop_reggae(self):
+        from julius.music import styles as st
+
+        res = st.styled("one drop reggae")
+        self.assertIn("A minor", res.facts)
+        self.assertIn("no key given", res.facts)
+        self.assertIn("Am (A C E) | Dm (D F A)", res.facts)
+        self.assertIn("Bass notes", res.facts)
+        for c in res.card["chords"]:
+            self.assertTrue(
+                all(58 <= m <= 79 for m in c["midi"]), c
+            )  # high, clipped skank voicings
+        moved = st.styled("reggae", "G major")
+        self.assertIn("G (G B D) | C (C E G)", moved.facts)
+        self.assertNotIn("no key given", moved.facts)
+
+    def test_dub_has_a_bass_note_and_a_sparse_stab(self):
+        from julius.music import styles as st
+
+        res = st.styled("dub bassline chords")
+        first = res.card["chords"][0]
+        self.assertEqual(first["midi"][0] % 12, 9)  # A in the bass
+        self.assertLessEqual(first["midi"][0], 47)
+        self.assertLessEqual(len(first["midi"]), 3)
+        self.assertIn("A (root), E (fifth), A (octave)", res.facts)
+
+    def test_neo_soul_voicings_for_dm9(self):
+        from julius.music import styles as st
+
+        res = st.styled("neo-soul", chord="Dm9")
+        self.assertIn("rootless A: F A C E", res.facts)
+        self.assertIn("rootless B: C E F A", res.facts)
+        up = st.styled("neo-soul", chord="Dm7")
+        self.assertIn("Dm7 with the 9th added is Dm9", up.facts)
+
+    def test_motown_ii_v_gets_a_real_answer_in_a_default_key(self):
+        from julius.music import styles as st
+
+        res = st.styled("Motown-style", progression="ii V")
+        self.assertIn("C major", res.facts)
+        self.assertIn("Dm D D F A", res.facts)  # bass D under the triad
+        self.assertEqual(res.card["chords"][0]["midi"][0] % 12, 2)
+        self.assertIn("I-vi-ii-V", res.facts)
+        chords = st.styled("Motown", key_text="Bb major", progression="ii V").facts
+        self.assertIn("Cm", chords)
+
+    def test_jazz_and_blues(self):
+        from julius.music import styles as st
+
+        jazz = st.styled("jazz", "Bb major").facts
+        self.assertIn("F7alt", jazz)
+        self.assertIn("Cm7 (C Eb G Bb) | F7 (F A C Eb) | Bbmaj7 (Bb D F A)", jazz)
+        blues = st.styled("12 bar blues", "E major")
+        self.assertEqual(len(blues.card["chords"]), 12)
+        self.assertIn("E7 (E G# B D)", blues.facts)
+
+    def test_unknown_style_says_what_it_knows(self):
+        from julius.music import styles as st
+
+        with self.assertRaises(t.TheoryProblem) as cm:
+            st.styled("polka")
+        self.assertIn("reggae", str(cm.exception))
+
+    def test_no_artist_is_named_or_imitated(self):
+        from julius.music import styles as st
+
+        for style in st.STYLES:
+            text = (style.character + " " + st.styled(style.aliases[0]).facts).lower()
+            self.assertNotRegex(
+                text,
+                r"in the style of|sounds like|made famous|marley|motown records|berry gordy|miles davis|d'angelo",
+            )
 
 
 class Base(unittest.TestCase):
@@ -343,6 +602,23 @@ class Tool(Base):
         d.begin_turn()
         out = d.dispatch("music_theory", {"key": "A minor"})
         self.assertEqual((out["agent"], out["code"]), ("theory", "completed"), out)
+        d.begin_turn()
+        out = d.dispatch("music_theory", {"style": "neo-soul", "chord": "Dm9"})
+        self.assertEqual(out["code"], "completed", out)
+
+    def test_style_requests_get_a_real_answer_and_a_card(self):
+        for args, needle in (
+            ({"style": "one drop reggae"}, "Am (A C E)"),
+            ({"style": "dub"}, "A (root), E (fifth)"),
+            ({"style": "neo-soul", "chord": "Dm9"}, "rootless A: F A C E"),
+            ({"style": "Motown", "progression": "ii V"}, "Dm D D F A"),
+        ):
+            said = music_tool.music_theory(**args)
+            self.assertIn(needle, said, args)
+            self.assertIn("side panel", said)
+            self.assertEqual(self.sent[-1]["type"], "panel.theory")
+            self.assertEqual(pn.validate(self.sent[-1]), [])
+        self.assertIn("I know reggae", music_tool.music_theory(style="polka"))
 
     def test_tool_is_offered_for_theory_questions_only(self):
         names = lambda text: {s["function"]["name"] for s in tools.select_schemas(text)}  # noqa: E731
@@ -353,6 +629,11 @@ class Tool(Base):
             "Show me voicings for Cmaj9",
             "Is Am F C G a good progression?",
             "explain the ii V I in Bb",
+            "one drop reggae progression",
+            "dub bassline chords",
+            "neo-soul voicings for Dm9",
+            "Motown-style ii-V",
+            "Give me a G7alt voicing",
         ):
             self.assertIn("music_theory", names(text), text)
         for text in ("what's the weather in Fresno", "what time is it"):

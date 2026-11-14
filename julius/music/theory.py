@@ -6,7 +6,7 @@ properly (C# in A major, Db in Ab major, a double flat where theory needs one). 
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 LETTERS = "CDEFGAB"
@@ -75,6 +75,27 @@ CHORDS: dict[str, list[tuple[int, int]]] = {
     "9": [(1, 0), (3, 4), (5, 7), (7, 10), (9, 14)],
     "maj9": [(1, 0), (3, 4), (5, 7), (7, 11), (9, 14)],
     "m9": [(1, 0), (3, 3), (5, 7), (7, 10), (9, 14)],
+    "11": [(1, 0), (3, 4), (5, 7), (7, 10), (9, 14), (11, 17)],
+    "m11": [(1, 0), (3, 3), (5, 7), (7, 10), (9, 14), (11, 17)],
+    "13": [(1, 0), (3, 4), (5, 7), (7, 10), (9, 14), (13, 21)],
+    "maj13": [(1, 0), (3, 4), (5, 7), (7, 11), (9, 14), (13, 21)],
+    "m13": [(1, 0), (3, 3), (5, 7), (7, 10), (9, 14), (13, 21)],
+    "6/9": [(1, 0), (3, 4), (5, 7), (6, 9), (9, 14)],
+    "maj7#11": [(1, 0), (3, 4), (5, 7), (7, 11), (11, 18)],
+    "7b9": [(1, 0), (3, 4), (5, 7), (7, 10), (9, 13)],
+    "7#9": [(1, 0), (3, 4), (5, 7), (7, 10), (9, 15)],
+    "7#11": [(1, 0), (3, 4), (5, 7), (7, 10), (11, 18)],
+    "7b13": [(1, 0), (3, 4), (5, 7), (7, 10), (13, 20)],
+    "7#5": [(1, 0), (3, 4), (5, 8), (7, 10)],
+    "7b5": [(1, 0), (3, 4), (5, 6), (7, 10)],
+    "7alt": [
+        (1, 0),
+        (3, 4),
+        (7, 10),
+        (9, 13),
+        (9, 15),
+        (13, 20),
+    ],  # root, 3rd, flat 7th and the altered tensions: flat 9, sharp 9, flat 13
 }
 SUFFIX_ALIASES = {
     "maj": "",
@@ -102,11 +123,37 @@ SUFFIX_ALIASES = {
     "sus": "sus4",
     "min6": "m6",
     "madd9": "m(add9)",
+    "m7(b5)": "m7b5",
+    "-7b5": "m7b5",
+    "min7b5": "m7b5",
+    "m7♭5": "m7b5",
+    "alt": "7alt",
+    "7+5": "7#5",
+    "aug7": "7#5",
+    "+7": "7#5",
+    "7(b9)": "7b9",
+    "7(#9)": "7#9",
+    "7(#11)": "7#11",
+    "7(b13)": "7b13",
+    "7(b5)": "7b5",
+    "7(#5)": "7#5",
+    "dom9": "9",
+    "-9": "m9",
+    "min11": "m11",
+    "-11": "m11",
+    "min13": "m13",
+    "-13": "m13",
+    "69": "6/9",
+    "M13": "maj13",
+    "M7#11": "maj7#11",
+    "maj7(#11)": "maj7#11",
 }
 CHORD_RE = re.compile(r"^([A-Ga-g])([#b♯♭]?)(.*?)(?:/([A-Ga-g])([#b♯♭]?))?$")
+EXT = "maj13|maj9|maj7#11|maj7|M7|13|11|9|7alt|7b9|7#9|7#11|7b13|7#5|7b5|7|6/9|6|sus2|sus4|add9"
 ROMAN_RE = re.compile(
-    r"^([b#♭♯]?)(VII|VI|IV|V|III|II|I|vii|vi|iv|v|iii|ii|i)(°|o|ø|\+|dim|aug)?(maj7|M7|7|9|6|sus2|sus4|add9)?$"
+    rf"^([b#♭♯]?)(VII|VI|IV|V|III|II|I|vii|vi|iv|v|iii|ii|i)(°|o|ø|\+|dim|aug)?({EXT})?$"
 )
+ALTERED = {"7alt", "7b9", "7#9", "7#11", "7b13", "7#5", "7b5", "maj7#11"}
 
 
 class TheoryProblem(ValueError):
@@ -201,6 +248,7 @@ class Chord:
     roman: str = ""
     midi: list[int] = field(default_factory=list)
     label: str = ""
+    degrees: list[int] = field(default_factory=list)
 
     @property
     def symbol(self) -> str:
@@ -221,6 +269,7 @@ def build_chord(root: str, quality: str, bass: str = "") -> Chord:
         notes,
         [(pc + semi) % 12 for _, semi in tones],
         [semi for _, semi in tones],
+        degrees=[deg for deg, _ in tones],
     )
     if bass:
         bl, bpc = parse_note(bass)
@@ -307,7 +356,7 @@ def roman_for(chord: Chord, key: Key) -> str:
     else:
         deg, acc = seven[(offset - 1) % 12], "#"
     q = chord.quality
-    minorish = q in ("m", "m7", "m6", "m9", "m(maj7)", "dim", "m7b5", "dim7")
+    minorish = q in ("m", "m7", "m6", "m9", "m11", "m13", "m(maj7)", "dim", "m7b5", "dim7")
     numeral = ROMAN[deg - 1].lower() if minorish else ROMAN[deg - 1]
     suffix = {
         "": "",
@@ -330,6 +379,20 @@ def roman_for(chord: Chord, key: Key) -> str:
         "maj9": "maj9",
         "m9": "9",
         "5": "5",
+        "11": "11",
+        "m11": "11",
+        "13": "13",
+        "maj13": "maj13",
+        "m13": "13",
+        "6/9": "6/9",
+        "7b9": "7b9",
+        "7#9": "7#9",
+        "7#11": "7#11",
+        "7b13": "7b13",
+        "7#5": "7#5",
+        "7b5": "7b5",
+        "7alt": "7alt",
+        "maj7#11": "maj7#11",
     }[q]
     return f"{acc}{numeral}{suffix}"
 
@@ -354,8 +417,20 @@ def chord_from_roman(token: str, key: Key) -> Chord:
         quality = "m7b5"
     elif dim in ("+", "aug"):
         quality = "aug"
-    elif ext in ("sus2", "sus4", "add9", "6", "9"):
-        quality = {"6": "6" if upper else "m6", "9": "9" if upper else "m9"}.get(ext, ext)
+    elif ext in ALTERED:
+        quality = ext
+    elif ext in ("9", "11", "13"):
+        quality = ext if upper else "m" + ext
+    elif ext in ("maj9", "maj13"):
+        if not upper:
+            raise TheoryProblem(
+                f"{token!r}: a minor numeral can't take {ext}; try m9 or m13 with a lower-case numeral."
+            )
+        quality = ext
+    elif ext in ("6", "6/9"):
+        quality = ("6" if upper else "m6") if ext == "6" else "6/9"
+    elif ext in ("sus2", "sus4", "add9"):
+        quality = ext
     elif ext in ("maj7", "M7"):
         quality = "maj7" if upper else "m(maj7)"
     elif ext == "7":
@@ -488,8 +563,14 @@ def names_for(c: Chord, midi: list[int]) -> list[str]:
     return [by_pc.get(m % 12, spell(0, m % 12)) for m in midi]
 
 
-def inversions(c: Chord) -> list[list[int]]:
-    base = _stack(c, _root_midi(c))
+def _compact(c: Chord) -> list[int]:
+    """Chord tones folded into one octave above the root (a 9th becomes a 2nd), lowest first: the compact shape used when a progression is voiced."""
+    return sorted({o % 12 for o in c.offsets})
+
+
+def inversions(c: Chord, compact: bool = False) -> list[list[int]]:
+    root = _root_midi(c)
+    base = [root + o for o in _compact(c)] if compact else _stack(c, root)
     out = [base]
     cur = base
     for _ in range(len(base) - 1):
@@ -498,49 +579,80 @@ def inversions(c: Chord) -> list[list[int]]:
     return out
 
 
+def _upward(lo: int, tones: list[tuple[int, int]], root_pc: int) -> list[int]:
+    """Stack tones (degree, semitones above the root) one above the other in the order given, the first at the lowest matching pitch at or above `lo`."""
+    out: list[int] = []
+    for _, semi in tones:
+        pc = (root_pc + semi) % 12
+        out.append(lo + (pc - lo) % 12 if not out else out[-1] + ((pc - out[-1]) % 12 or 12))
+    return out
+
+
+def _fit(midi: list[int], low: int, high: int) -> list[int]:
+    while max(midi) > high and min(midi) - 12 >= low:
+        midi = [m - 12 for m in midi]
+    while min(midi) < low and max(midi) + 12 <= high:
+        midi = [m + 12 for m in midi]
+    return midi
+
+
+def rootless(
+    c: Chord, variant: str = "A", lo: int = 53, low: int = 48, high: int = 79
+) -> list[int] | None:
+    """A rootless voicing for the piano (the bass player has the root). A stacks the 3rd, 5th, 7th and tensions in order (3-5-7-9); B starts on the 7th (7-9-3-5). Big chords
+    (six notes) also leave out the 5th. None when the chord has no 7th or tension to build on."""
+    tones = sorted(
+        ((d, o) for d, o in zip(c.degrees, c.offsets, strict=False) if d != 1),
+        key=lambda t: (t[0], t[1]),
+    )
+    if len(c.offsets) >= 6:
+        tones = [t for t in tones if t[0] != 5]
+    if variant == "B":
+        i = next((k for k, t in enumerate(tones) if t[0] == 7), None)
+        if i is None:
+            return None
+        tones = tones[i:] + tones[:i]
+    if len(tones) < 3 or not any(d >= 6 for d, _ in tones):
+        return None
+    return _fit(_upward(lo, tones, c.root_pc), low, high)
+
+
+def _shell(c: Chord) -> list[int] | None:
+    third = next((o for d, o in zip(c.degrees, c.offsets, strict=False) if d in (2, 3, 4)), None)
+    seventh = next((o for d, o in zip(c.degrees, c.offsets, strict=False) if d == 7), None)
+    if third is None or seventh is None:
+        return None
+    r = _root_midi(c)
+    return [r, r + third, r + seventh]
+
+
 def voicings(c: Chord) -> list[Chord]:
-    """The usual ways to play one chord: root position, inversions, drop 2 (four or more notes), open, and shell (seventh chords)."""
-    invs = inversions(c)
-    labels = [
-        "root position",
-        "first inversion",
-        "second inversion",
-        "third inversion",
-        "fourth inversion",
-    ]
-    out: list[tuple[str, list[int]]] = [(labels[i], v) for i, v in enumerate(invs)]
+    """The usual ways to play one chord: root position, inversions and drop 2 for triads and sevenths, open (triads), shell (sevenths), and for bigger chords the spread
+    root position plus rootless A and B voicings."""
     n = len(c.offsets)
-    if n >= 4:
-        root = invs[0]
-        out.append(
-            ("drop 2", sorted([root[-2] - 12] + [x for i, x in enumerate(root) if i != n - 2]))
-        )
-    if n == 3:
-        r = invs[0]
-        out.append(("open", [r[0], r[2], r[1] + 12]))
-    if n >= 4 and any(o in (10, 11) for o in c.offsets):
-        third = next(o for o in c.offsets if o in (3, 4, 5, 2))
-        seventh = next(o for o in c.offsets if o in (9, 10, 11))
-        r = _root_midi(c)
-        out.append(("shell", [r, r + third, r + seventh]))
-    res = []
-    for label, midi in out:
-        midi = _with_bass(c, midi)
-        v = Chord(
-            c.root,
-            c.root_letter,
-            c.root_pc,
-            c.quality,
-            c.notes,
-            c.pcs,
-            c.offsets,
-            c.bass,
-            c.roman,
-            midi,
-            label,
-        )
-        res.append(v)
-    return res
+    out: list[tuple[str, list[int]]] = []
+    if n <= 4:
+        invs = inversions(c)
+        labels = ["root position", "first inversion", "second inversion", "third inversion"]
+        out = [(labels[i], v) for i, v in enumerate(invs)]
+        if n == 4:
+            root = invs[0]
+            out.append(
+                ("drop 2", sorted([root[-2] - 12] + [x for i, x in enumerate(root) if i != n - 2]))
+            )
+        if n == 3:
+            r = invs[0]
+            out.append(("open", [r[0], r[2], r[1] + 12]))
+    else:
+        out = [("root position (spread)", _stack(c, _root_midi(c)))]
+        for variant in ("A", "B"):
+            v = rootless(c, variant)
+            if v:
+                out.append((f"rootless {variant}", v))
+    sh = _shell(c)
+    if sh:
+        out.append(("shell (root, 3rd, 7th)", sh))
+    return [replace(c, midi=_with_bass(c, midi), label=label) for label, midi in out]
 
 
 def _cost(prev: list[int], new: list[int]) -> float:
@@ -548,44 +660,50 @@ def _cost(prev: list[int], new: list[int]) -> float:
     return move + 0.2 * abs(min(new) - min(prev)) + 0.1 * abs(len(new) - len(prev))
 
 
-def smooth(chords: list[Chord], low: int = 45, high: int = 76) -> list[Chord]:
-    """Voice a progression with the least movement: each chord takes the inversion and octave nearest the one before it, all inside a comfortable range."""
+def smooth(
+    chords: list[Chord], low: int = 45, high: int = 76, rootless_voicings: bool = False
+) -> list[Chord]:
+    """Voice a progression with the least movement: each chord takes the inversion and octave nearest the one before it, all inside a comfortable range. Chords with tensions
+    (9ths and up) use their compact shape; with `rootless_voicings` the piano plays only the 3rd, 5th, 7th and tensions."""
     prev: list[int] | None = None
     out = []
     for c in chords:
+        compact = any(o >= 12 for o in c.offsets)
         cands = []
-        for inv in inversions(c):
-            for shift in (-24, -12, 0, 12):
-                v = [x + shift for x in inv]
-                if min(v) >= low and max(v) <= high:
-                    cands.append(v)
+        if rootless_voicings:
+            for variant in ("A", "B"):
+                v = rootless(c, variant)
+                if v:
+                    cands += [
+                        [x + sh for x in v]
+                        for sh in (-12, 0, 12)
+                        if min(v) + sh >= 48 and max(v) + sh <= 79
+                    ]
         if not cands:
-            cands = [inversions(c)[0]]
-        if prev is None:  # start in root position, the octave nearest the middle of the range
-            root = inversions(c)[0]
-            rooted = [
-                [x + sh for x in root]
-                for sh in (-24, -12, 0, 12)
-                if min(root) + sh >= low and max(root) + sh <= high
-            ]
-            pick = min(rooted or cands, key=lambda v: abs(sum(v) / len(v) - 58))
+            for inv in inversions(c, compact):
+                for shift in (-24, -12, 0, 12):
+                    v = [x + shift for x in inv]
+                    if min(v) >= low and max(v) <= high:
+                        cands.append(v)
+        if not cands:
+            cands = [inversions(c, compact)[0]]
+        if (
+            prev is None
+        ):  # start in root position (or rootless A), the octave nearest the middle of the range
+            first = cands if rootless_voicings else None
+            if first is None:
+                root = inversions(c, compact)[0]
+                first = [
+                    [x + sh for x in root]
+                    for sh in (-24, -12, 0, 12)
+                    if min(root) + sh >= low and max(root) + sh <= high
+                ] or cands
+            pick = min(first, key=lambda v: abs(sum(v) / len(v) - 62))
         else:
             pick = min(cands, key=lambda v: (_cost(prev, v), v[0]))
         prev = pick
-        v = Chord(
-            c.root,
-            c.root_letter,
-            c.root_pc,
-            c.quality,
-            c.notes,
-            c.pcs,
-            c.offsets,
-            c.bass,
-            c.roman,
-            _with_bass(c, pick),
-            "smooth voice leading",
-        )
-        out.append(v)
+        label = "rootless, smooth voice leading" if rootless_voicings else "smooth voice leading"
+        out.append(replace(c, midi=_with_bass(c, pick), label=label))
     return out
 
 

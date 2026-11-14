@@ -177,3 +177,12 @@
 {"id": "r177", "cat": "theory", "text": "What is the circle of fifths?", "expect": {"path": "direct", "path_in": ["direct", "tool"]}}
 {"id": "r178", "cat": "theory", "text": "What does a leading tone do?", "expect": {"path": "direct", "path_in": ["direct", "tool"]}}
 {"id": "r179", "cat": "theory", "text": "Write me a chord progression in the style of a famous living songwriter.", "expect": {"path": "direct", "path_in": ["direct", "tool"]}}
+{"id": "r180", "cat": "theory", "text": "Give me a one drop reggae progression.", "expect": {"path": "tool", "tool": "music_theory", "args_contain": ["reggae"]}}
+{"id": "r181", "cat": "theory", "text": "What chords would work for a dub bassline?", "expect": {"path": "tool", "tool": "music_theory", "args_contain": ["dub"]}}
+{"id": "r182", "cat": "theory", "text": "Show me neo-soul voicings for Dm9.", "expect": {"path": "tool", "tool": "music_theory", "args_contain": ["dm9"]}}
+{"id": "r183", "cat": "theory", "text": "Give me a Motown-style ii-V.", "expect": {"path": "tool", "tool": "music_theory", "args_contain": ["motown"]}}
+{"id": "r184", "cat": "theory", "text": "What notes are in a G7alt chord?", "expect": {"path": "tool", "tool": "music_theory", "args_contain": ["g7alt"]}}
+{"id": "r185", "cat": "theory", "text": "Spell a C13 chord for me.", "expect": {"path": "tool", "tool": "music_theory", "args_contain": ["c13"]}}
+{"id": "r186", "cat": "theory", "text": "Is Dm7-5 the same as Dm7b5?", "expect": {"path": "direct", "path_in": ["direct", "tool"]}}
+{"id": "r187", "cat": "theory", "text": "Give me a jazz ii-V-I in Bb with an altered dominant.", "expect": {"path": "tool", "tool": "music_theory", "args_contain": ["bb"]}}
+{"id": "r188", "cat": "theory", "text": "Show me a 12 bar blues in E.", "expect": {"path": "tool", "tool": "music_theory", "args_contain": ["blues"]}}
