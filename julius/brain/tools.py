@@ -859,6 +859,23 @@ def analyze_audio(path: str = "") -> str:
 REGISTRY["analyze_audio"] = analyze_audio
 
 
+def find_samples(query: str = "", bpm: int = 0, key: str = "") -> str:
+    from julius.music import tool as music_tool
+
+    return music_tool.find_samples(query, bpm, key)
+
+
+REGISTRY["find_samples"] = find_samples
+SCHEMAS.append(
+    _utility_schema(
+        "find_samples",
+        "Search the user's own sample and loop library by name, BPM or key as written in file names ('find my loops around 150 BPM'). Also use it for 'update my sample index'. Read-only; approved folders only.",
+        {"query": "string", "bpm": "integer", "key": "string"},
+        [],
+    )
+)
+
+
 def music_theory(
     key: str = "", progression: str = "", chord: str = "", scale: str = "", style: str = ""
 ) -> str:
@@ -1042,6 +1059,10 @@ _SCHEMA_GROUPS = (
     (
         r"\bbpm\b|\btempo\b|beats per minute|what key|\bkey of\b|\bkey is\b|\banaly[sz]e (?:this|the|that|my)\b.*\b(?:track|song|file|audio|loop|sample|wav|mp3)|\.(?:wav|aiff?|mp3|flac|m4a)\b",
         ("analyze_audio",),
+    ),
+    (
+        r"\bloops?\b|\bsamples?\b|sample (?:library|index|folder)|my (?:beats|stems|drums)|re-?scan|update my .*index",
+        ("find_samples",),
     ),
     (
         r"\bchords?\b|\bscales?\b|dorian|phrygian|lydian|mixolydian|locrian|pentatonic|progression|voicing|inversion|arpeggio|\bdiatonic\b|circle of fifths|\bii[- ]?v(?:[- ]?i)?\b|roman numeral|reggae|\bdub\b|one[- ]?drop|neo[- ]?soul|motown|rocksteady|\bska\b|lo-?fi (?:chords|progression)|(?:jazz|blues|soul|gospel) (?:chords|progression|voicings)|12[- ]bar|\bin the key of\b|\b[a-g][#b]? (?:major|minor)\b",

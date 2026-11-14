@@ -307,7 +307,7 @@ def styled(style_text: str, key_text: str = "", progression: str = "", chord: st
             + (f" {note}" if note else ""),
             "Voicings (lowest to highest):",
         ]
-        lines += [f"  {v.label}: {' '.join(t.names_for(v, v.midi))}" for v in vs]
+        lines += [f"  {v.label}: {t.say_voicing(v, v.midi)}" for v in vs]
         lines.append(f"Style notes: {st.character}")
         if st.bass_notes:
             lines.append(_bass([c]))
@@ -335,9 +335,9 @@ def styled(style_text: str, key_text: str = "", progression: str = "", chord: st
         lines = [f"{st.name} treatment of {' '.join(tokens)} in {key.short}{default_note}:"]
         lines += [f"  {t.chord_line(c)}: {t.function_of(c.roman)}" for c in chords]
         lines.append(
-            "Voiced for the style (lowest to highest): "
+            "Voiced for the style (each note named once, doubled notes said so): "
             + " | ".join(
-                f"{c.symbol} {' '.join(t.names_for(c, v.midi))}"
+                f"{c.symbol} {t.say_voicing(c, v.midi)}"
                 for c, v in zip(chords, voiced, strict=False)
             )
         )
@@ -369,7 +369,7 @@ def styled(style_text: str, key_text: str = "", progression: str = "", chord: st
     lines.append(
         f"Voiced for the style, first progression ({built[0][0]}), lowest to highest: "
         + " | ".join(
-            f"{c.symbol} {' '.join(t.names_for(c, v.midi))}"
+            f"{c.symbol} {t.say_voicing(c, v.midi)}"
             for c, v in zip(built[0][1], first, strict=False)
         )
     )

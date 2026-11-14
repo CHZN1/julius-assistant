@@ -34,6 +34,7 @@ exclude_owners = ["Julius Orb", "Julius"]   # windows of these apps are never th
 
 [music]                     # music helpers (julius/music/): read-only analysis of audio files you name; never Logic, GarageBand, /Library/Audio or plug-in folders
 search_folders = ["~/Downloads", "~/Documents", "~/Desktop"]   # where a bare file name is looked for ("what's the BPM of loop.wav")
+index_allowlist = ["~/Desktop/Free CHZN1 Diversity Loop Pack "]   # the ONLY folders the sample index ever scans (your own work); nothing is indexed unless it is listed here. Read-only; the deny-list still applies
 
 [offline]
 model = "llama3.2:3b"       # loaded only while the API is unreachable

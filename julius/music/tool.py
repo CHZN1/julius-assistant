@@ -162,6 +162,43 @@ def music_theory(
     log.event("theory_answered", kind=res.card.get("kind"))
     return (
         res.facts
-        + "\n\nEvery note name above was computed exactly: use only these, never add or change one from memory. Explain briefly and musically (what each chord does, why it works, what to try); suggestions only, nothing is written anywhere."
+        + "\n\nEvery note name above was computed exactly: use only these, never add or change one from memory. Read each voicing exactly as given: when it says a note is doubled, say it that way (D F A, with D doubled) and never list that note twice. Explain briefly and musically (what each chord does, why it works, what to try); suggestions only, nothing is written anywhere."
         + (" The piano and chord chart are in the side panel." if shown else "")
+    )
+
+
+def index_samples(**_) -> str:
+    """Refresh the index of the user's approved sample folders (names, sizes and dates only)."""
+    from julius.music import library
+
+    if not library.allowlist():
+        return "No sample folders are approved for indexing yet. The folders are listed in julius.toml under [music] index_allowlist, and I only ever scan those."
+    r = library.scan()
+    return f"Indexed {r['files']} audio files in {r['folders']} approved folder(s); {r['removed']} no longer there. Names, sizes and dates only: nothing was opened, moved or changed."
+
+
+def find_samples(query: str = "", bpm: int = 0, key: str = "", **_) -> str:
+    """Search the user's own indexed samples by name, folder, BPM or key as written in the file names."""
+    from julius.music import library
+
+    if not library.allowlist():
+        return "No sample folders are approved for indexing yet, so there is nothing to search."
+    try:
+        library.scan()  # cheap name-only refresh so new files show up
+        hits = library.search(query, int(bpm) if bpm else None, key, limit=10)
+    except Exception as exc:
+        log.event("sample_index_failed", error=type(exc).__name__)
+        return "I couldn't read the sample index."
+    if not hits:
+        return "Nothing in your indexed samples matches that."
+    lines = [
+        f"- {h['name']}{h['ext']} ({Path(h['folder']).name.strip()}"
+        + (f", {h['bpm']} BPM in the name" if h["bpm"] else "")
+        + (f", {h['key']} in the name" if h["key"] else "")
+        + ")"
+        for h in hits
+    ]
+    return (
+        f"{len(hits)} match(es) from your own approved sample folders (BPM and key are only what the file names say; use analyze_audio to measure):\n"
+        + "\n".join(lines)
     )

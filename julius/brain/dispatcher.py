@@ -44,6 +44,7 @@ OWNERS = {
     "find_files": "files",
     "render_chart": "charts",
     "analyze_audio": "audio",
+    "find_samples": "audio",
     "music_theory": "theory",
 }
 

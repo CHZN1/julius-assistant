@@ -186,3 +186,8 @@
 {"id": "r186", "cat": "theory", "text": "Is Dm7-5 the same as Dm7b5?", "expect": {"path": "direct", "path_in": ["direct", "tool"]}}
 {"id": "r187", "cat": "theory", "text": "Give me a jazz ii-V-I in Bb with an altered dominant.", "expect": {"path": "tool", "tool": "music_theory", "args_contain": ["bb"]}}
 {"id": "r188", "cat": "theory", "text": "Show me a 12 bar blues in E.", "expect": {"path": "tool", "tool": "music_theory", "args_contain": ["blues"]}}
+{"id": "r189", "cat": "samples", "text": "Find my loops around 150 BPM.", "expect": {"path": "tool", "tool": "find_samples"}}
+{"id": "r190", "cat": "samples", "text": "Do I have any loop in F minor?", "expect": {"path": "tool", "tool": "find_samples"}}
+{"id": "r191", "cat": "samples", "text": "Update my sample index.", "expect": {"path": "tool", "tool": "find_samples"}}
+{"id": "r192", "cat": "samples", "text": "Show me my CHZN1 loops.", "expect": {"path": "tool", "tool": "find_samples"}}
+{"id": "r193", "cat": "samples", "text": "What's the BPM of CHZN1_Cake_BPM160.wav?", "expect": {"path": "tool", "tool": "analyze_audio"}}

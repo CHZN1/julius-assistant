@@ -626,6 +626,18 @@ def _shell(c: Chord) -> list[int] | None:
     return [r, r + third, r + seventh]
 
 
+def say_voicing(c: Chord, midi: list[int]) -> str:
+    """The notes of a voicing, low to high, each name once; a doubled note is said so ("D F A, with D doubled") rather than listed twice."""
+    names = names_for(c, midi)
+    uniq = list(dict.fromkeys(names))
+    extra = [(n, names.count(n)) for n in uniq if names.count(n) > 1]
+    if not extra:
+        return " ".join(uniq)
+    words = {2: "doubled", 3: "tripled"}
+    parts = [n + " " + words.get(k, "in " + str(k) + " octaves") for n, k in extra]
+    return " ".join(uniq) + ", with " + " and ".join(parts)
+
+
 def voicings(c: Chord) -> list[Chord]:
     """The usual ways to play one chord: root position, inversions and drop 2 for triads and sevenths, open (triads), shell (sevenths), and for bigger chords the spread
     root position plus rootless A and B voicings."""
@@ -893,7 +905,7 @@ def explain_chord(chord: Chord, key: Key | None = None) -> Result:
     ]
     lines.append("Voicings (lowest to highest):")
     for v in vs:
-        lines.append(f"  {v.label}: {' '.join(names_for(v, v.midi))}")
+        lines.append(f"  {v.label}: {say_voicing(v, v.midi)}")
     card = piano_card(f"{chord.symbol} voicings", "chord", key.short if key else "", [], vs)
     return Result("\n".join(lines), card)
 
@@ -915,8 +927,7 @@ def explain_progression(text: str, key_text: str = "") -> Result:
     lines.append(
         "Voiced with the least movement between chords (lowest to highest): "
         + " | ".join(
-            f"{c.symbol} {' '.join(names_for(c, v.midi))}"
-            for c, v in zip(chords, voiced, strict=False)
+            f"{c.symbol} {say_voicing(c, v.midi)}" for c, v in zip(chords, voiced, strict=False)
         )
     )
     nondia = [c.symbol for c in chords if c.roman[:1] in "b#"]

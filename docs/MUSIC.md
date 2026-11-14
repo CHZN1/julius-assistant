@@ -26,3 +26,13 @@ Ask: "what chords go with A minor", "give me a progression in G major", "what no
 - **Genre and era requests are answered, not declined.** "One drop reggae progression", "dub bassline chords", "neo-soul voicings for Dm9", "Motown-style ii-V", plus jazz and blues, use `styles.py`: fixed, generic conventions per genre (progressions, voicing shapes, bass notes) computed by the same theory code. With no key given it uses a default and says so. Only "in the style of" a named living artist is declined, and no artist names appear in the style data.
 - **Card:** a piano with the selected chord lit (root in a second colour, note names on the keys) and a chord chart; click a chord to light it. The numbers are MIDI note numbers 21 to 108 (`docs/EVENT_FEED.md`).
 - **Suggestions only.** Nothing is written to your projects, nothing is saved, and no song or artist is named or imitated: a request to write something "in the style of" a named living artist is declined.
+
+
+## Sample index (`julius/music/library.py`, tool `find_samples`, which also refreshes the index)
+
+Ask: "find my loops around 150 BPM", "do I have a loop in F minor", "update my sample index".
+
+- **Only folders you approve.** The index scans the folders in `[music] index_allowlist` in `julius.toml` and nothing else, ever: with no setting it scans nothing, a folder outside the list is refused even if asked for, and taking a folder off the list hides its files at once. Shipped list: `~/Desktop/Free CHZN1 Diversity Loop Pack ` (your own work; the folder name ends in a space). Purchased or downloaded kits, other people's sounds and loose files are never indexed unless you add them.
+- **Read-only.** It reads names, sizes and dates, never the audio, and never renames, moves, writes or deletes anything in those folders. Symlinks are not followed, and the deny-list (Logic, GarageBand, `/Library/Audio`, plug-in and sample-library folders) still applies inside approved folders and rejects an allowlist entry that is on it. The index is one small file, `~/.julius/sample_index.sqlite3`.
+- **BPM and key are what the file name says** (`CHZN1_Cake_BPM160.wav`, `Dark_F#m_BPM140`). Measure the real values with `analyze_audio`.
+- Separate from `search_folders`, which only finds the file you name for a BPM/key question.

@@ -482,7 +482,7 @@ class Styles(unittest.TestCase):
 
         res = st.styled("Motown-style", progression="ii V")
         self.assertIn("C major", res.facts)
-        self.assertIn("Dm D D F A", res.facts)  # bass D under the triad
+        self.assertIn("Dm D F A, with D doubled", res.facts)  # bass D under the triad
         self.assertEqual(res.card["chords"][0]["midi"][0] % 12, 2)
         self.assertIn("I-vi-ii-V", res.facts)
         chords = st.styled("Motown", key_text="Bb major", progression="ii V").facts
@@ -611,7 +611,7 @@ class Tool(Base):
             ({"style": "one drop reggae"}, "Am (A C E)"),
             ({"style": "dub"}, "A (root), E (fifth)"),
             ({"style": "neo-soul", "chord": "Dm9"}, "rootless A: F A C E"),
-            ({"style": "Motown", "progression": "ii V"}, "Dm D D F A"),
+            ({"style": "Motown", "progression": "ii V"}, "Dm D F A, with D doubled"),
         ):
             said = music_tool.music_theory(**args)
             self.assertIn(needle, said, args)
@@ -642,3 +642,25 @@ class Tool(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DoubledNotes(unittest.TestCase):
+    def test_a_doubled_note_is_said_not_listed_twice(self):
+        c = t.parse_chord("Dm")
+        self.assertEqual(t.say_voicing(c, [50, 62, 65, 69]), "D F A, with D doubled")
+        self.assertEqual(t.say_voicing(c, [62, 65, 69]), "D F A")
+
+    def test_no_voiced_line_lists_a_note_twice(self):
+        from julius.music import styles
+
+        for text in (
+            styles.styled("Motown", "C", "ii V", "").facts,
+            styles.styled("neo-soul", "", "", "Dm9").facts,
+            t.theory("C", "I vi ii V", "", "").facts,
+        ):
+            for line in text.splitlines():
+                if not line.startswith("Voiced"):
+                    continue
+                for seg in line.split(": ", 1)[1].split(" | "):
+                    notes = seg.split(", with")[0].split()[1:]  # first token is the chord symbol
+                    self.assertEqual(len(notes), len(set(notes)), seg)
