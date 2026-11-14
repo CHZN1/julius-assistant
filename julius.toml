@@ -123,6 +123,11 @@ index_allowlist = [   # the ONLY folders and files the sample index ever scans (
     "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/Movies_PRPHT_Vocal Stems",
     "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/New Mleodies",
     "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/Sync Music Folder (Untagging,Stings, etc)",
+    # --- the CHZN drive, A1: root-level files only, matched by name (other artists' songs that merely say "Prod. CHZN1" do not match) ---
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/CHZN1*",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/CZHN1*",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/CHNZ1*",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/CHZ1*",
 ]
 
 volume_labels = { "BBD8952A-31DB-3D53-B954-06E07A5395C2" = "your CHZN drive" }   # what results call a drive that is not connected

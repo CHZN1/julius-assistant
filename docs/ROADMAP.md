@@ -274,3 +274,5 @@ Safety net: AecMonitor falls back to the mic gate by itself after 3 s of leaking
 
 
 - 5c-music item 4 (session busywork): audio workspace, preview/confirm/undo rename and organize, batch convert as a file-agent plan: built; the drive entries wait on macOS permission for Julius's own Python (~/.julius/env-service).
+
+- **5c-music: done (2026-11-14).** BPM and key detection, theory help (genre and era styles, extended and altered chords, piano card), the allowlist-only sample index (folders, single files, name patterns, the CHZN drive by volume UUID, offline marking), the audio workspace with batch convert through the file agent, and the spoken rescan command. Song identification is deferred to ShazamKit until there is an Apple Developer account (AcoustID evaluated and skipped; the acceptance test is kept above). Real-music accuracy is unverified: measured on synthetic clips only. Open item: macOS access to the CHZN drive for Julius's own Python (`~/.julius/env-service`) is not working yet, so the drive entries are saved but not indexed.

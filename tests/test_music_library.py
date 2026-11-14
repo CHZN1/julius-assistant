@@ -481,3 +481,38 @@ class PatternAndDriveScanTests(unittest.TestCase):
             shutil.move(str(self.d / "gone"), str(self.drive))
             library._UUID_CACHE.clear()
             self.assertEqual(library.scan_new_drives(self.db)["files"], 4)  # plugged back in
+
+
+class ShippedPatternTests(unittest.TestCase):
+    def test_the_a1_patterns_match_own_root_files_and_not_other_artists_songs(self):
+        import fnmatch
+
+        import julius.config as c
+
+        U = "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/"
+        pats = [
+            n[len(U) :]
+            for n in c.load_config()["music"]["index_allowlist"]
+            if n.startswith(U) and any(ch in n for ch in "*?")
+        ]
+        self.assertEqual(sorted(pats), ["CHNZ1*", "CHZ1*", "CHZN1*", "CZHN1*"])
+
+        def hit(name):
+            return any(fnmatch.fnmatch(name.casefold(), p.casefold()) for p in pats)
+
+        for yes in (
+            "CHZN1_Cake_BPM160.wav",
+            "chzn1_lower.mp3",
+            "CZHN1_TellMe_BPM153.wav",
+            "CHNZ1_x.wav",
+            "CHZ1_CASH_BPM130.wav",
+        ):
+            self.assertTrue(hit(yes), yes)
+        for no in (
+            "PRPHT - 21st Century Girl (Prod. CHZN1).mp3",
+            "Lil Turbo - Pirate V1 (Prod. CHZN1).wav",
+            "Feather Thief - Mine Forever (Prod. CHZN1) (LANDR MASTER).wav",
+            "Keats - Idc (Prod. CHZN1) Mix 1.mp3",
+            "PRPHT - Honest.mp3",
+        ):
+            self.assertFalse(hit(no), no)
