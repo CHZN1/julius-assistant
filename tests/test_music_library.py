@@ -110,20 +110,75 @@ class LibraryTests(unittest.TestCase):
 
     def test_tool_messages(self):
         with cfg():
-            self.assertIn("No sample folders are approved", tool.index_samples())
-            self.assertIn("No sample folders are approved", tool.find_samples("cake"))
+            self.assertIn("No sample folders or files are approved", tool.index_samples())
+            self.assertIn("No sample folders or files are approved", tool.find_samples("cake"))
         with cfg(self.mine), mock.patch.object(library, "DB_PATH", self.db):
             self.assertIn("Indexed 2 audio files", tool.index_samples())
             out = tool.find_samples("", 160)
             self.assertIn("CHZN1_Cake_BPM160", out)
             self.assertNotIn("kick", out)
 
-    def test_the_shipped_config_lists_only_the_loop_pack(self):
+
+class FileEntryTests(unittest.TestCase):
+    def setUp(self):
+        self.d = Path(tempfile.mkdtemp())
+        pack = self.d / "Da Rocket  miniPack"
+        pack.mkdir()
+        self.mine = pack / "CHZN1_Chase_BPM150.mp3"
+        self.mine.write_bytes(b"x" * 5)
+        self.theirs = pack / "Someone Else_BPM150.mp3"
+        self.theirs.write_bytes(b"x" * 5)
+        self.mp3 = self.d / "CHZN1_Mercy_BPM180.mp3"
+        self.wav = self.d / "CHZN1_Mercy_BPM180.wav"
+        self.mp3.write_bytes(b"x")
+        self.wav.write_bytes(b"xx")
+        self.db = self.d / "idx.sqlite3"
+
+    def test_a_file_entry_approves_only_that_file_not_its_neighbours(self):
+        with cfg(self.mine):
+            self.assertEqual(library.scan(db=self.db)["files"], 1)
+            names = [h["name"] for h in library.search(limit=25, db=self.db)]
+            self.assertEqual(names, ["CHZN1_Chase_BPM150"])
+            self.assertEqual(library.scan([self.theirs], db=self.db)["files"], 0)
+
+    def test_mp3_and_wav_are_one_entry_with_both_formats(self):
+        with cfg(self.mp3, self.wav):
+            library.scan(db=self.db)
+            hits = library.search(limit=25, db=self.db)
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["formats"], [".mp3", ".wav"])
+        self.assertEqual(len(hits[0]["paths"]), 2)
+
+    def test_the_tool_shows_both_formats_on_one_line(self):
+        with cfg(self.mp3, self.wav), mock.patch.object(library, "DB_PATH", self.db):
+            out = tool.find_samples("mercy")
+        self.assertEqual(out.count("CHZN1_Mercy_BPM180"), 1)
+        self.assertIn(".mp3+.wav", out)
+
+    def test_non_audio_and_missing_file_entries_are_dropped(self):
+        txt = self.d / "notes.txt"
+        txt.write_text("x")
+        with cfg(txt, self.d / "missing.wav"):
+            self.assertEqual(library.allowlist(), [])
+
+    def test_a_denied_file_cannot_be_allowlisted(self):
+        bad = self.d / "Logic"
+        bad.mkdir()
+        f = bad / "bounce.wav"
+        f.write_bytes(b"x")
+        with cfg(f):
+            self.assertEqual(library.allowlist(), [])
+
+    def test_shipped_allowlist_has_the_approved_own_work_only(self):
         import julius.config as c
 
         names = (c.load_config().get("music") or {}).get("index_allowlist")
-        self.assertEqual(names, ["~/Desktop/Free CHZN1 Diversity Loop Pack "])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        self.assertEqual(len(names), 15)
+        for n in names:
+            low = n.casefold()
+            self.assertTrue(
+                "chzn1" in low or low.endswith("new mleodies 2"),
+                n,
+            )
+            for banned in ("chzn drum samples", "boomin bass", "surge", "versace", "topsounds"):
+                self.assertNotIn(banned, low)

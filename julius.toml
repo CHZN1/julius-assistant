@@ -34,7 +34,23 @@ exclude_owners = ["Julius Orb", "Julius"]   # windows of these apps are never th
 
 [music]                     # music helpers (julius/music/): read-only analysis of audio files you name; never Logic, GarageBand, /Library/Audio or plug-in folders
 search_folders = ["~/Downloads", "~/Documents", "~/Desktop"]   # where a bare file name is looked for ("what's the BPM of loop.wav")
-index_allowlist = ["~/Desktop/Free CHZN1 Diversity Loop Pack "]   # the ONLY folders the sample index ever scans (your own work); nothing is indexed unless it is listed here. Read-only; the deny-list still applies
+index_allowlist = [   # the ONLY folders and files the sample index ever scans (your own work); anything not listed is never indexed. A file entry approves that one file only. Read-only; the deny-list still applies
+    "~/Desktop/Free CHZN1 Diversity Loop Pack ",
+    "~/Desktop/New Mleodies 2",
+    "~/Desktop/CHZN1_NightWave_BPM170.mp3",
+    "~/Documents/CHZN1_LostConciousV2_BPM140.mp3",
+    "~/Documents/CHZN1_LostConciousV2_BPM140.wav",
+    "~/Documents/CHZN1_Mercy_BPM180.mp3",
+    "~/Documents/CHZN1_Mercy_BPM180.wav",
+    "~/Downloads/CHZN1_NewVision v2_BPM150.mp3",
+    "~/Desktop/Da Rocket  miniPack/10fifty x chzn1 130bpm.mp3",
+    "~/Desktop/Da Rocket  miniPack/CHZN1 x Lukrative_Slidin_BPM130.mp3",
+    "~/Desktop/Da Rocket  miniPack/CHZN1_ChaseABag_BPM150.mp3",
+    "~/Desktop/Da Rocket  miniPack/CHZN1_PhadedV2_BPM130.mp3",
+    "~/Desktop/Feather Theif Pack/CHZN1_BreakAway_BPM150.mp3",
+    "~/Desktop/Feather Theif Pack/CHZN1_LoveMeDead_BPM140.mp3",
+    "~/Desktop/Feather Theif Pack/CHZN1_MineForever_BPM155.mp3",
+]
 
 [offline]
 model = "llama3.2:3b"       # loaded only while the API is unreachable

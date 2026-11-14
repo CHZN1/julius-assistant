@@ -431,3 +431,53 @@ class InjectionIsDataTests(unittest.TestCase):
         finally:
             jm.MEM = old
         self.assertIn("background data only", ctx.split(self.BAD)[0])
+
+
+class ForgetIsReallyForgetTests(unittest.TestCase):
+    """The 2026-11-09 bug: "remember" saved one row, auto-capture saved a second wording of it, and "Forget that" said Forgotten after removing only the second."""
+
+    SAID = "That's okay. Remember that my sister's name is Dana."
+
+    def test_autocapture_makes_no_second_copy_of_what_was_just_remembered(self):
+        d, s, a, _ = make()
+        s.add("Roy's sister's name is Dana.", "fact", "said", self.SAID)
+        stored = a.autocapture(
+            self.SAID, lambda p: '{"facts": ["The user has a sister named Dana."]}'
+        )
+        self.assertEqual(stored, [])
+        self.assertEqual(len(s.all()), 1)
+
+    def test_forget_that_removes_every_row_from_that_sentence_and_regenerates_the_file(self):
+        d, s, a, _ = make()
+        s.add("Roy's sister's name is Dana.", "fact", "said", self.SAID)
+        row, _st = s.add("Roy has a sister named Dana.", "fact", "auto", self.SAID)
+        a._export()
+        a.last_added = row  # what the old flow left pointing at the auto copy
+        self.assertIn("Dana", (d / "MEMORY.md").read_text())
+        reply = a.handle("forget that")
+        self.assertIn("Forgotten", reply)
+        self.assertEqual(s.all(), [])
+        self.assertNotIn("Dana", (d / "MEMORY.md").read_text())
+        self.assertEqual(a.block("what's my sister's name?"), "")
+
+    def test_forgotten_is_only_said_when_the_row_is_really_gone(self):
+        d, s, a, _ = make()
+        row, _st = s.add("My locker code word is plum.", "fact", "said", "x")
+        real = s.forget
+
+        def broken(ids, sessions_dir=None):  # a delete that silently fails
+            return []
+
+        s.forget = broken
+        a.last_added = row
+        reply = a.handle("forget that")
+        s.forget = real
+        self.assertNotIn("Forgotten", reply)
+        self.assertEqual(len(s.all()), 1)
+
+    def test_store_forget_reports_only_rows_actually_deleted(self):
+        d, s, a, _ = make()
+        row, _st = s.add("Roy likes plums.", "fact", "said", "")
+        gone = s.forget([row["id"]])
+        self.assertEqual([g["id"] for g in gone], [row["id"]])
+        self.assertEqual(s.forget([row["id"]]), [])

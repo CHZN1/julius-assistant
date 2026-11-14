@@ -295,12 +295,22 @@ class MemoryStore:
                 c.execute("DELETE FROM memories WHERE id=?", (r["id"],))
                 c.execute("DELETE FROM mem_fts WHERE rowid=?", (r["id"],))
             c.execute("INSERT INTO mem_fts(mem_fts) VALUES('optimize')")
+        still = {r["id"] for r in self.get([r["id"] for r in rows])}
+        rows = [
+            r for r in rows if r["id"] not in still
+        ]  # only what is really gone is reported gone
         if sessions_dir:
             scrub_sessions(
                 sessions_dir,
                 [x for r in rows for x in (r["text"], r.get("utterance") or "") if len(x) > 8],
             )
         return rows
+
+    def same_utterance(self, utterance: str) -> list[dict[str, str | float | int]]:
+        """Every row saved from one spoken sentence (an explicit "remember" and an automatic note of it are two rows)."""
+        if not (utterance or "").strip():
+            return []
+        return [dict(r) for r in self.all() if (r.get("utterance") or "") == utterance]
 
     def restore(self, rows: list[dict[str, str | float | int]]) -> None:
         for r in rows:

@@ -269,9 +269,16 @@ class MemoryAssistant:
                 return "I don't have anything stored."
             self.pending = ("forget_what", None)
             return "Which one? Tell me what it was about."
-        rows = self.store.forget([target[0]["id"]], self.sessions_dir)
+        ids = [target[0]["id"]] + [
+            r["id"]
+            for r in self.store.same_utterance(target[0].get("utterance") or "")
+            if r["id"] != target[0]["id"]
+        ]  # what was said once is forgotten once, whichever way it was saved
+        rows = self.store.forget(ids, self.sessions_dir)
         self._gone(rows)
-        return f"Forgotten: {rows[0]['text'].rstrip('.')}." if rows else "That's already gone."
+        if not rows:
+            return "I couldn't remove that." if self.store.get(ids) else "That's already gone."
+        return f"Forgotten: {rows[0]['text'].rstrip('.')}."
 
     def _forget(self, topic: str) -> str:
         rows = self.store.search(topic, 5)
@@ -280,6 +287,8 @@ class MemoryAssistant:
         if len(rows) == 1:
             gone = self.store.forget([rows[0]["id"]], self.sessions_dir)
             self._gone(gone)
+            if not gone:
+                return "I couldn't remove that."
             return f"Forgotten: {gone[0]['text'].rstrip('.')}."
         self.pending = ("choose", rows)
         return self._ask(rows)
@@ -324,6 +333,8 @@ class MemoryAssistant:
         ):
             gone = self.store.forget([r["id"] for r in rows], self.sessions_dir)
             self._gone(gone)
+            if not gone:
+                return "I couldn't remove that."
             return (
                 f"Okay, I've forgotten {len(gone)} things."
                 if len(gone) != 1
@@ -356,6 +367,8 @@ class MemoryAssistant:
             if m and ordinals[m.group(1)] <= len(rows):
                 gone = self.store.forget([rows[ordinals[m.group(1)] - 1]["id"]], self.sessions_dir)
                 self._gone(gone)
+                if not gone:
+                    return "I couldn't remove that."
                 return f"Forgotten: {gone[0]['text'].rstrip('.')}."
         return None  # something else: handled as a normal request
 
@@ -431,6 +444,8 @@ class MemoryAssistant:
         """llm(prompt) -> text. Returns the rows stored (source='auto'). Never raises."""
         if not self.worth_a_look(user_text):
             return []
+        if self.store.same_utterance(user_text):
+            return []  # already saved from this very sentence (an explicit remember): no second copy
         try:
             raw = llm(EXTRACT_PROMPT + user_text)
             m = re.search(r"\{.*\}", raw or "", re.S)

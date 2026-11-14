@@ -1,4 +1,4 @@
-"""Index of the user's OWN sample folders: only folders listed in `[music] index_allowlist` are ever scanned; nothing outside it, ever.
+"""Index of the user's OWN sample folders and files: only the folders and individual files listed in `[music] index_allowlist` are ever scanned; nothing outside it, ever (a file entry approves that one file, not its neighbours).
 
 Read-only: file names, sizes and dates are read, never audio content, and nothing is renamed, moved, written or deleted in those folders. The deny-list (policy.py) is enforced on top of the allowlist. The index itself is one small SQLite file under ~/.julius/. A BPM or key is only what the file name says (CHZN1_Cake_BPM160.wav); measure the real one with analyze_audio."""
 
@@ -20,13 +20,13 @@ _KEY = re.compile(r"(?<![A-Za-z])([A-G][#b]?)[ _-]?(maj(?:or)?|min(?:or)?|m)(?![
 
 
 def allowlist() -> list[Path]:
-    """The folders the user approved, as they exist now. No setting means no folders, and a folder the deny-list rejects is dropped."""
+    """The folders and single audio files the user approved, as they exist now. No setting means nothing, and an entry the deny-list rejects is dropped."""
     names = (config.load_config().get("music") or {}).get("index_allowlist") or []
     out: list[Path] = []
     for n in names:
         p = Path(os.path.expanduser(str(n)))
         if (
-            p.is_dir()
+            (p.is_dir() or (p.is_file() and p.suffix.casefold() in policy.AUDIO_EXT))
             and policy.denied(p) is None
             and p.resolve() not in [q.resolve() for q in out]
         ):
@@ -77,6 +77,24 @@ def scan(roots: list[Path] | None = None, db: Path | None = None) -> dict:
         return {"folders": 0, "files": 0, "removed": 0, "refused": roots is not None}
     rows, seen = [], 0
     for root in use:
+        if root.is_file():
+            if root.is_symlink() or policy.denied(root) is not None:
+                continue
+            st = root.stat()
+            bpm, key = parse_name(root.stem)
+            rows.append(
+                (
+                    str(root),
+                    root.stem,
+                    str(root.parent),
+                    root.suffix.casefold(),
+                    st.st_size,
+                    st.st_mtime,
+                    bpm,
+                    key,
+                )
+            )
+            continue
         base = len(root.parts)
         for dirpath, dirs, files in os.walk(root, followlinks=False):
             dirs[:] = [
@@ -147,7 +165,24 @@ def search(
             if key and (d["key"] or "").casefold() != _norm_key(key):
                 continue
             out.append(d)
-    return out[: max(1, min(limit, 25))]
+    return group(out)[: max(1, min(limit, 25))]
+
+
+def group(rows: list[dict]) -> list[dict]:
+    """One entry per sound, however many formats it exists in: CHZN1_Mercy.mp3 and CHZN1_Mercy.wav are shown once with both formats."""
+    by: dict[tuple[str, str], dict] = {}
+    for d in rows:
+        k = (d["folder"], d["name"].casefold())
+        if k not in by:
+            by[k] = {**d, "formats": [d["ext"]], "paths": [d["path"]]}
+        else:
+            by[k]["formats"].append(d["ext"])
+            by[k]["paths"].append(d["path"])
+            by[k]["bpm"] = by[k]["bpm"] or d["bpm"]
+            by[k]["key"] = by[k]["key"] or d["key"]
+    for e in by.values():
+        e["formats"] = sorted(set(e["formats"]))
+    return list(by.values())
 
 
 def _norm_key(k: str) -> str:

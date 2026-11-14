@@ -172,9 +172,9 @@ def index_samples(**_) -> str:
     from julius.music import library
 
     if not library.allowlist():
-        return "No sample folders are approved for indexing yet. The folders are listed in julius.toml under [music] index_allowlist, and I only ever scan those."
+        return "No sample folders or files are approved for indexing yet. They are listed in julius.toml under [music] index_allowlist, and I only ever scan those."
     r = library.scan()
-    return f"Indexed {r['files']} audio files in {r['folders']} approved folder(s); {r['removed']} no longer there. Names, sizes and dates only: nothing was opened, moved or changed."
+    return f"Indexed {r['files']} audio files from {r['folders']} approved folder(s) or file(s); {r['removed']} no longer there. Names, sizes and dates only: nothing was opened, moved or changed."
 
 
 def find_samples(query: str = "", bpm: int = 0, key: str = "", **_) -> str:
@@ -182,7 +182,7 @@ def find_samples(query: str = "", bpm: int = 0, key: str = "", **_) -> str:
     from julius.music import library
 
     if not library.allowlist():
-        return "No sample folders are approved for indexing yet, so there is nothing to search."
+        return "No sample folders or files are approved for indexing yet, so there is nothing to search."
     try:
         library.scan()  # cheap name-only refresh so new files show up
         hits = library.search(query, int(bpm) if bpm else None, key, limit=10)
@@ -192,7 +192,7 @@ def find_samples(query: str = "", bpm: int = 0, key: str = "", **_) -> str:
     if not hits:
         return "Nothing in your indexed samples matches that."
     lines = [
-        f"- {h['name']}{h['ext']} ({Path(h['folder']).name.strip()}"
+        f"- {h['name']} ({'+'.join(h['formats'])}; {Path(h['folder']).name.strip()}"
         + (f", {h['bpm']} BPM in the name" if h["bpm"] else "")
         + (f", {h['key']} in the name" if h["key"] else "")
         + ")"
