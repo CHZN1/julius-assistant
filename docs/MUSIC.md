@@ -51,3 +51,5 @@ Ask: "find my loops around 150 BPM", "do I have a loop in F minor".
 ## Drive access and the service launcher
 
 The launchd service now starts `~/.julius/env-service/bin/python -u -m julius` directly (no `run_julius.sh` or shell in between), with the cloud-profile settings in the plist's environment, so macOS attributes file access to that interpreter. `run_julius.sh` stays for manual runs. The previous plist is kept at `~/.julius/rollback/com.julius.assistant.plist.via-run_julius.sh`.
+
+`analyze_audio` also finds files by name in the approved sample folders (drives included), after Downloads, Documents and Desktop; a sound that exists as wav and mp3 is analysed as the wav.

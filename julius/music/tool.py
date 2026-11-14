@@ -87,8 +87,12 @@ def resolve(path: str) -> Path:
         return Path(os.path.expanduser(raw))
     hits = find(raw)
     if not hits:
+        from julius.music import library
+
+        hits = library.lookup(raw)  # the approved sample folders, drives included
+    if not hits:
         raise analysis.AudioProblem(
-            f"I couldn't find an audio file called {raw} in Downloads, Documents or Desktop. Give me the full path or drop it on the orb."
+            f"I couldn't find an audio file called {raw} in Downloads, Documents, Desktop or your approved sample folders. Give me the full path or drop it on the orb."
         )
     if len(hits) > 1:
         shown = "; ".join(str(h.parent).replace(os.path.expanduser("~"), "~") for h in hits[:4])

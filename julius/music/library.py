@@ -396,6 +396,40 @@ def search(
     return group(out)[: max(1, min(limit, 25))]
 
 
+def real_path(canon: str) -> Path | None:
+    """The path to read a stored row from today: a drive file is found through its volume UUID, whatever the mount is called now; None when that drive is not connected."""
+    u = _uuid_of(canon)
+    if u is None:
+        return Path(canon)
+    mount = mounts().get(u)
+    if mount is None:
+        return None
+    rel = canon[len(_VOL_PREFIX) + len(u) :].lstrip("/")
+    return mount / rel if rel else mount
+
+
+def lookup(name: str, db: Path | None = None) -> list[Path]:
+    """Indexed sounds whose name (with or without the extension) is exactly `name`, readable now. A sound that exists as wav and mp3 in one folder is returned once, as the wav."""
+    want = name.strip().casefold()
+    if not want:
+        return []
+    ents = entries()
+    best: dict[tuple[str, str], tuple[int, str]] = {}
+    with _db(db) as c:
+        for r in c.execute("SELECT path, name, folder, ext FROM samples"):
+            if want not in (r["name"].casefold(), (r["name"] + r["ext"]).casefold()):
+                continue
+            cov = _covering(Path(r["path"]), ents)
+            if cov is None or cov[1] != "online":
+                continue
+            k = (r["folder"], r["name"].casefold())
+            rank = 0 if r["ext"].casefold() == ".wav" else 1
+            if k not in best or rank < best[k][0]:
+                best[k] = (rank, r["path"])
+    out = [real_path(p) for _, p in best.values()]
+    return [p for p in out if p is not None]
+
+
 def group(rows: list[dict]) -> list[dict]:
     """One entry per sound, however many formats it exists in: CHZN1_Mercy.mp3 and CHZN1_Mercy.wav are shown once with both formats."""
     by: dict[tuple[str, str], dict] = {}

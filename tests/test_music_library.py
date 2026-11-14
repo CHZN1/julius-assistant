@@ -516,3 +516,36 @@ class ShippedPatternTests(unittest.TestCase):
             "PRPHT - Honest.mp3",
         ):
             self.assertFalse(hit(no), no)
+
+
+class LookupTests(unittest.TestCase):
+    def setUp(self):
+        self.d, self.mine, self.other, self.outside = tree()
+        self.db = self.d / "idx.sqlite3"
+
+    def test_lookup_finds_an_indexed_sound_by_name_and_only_within_the_allowlist(self):
+        with cfg(self.mine):
+            library.scan(db=self.db)
+            hit = library.lookup("CHZN1_Cake_BPM160", db=self.db)
+            hit_ext = library.lookup("chzn1_cake_bpm160.WAV", db=self.db)
+            miss = library.lookup("kick", db=self.db)
+        self.assertEqual(hit, [self.mine / "CHZN1_Cake_BPM160.wav"])
+        self.assertEqual(hit_ext, hit)
+        self.assertEqual(miss, [])
+
+    def test_wav_and_mp3_of_one_sound_come_back_once_as_the_wav(self):
+        (self.mine / "CHZN1_Both.mp3").write_bytes(b"x")
+        (self.mine / "CHZN1_Both.wav").write_bytes(b"x")
+        with cfg(self.mine):
+            library.scan(db=self.db)
+            self.assertEqual(
+                library.lookup("CHZN1_Both", db=self.db), [self.mine / "CHZN1_Both.wav"]
+            )
+
+    def test_real_path_follows_the_volume_uuid_to_the_current_mount(self):
+        with mock.patch.object(library, "mounts", return_value={"ABC": Path("/Volumes/Renamed 2")}):
+            self.assertEqual(
+                library.real_path("volume:ABC/Beats/x.wav"), Path("/Volumes/Renamed 2/Beats/x.wav")
+            )
+            self.assertIsNone(library.real_path("volume:GONE/x.wav"))
+        self.assertEqual(library.real_path("/Users/x/a.wav"), Path("/Users/x/a.wav"))
