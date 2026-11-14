@@ -13,4 +13,15 @@ Say: "what's the BPM of kick_loop.wav", "what key is pad_take2.wav in", "analyze
 - The card is a table: tempo, key, duration, with the confidence next to each.
 - Never read, ever: Logic and GarageBand projects, `/Library/Audio`, `~/Library/Audio`, Waves, Native Instruments, Slate, Zebra, Spitfire, plug-in and Apple Loops folders (`julius/music/policy.py`, checked on the path as given and after following links).
 
-Accuracy: `python evals/music_eval.py` (free, local) scores synthetic labelled clips, Creative Commons tracks listed in `~/datasets/julius_music_eval/manifest.json`, and your own labelled files in `~/datasets/julius_music_eval/local/manifest.json` (printed only, never saved in the repo). Manifest entries: `{"file": "x.mp3", "bpm": 120, "key": "A minor", "source": "...", "license": "..."}`.
+**Accuracy is measured on synthetic clips only; accuracy on real music is unverified.** On 16 synthetic clips: key 16/16, tempo within an octave 16/16, tempo exact 10/16 (the misses are half/double-time readings). Synthetic clips are far easier than real recordings (clean chord tones, a steady click-like pulse), so treat these numbers as a sanity check, not an expected hit rate. Real-track checking was skipped by choice (no public files downloaded); if you drop labelled files of your own into `~/datasets/julius_music_eval/local/`, run the eval on them then.
+
+Accuracy tool: `python evals/music_eval.py` (free, local) scores synthetic labelled clips, Creative Commons tracks listed in `~/datasets/julius_music_eval/manifest.json`, and your own labelled files in `~/datasets/julius_music_eval/local/manifest.json` (printed only, never saved in the repo). Manifest entries: `{"file": "x.mp3", "bpm": 120, "key": "A minor", "source": "...", "license": "..."}`.
+
+## Theory help (`julius/music/theory.py`, tool `music_theory`, card `panel.theory`)
+
+Ask: "what chords go with A minor", "give me a progression in G major", "what notes are in D dorian", "voicings for Cmaj9", "is Am F C G a good progression", "explain the ii V I in Bb".
+
+- **The notes are computed, not generated.** Scales and modes (major, minor, the five other modes, harmonic and melodic minor, pentatonic, blues), diatonic triads and seventh chords, chord spelling, Roman-numeral analysis in both directions, inversions, drop 2, open and shell voicings, and smooth voice leading for a progression are plain Python (`theory.py`). Notes are spelled properly (C# in A major, Db in Ab major, Bbb in Cdim7). The model only explains what comes back, and the tool tells it to use no note names of its own.
+- **Input:** a key ("A minor", "F# dorian", "Bb"), a scale or mode, a chord symbol (maj, m, dim, aug, sus2/4, 5, 6, 7, maj7, m7, m7b5, dim7, 9, maj9, m9, add9, slash chords) or a progression as Roman numerals (needs a key) or chord names (the key is inferred, and other keys that fit are listed). Up to 16 chords.
+- **Card:** a piano with the selected chord lit (root in a second colour, note names on the keys) and a chord chart; click a chord to light it. The numbers are MIDI note numbers 21 to 108 (`docs/EVENT_FEED.md`).
+- **Suggestions only.** Nothing is written to your projects, nothing is saved, and no song or artist is named or imitated: a request to write something "in the style of" a named living artist is declined.

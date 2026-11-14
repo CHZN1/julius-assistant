@@ -128,3 +128,35 @@ def analyze_audio(path: str = "", **_) -> str:
         log.event("audio_card_failed", error=type(exc).__name__)
     log.event("audio_analysed", bpm=a.bpm, key=a.key, seconds=a.analysed_seconds)
     return analysis.spoken(a) + (" Details are in the side panel." if shown else "")
+
+
+def music_theory(
+    key: str = "", progression: str = "", chord: str = "", scale: str = "", **_
+) -> str:
+    """Compute theory for a key, scale or mode, chord or chord progression; show the piano card; return the exact facts for Julius to explain."""
+    from julius.music import theory
+
+    try:
+        res = theory.theory(
+            str(key or ""), str(progression or ""), str(chord or ""), str(scale or "")
+        )
+    except theory.TheoryProblem as exc:
+        return str(exc)
+    except Exception as exc:
+        log.event("theory_failed", error=type(exc).__name__)
+        return "I couldn't work that out."
+    shown = False
+    try:
+        from julius.ui_bridge import charts
+
+        if charts._panel is not None:
+            panel, _files, turn_fn = charts._panel
+            shown = panel.theory(res.card, turn=turn_fn()) is not None
+    except Exception as exc:
+        log.event("theory_card_failed", error=type(exc).__name__)
+    log.event("theory_answered", kind=res.card.get("kind"))
+    return (
+        res.facts
+        + "\n\nEvery note name above was computed exactly: use only these, never add or change one from memory. Explain briefly and musically (what each chord does, why it works, what to try); suggestions only, nothing is written anywhere."
+        + (" The piano and chord chart are in the side panel." if shown else "")
+    )

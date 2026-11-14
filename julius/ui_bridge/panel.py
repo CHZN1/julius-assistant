@@ -100,6 +100,13 @@ SCHEMAS: dict[str, dict[str, str]] = {
         "cost_usd": "num",
         "est_cost_usd": "num",
     },
+    "panel.theory": {
+        "title": "str",
+        "kind": "str",
+        "key": "str",
+        "scale_notes": "list",
+        "chords": "list",
+    },
     "panel.update": {
         "target": "str",
         "images": "list?",
@@ -114,6 +121,16 @@ SCHEMAS: dict[str, dict[str, str]] = {
 }
 CLEAR_SCOPES = ("all", "card")
 CLEAR_REASONS = ("new_topic", "dismissed", "expired", "done")
+THEORY_KINDS = ("key", "scale", "progression", "chord")
+THEORY_CHORD_FIELDS = {
+    "symbol": "str",
+    "roman": "str",
+    "label": "str",
+    "notes": "list",
+    "midi": "list",
+    "root": "int",
+}
+MAX_THEORY_CHORDS = 16
 FINDING_FIELDS = {"n": "int", "claim": "str", "cite": "list"}
 SOURCE_FIELDS = {"n": "int", "title": "str", "site": "str", "date": "str?", "url": "str"}
 ITEM_FIELDS = {
@@ -261,6 +278,25 @@ def _v_vision(msg: dict, errors: list[str]) -> None:
         errors.append("panel.vision: bad source")
 
 
+def _v_theory(msg: dict, errors: list[str]) -> None:
+    if msg["kind"] not in THEORY_KINDS:
+        errors.append("panel.theory: bad kind")
+    if len(msg["chords"]) > MAX_THEORY_CHORDS or not msg["chords"]:
+        errors.append(f"panel.theory.chords: 1 to {MAX_THEORY_CHORDS} entries")
+    if not all(isinstance(n, str) for n in msg["scale_notes"]):
+        errors.append("panel.theory.scale_notes: not text")
+    for i, c in enumerate(msg["chords"]):
+        _check(THEORY_CHORD_FIELDS, c, f"chords[{i}]", errors)
+        if not isinstance(c, dict) or errors:
+            continue
+        if not all(isinstance(n, str) for n in c["notes"]) or not all(
+            isinstance(m, int) and not isinstance(m, bool) and 21 <= m <= 108 for m in c["midi"]
+        ):
+            errors.append(f"chords[{i}]: notes must be text and midi numbers 21 to 108")
+        if not 0 <= c["root"] <= 11:
+            errors.append(f"chords[{i}].root: not a pitch class")
+
+
 def _v_table(msg: dict, errors: list[str]) -> None:
     for i, r in enumerate(msg["rows"]):
         if not isinstance(r, list) or len(r) != len(msg["columns"]):
@@ -279,6 +315,7 @@ _EXTRA_CHECKS: dict[str, Callable[[dict, list[str]], None]] = {
     "panel.chart": _v_chart,
     "panel.table": _v_table,
     "panel.vision": _v_vision,
+    "panel.theory": _v_theory,
     "panel.images": lambda m, e: _v_images(m["images"], e),
     "panel.clear": _v_clear,
 }
@@ -612,6 +649,30 @@ class PanelHub:
             "est_cost_usd": round(float(card.get("est_cost_usd") or 0.0), 6),
         }
         return self._publish("panel.vision", body, turn)
+
+    def theory(self, card: dict, turn: int | None = None) -> str | None:
+        """A theory card: a key, scale, chord or progression with computed note names and MIDI numbers, drawn by the UI as a piano and a chord chart."""
+        kind = str(card.get("kind") or "")
+        chords = []
+        for c in (card.get("chords") or [])[:MAX_THEORY_CHORDS]:
+            chords.append(
+                {
+                    "symbol": clean(c.get("symbol"), 24),
+                    "roman": clean(c.get("roman"), 16),
+                    "label": clean(c.get("label"), 40),
+                    "notes": [clean(n, 6) for n in (c.get("notes") or [])[:8]],
+                    "midi": [int(m) for m in (c.get("midi") or [])[:8] if 21 <= int(m) <= 108],
+                    "root": int(c.get("root") or 0) % 12,
+                }
+            )
+        body = {
+            "title": clean(card.get("title") or "Theory", CAPS["title"]),
+            "kind": kind if kind in THEORY_KINDS else "key",
+            "key": clean(card.get("key"), 40),
+            "scale_notes": [clean(n, 6) for n in (card.get("scale_notes") or [])[:12]],
+            "chords": chords,
+        }
+        return self._publish("panel.theory", body, turn)
 
     def table(self, card: dict, turn: int | None = None) -> str | None:
         body = {

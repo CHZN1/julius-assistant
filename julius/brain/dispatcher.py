@@ -44,6 +44,7 @@ OWNERS = {
     "find_files": "files",
     "render_chart": "charts",
     "analyze_audio": "audio",
+    "music_theory": "theory",
 }
 
 # Read-only network lookups with no shared state may run side by side; files, planning, reminders and documents stay one at a time.

@@ -167,3 +167,13 @@
 {"id": "r167", "cat": "music", "text": "What's a typical BPM range for house music?", "expect": {"path": "direct"}}
 {"id": "r168", "cat": "music", "text": "What does it mean when a song is in a minor key?", "expect": {"path": "direct"}}
 {"id": "r169", "cat": "music", "text": "What's the key to a good night's sleep?", "expect": {"path": "direct"}}
+{"id": "r170", "cat": "theory", "text": "What chords go with A minor?", "expect": {"path": "tool", "tool": "music_theory", "args_contain": ["minor"]}}
+{"id": "r171", "cat": "theory", "text": "Give me a chord progression in G major.", "expect": {"path": "tool", "tool": "music_theory", "args_contain": ["g"]}}
+{"id": "r172", "cat": "theory", "text": "What notes are in the D dorian scale?", "expect": {"path": "tool", "tool": "music_theory", "args_contain": ["dorian"]}}
+{"id": "r173", "cat": "theory", "text": "Show me some voicings for Cmaj9.", "expect": {"path": "tool", "tool": "music_theory", "args_contain": ["cmaj9"]}}
+{"id": "r174", "cat": "theory", "text": "Is Am F C G a good progression?", "expect": {"path": "tool", "tool": "music_theory", "args_contain": ["am"]}}
+{"id": "r175", "cat": "theory", "text": "Explain the ii V I in Bb major.", "expect": {"path": "tool", "tool": "music_theory", "args_contain": ["bb"]}}
+{"id": "r176", "cat": "theory", "text": "What notes are in an F sharp minor seventh flat five chord?", "expect": {"path": "tool", "tool": "music_theory", "args_contain": ["f#"]}}
+{"id": "r177", "cat": "theory", "text": "What is the circle of fifths?", "expect": {"path": "direct", "path_in": ["direct", "tool"]}}
+{"id": "r178", "cat": "theory", "text": "What does a leading tone do?", "expect": {"path": "direct", "path_in": ["direct", "tool"]}}
+{"id": "r179", "cat": "theory", "text": "Write me a chord progression in the style of a famous living songwriter.", "expect": {"path": "direct", "path_in": ["direct", "tool"]}}
