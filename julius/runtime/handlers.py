@@ -121,6 +121,17 @@ def handle_vision(s: Session, text: str) -> str | None:
         return "I couldn't look at that."
 
 
+def handle_music(s: Session, text: str) -> str | None:
+    """ "Rescan my samples" / "update my sample index" / "refresh my library": the index is rebuilt directly, no model call."""
+    try:
+        from julius.music import commands
+
+        return commands.handle(text)
+    except Exception as exc:
+        log.console(f"  [sample rescan failed: {type(exc).__name__}: {exc}]", flush=True)
+        return "I couldn't rescan the sample index."
+
+
 def handle_memory(s: Session, text: str) -> str | None:
     """remember / forget / what do you remember: deterministic, no model call."""
     try:

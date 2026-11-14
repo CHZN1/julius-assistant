@@ -89,6 +89,16 @@ class Sandbox:
 
 def shortcut(text, sb, ctx, turn, case_history=None):
     """What the runtime does before the brain: utility session, file session, then the live intent router."""
+    from julius.music import commands as music_commands
+
+    if music_commands.is_rescan(text):  # answered before the brain by a fixed pattern
+        return {
+            "path": "shortcut",
+            "tool": "rescan_samples",
+            "args": "",
+            "ok": True,
+            "detail": "rescan",
+        }
     out = sb.utility.handle(text, turn)
     if out is not None:
         return {

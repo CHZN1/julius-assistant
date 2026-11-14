@@ -28,6 +28,7 @@ from julius.runtime.handlers import (
     handle_code,
     handle_files,
     handle_memory,
+    handle_music,
     handle_panel,
     handle_vision,
     memory_autocapture,
@@ -152,6 +153,7 @@ def _command_reply(s: Session, text: str) -> str | None:
     return (
         handle_panel(s, text)
         or handle_vision(s, text)
+        or handle_music(s, text)
         or handle_memory(s, text)
         or handle_code(s, text)
         or handle_files(s, text)

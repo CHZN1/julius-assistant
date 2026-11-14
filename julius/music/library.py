@@ -20,6 +20,59 @@ _KEY = re.compile(r"(?<![A-Za-z])([A-G][#b]?)[ _-]?(maj(?:or)?|min(?:or)?|m)(?![
 
 
 VOLUMES = Path("/Volumes")
+_UUID_CACHE: dict[str, tuple[float, str | None]] = {}
+_VOL_PREFIX = "volume:"
+
+
+def volume_uuid(mount: Path) -> str | None:
+    """The volume UUID of a mounted drive (from diskutil, which needs no file access), or None."""
+    import plistlib
+    import subprocess
+    import time
+
+    key = str(mount)
+    hit = _UUID_CACHE.get(key)
+    if hit and time.time() - hit[0] < 30:
+        return hit[1]
+    uuid = None
+    try:
+        out = subprocess.run(
+            ["diskutil", "info", "-plist", key], capture_output=True, timeout=10, check=True
+        ).stdout
+        uuid = (plistlib.loads(out).get("VolumeUUID") or "").upper() or None
+    except Exception:
+        uuid = None
+    _UUID_CACHE[key] = (time.time(), uuid)
+    return uuid
+
+
+def mounts() -> dict[str, Path]:
+    """UUID -> mount point for the drives connected now. A renamed mount (CHZN1 vs "CHZN1 1") is the same UUID."""
+    out: dict[str, Path] = {}
+    try:
+        kids = sorted(VOLUMES.iterdir())
+    except OSError:
+        return out
+    for k in kids:
+        if k.is_symlink() or not k.is_dir():
+            continue
+        u = volume_uuid(k)
+        if u:
+            out[u] = k
+    return out
+
+
+def _canon(p: Path) -> str:
+    """The stable name of a path: files on a drive are "volume:<UUID>/relative/path" whatever the mount is called today."""
+    if str(p).startswith(_VOL_PREFIX):
+        return str(p)
+    vol = _volume_root(p)
+    if vol is not None:
+        for u, m in mounts().items():
+            if m == vol:
+                rel = p.relative_to(vol)
+                return f"{_VOL_PREFIX}{u}" + (f"/{rel}" if str(rel) != "." else "")
+    return str(p)
 
 
 def _volume_root(p: Path) -> Path | None:
@@ -31,25 +84,45 @@ def _volume_root(p: Path) -> Path | None:
     return VOLUMES / rel.parts[0] if rel.parts else None
 
 
+def _uuid_of(canon: str) -> str | None:
+    if canon.startswith(_VOL_PREFIX):
+        return canon[len(_VOL_PREFIX) :].split("/", 1)[0].upper()
+    return None
+
+
 def entries() -> list[tuple[Path, str]]:
-    """Every approved folder or file with its state: "online" (there and readable), "offline" (it is on an external drive that is not connected: kept, never dropped), or "blocked" (the drive is connected but macOS will not let this program read it). A missing entry that is not on an external drive is a typo or a deleted file and is dropped, as is anything the deny-list rejects."""
+    """Every approved folder or file with its state: "online" (there and readable), "offline" (it is on an external drive that is not connected: kept, never dropped), or "blocked" (the drive is connected but macOS will not let this program read it). A drive is named by its volume UUID ("volume:<UUID>/Beats"), so a changed mount name does not matter; plain /Volumes paths still work. A missing entry that is not on an external drive is a typo or a deleted file and is dropped, as is anything the deny-list rejects."""
     names = (config.load_config().get("music") or {}).get("index_allowlist") or []
     out: list[tuple[Path, str]] = []
     seen: set[str] = set()
+    live = None
     for n in names:
-        p = Path(os.path.expanduser(str(n)))
-        if policy.denied(p) is not None or str(p) in seen:
+        raw = os.path.expanduser(str(n))
+        uuid = _uuid_of(raw)
+        if uuid is not None:
+            live = mounts() if live is None else live
+            rel = raw[len(_VOL_PREFIX) :].split("/", 1)[1] if "/" in raw[len(_VOL_PREFIX) :] else ""
+            mount = live.get(uuid)
+            p = (mount / rel) if mount is not None else Path(raw)
+            vol = None if mount is not None else p
+        else:
+            p = Path(raw)
+            vol = _volume_root(p)
+        if policy.denied(p) is not None or _canon(p) in seen:
             continue
-        vol = _volume_root(p)
-        try:
-            ok = p.is_dir() or (p.is_file() and p.suffix.casefold() in policy.AUDIO_EXT)
-            state = "online" if ok else None
-        except PermissionError:
-            state = "blocked"
-        if state is None and vol is not None and not vol.exists():
+        state = None
+        if uuid is not None and mount is None:
             state = "offline"
+        else:
+            try:
+                ok = p.is_dir() or (p.is_file() and p.suffix.casefold() in policy.AUDIO_EXT)
+                state = "online" if ok else None
+            except PermissionError:
+                state = "blocked"
+            if state is None and uuid is None and vol is not None and not vol.exists():
+                state = "offline"
         if state:
-            seen.add(str(p))
+            seen.add(_canon(p))
             out.append((p, state))
     return out
 
@@ -60,9 +133,14 @@ def allowlist() -> list[Path]:
 
 
 def _covering(p: Path, ents: list[tuple[Path, str]]) -> tuple[Path, str] | None:
+    ps = str(p)
     for root, st in ents:
-        if p == root or root in p.parents:
+        rs = _canon(root).rstrip("/")
+        if ps == rs or ps.startswith(rs + "/"):
             return root, st
+    for root, st in ents:
+        if str(root).startswith(_VOL_PREFIX):
+            continue
         try:
             r, rr = p.resolve(), root.resolve()
         except OSError:
@@ -73,8 +151,14 @@ def _covering(p: Path, ents: list[tuple[Path, str]]) -> tuple[Path, str] | None:
 
 
 def volume_label(path: Path) -> str:
-    vol = _volume_root(path)
+    """ "your CHZN drive" for a labelled drive (`[music] volume_labels`, keyed by UUID or mount name), else "the drive <name>"."""
     labels = (config.load_config().get("music") or {}).get("volume_labels") or {}
+    c = _canon(path)
+    uuid = _uuid_of(c)
+    if uuid is not None:
+        name = next((m.name for u, m in mounts().items() if u == uuid), None)
+        return str(labels.get(uuid) or (name and labels.get(name)) or f"the drive {name or uuid}")
+    vol = _volume_root(path)
     if vol is None:
         return "an external drive"
     return str(labels.get(vol.name) or f"the drive {vol.name}")
@@ -143,9 +227,9 @@ def scan(roots: list[Path] | None = None, db: Path | None = None) -> dict:
             bpm, key = parse_name(root.stem)
             rows.append(
                 (
-                    str(root),
+                    _canon(root),
                     root.stem,
-                    str(root.parent),
+                    _canon(root.parent),
                     root.suffix.casefold(),
                     st.st_size,
                     st.st_mtime,
@@ -176,9 +260,9 @@ def scan(roots: list[Path] | None = None, db: Path | None = None) -> dict:
                 bpm, key = parse_name(p.stem)
                 rows.append(
                     (
-                        str(p),
+                        _canon(p),
                         p.stem,
-                        str(root),
+                        _canon(root),
                         p.suffix.casefold(),
                         st.st_size,
                         st.st_mtime,

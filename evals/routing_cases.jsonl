@@ -192,3 +192,7 @@
 {"id": "r193", "cat": "samples", "text": "What's the BPM of CHZN1_Cake_BPM160.wav?", "expect": {"path": "tool", "tool": "analyze_audio"}}
 {"id": "r194", "cat": "samples", "text": "Do I have a loop in F minor or around 180 BPM?", "expect": {"path": "tool", "tool": "find_samples", "args_contain": ["either"]}}
 {"id": "r195", "cat": "samples", "text": "Find a loop at 150 BPM in G minor.", "expect": {"path": "tool", "tool": "find_samples"}}
+{"id": "r196", "cat": "samples", "text": "Rescan my samples.", "expect": {"path": "shortcut", "tool": "rescan_samples"}}
+{"id": "r197", "cat": "samples", "text": "Update my sample index.", "expect": {"path": "shortcut", "tool": "rescan_samples"}}
+{"id": "r198", "cat": "samples", "text": "Hey Julius, refresh my library please.", "expect": {"path": "shortcut", "tool": "rescan_samples"}}
+{"id": "r199", "cat": "samples", "text": "What is a sample rate?", "expect": {"path": "direct"}}
