@@ -47,3 +47,7 @@ Ask: "find my loops around 150 BPM", "do I have a loop in F minor".
 - **Where sources may come from:** the workspace, or one file at a time from your approved sample folders (`index_allowlist`). Anything else (purchased kits, Logic, GarageBand, plug-in and `/Library/Audio` folders) is refused.
 - **The audio rule outside the workspace:** more than one audio file outside the workspace in a single move, copy, rename or convert is refused ("approving a set never covers audio"); name one file, which gets its own preview and yes. Audio is never trashed by voice.
 - **Converter:** macOS `afconvert` (wav and aiff) plus `lame` (mp3) are enough and need nothing installed beyond `lame`. ffmpeg is optional: when it is installed Julius uses it instead, which allows wider formats later (flac, m4a output); `brew install ffmpeg` is not required. Commands are argument lists, never shell strings.
+
+## Drive access and the service launcher
+
+The launchd service now starts `~/.julius/env-service/bin/python -u -m julius` directly (no `run_julius.sh` or shell in between), with the cloud-profile settings in the plist's environment, so macOS attributes file access to that interpreter. `run_julius.sh` stays for manual runs. The previous plist is kept at `~/.julius/rollback/com.julius.assistant.plist.via-run_julius.sh`.

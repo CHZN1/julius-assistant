@@ -23,6 +23,7 @@ from typing import Any
 
 from julius import state
 from julius.paths import REPO_ROOT
+from julius.profile import CLOUD_DEFAULTS
 
 ROOT = REPO_ROOT
 LABEL = "com.julius.assistant"
@@ -34,7 +35,8 @@ def plist_dict(root: Path = ROOT, log_dir: str | None = None) -> dict[str, Any]:
     log_dir = Path(log_dir or "~/Library/Logs/Julius").expanduser()
     return {
         "Label": LABEL,
-        "ProgramArguments": ["/bin/zsh", str(root / "run_julius.sh")],
+        # python directly, not via run_julius.sh: macOS attributes file access (the CHZN drive) to the launched binary, and a shell in between would make the Full Disk Access grant for this interpreter useless. run_julius.sh stays for manual runs.
+        "ProgramArguments": [PY, "-u", "-m", "julius"],
         "WorkingDirectory": str(root),
         "RunAtLoad": True,
         "KeepAlive": {
@@ -46,6 +48,7 @@ def plist_dict(root: Path = ROOT, log_dir: str | None = None) -> dict[str, Any]:
         "EnvironmentVariables": {
             "JULIUS_SERVICE": "1",
             "JULIUS_PROFILE": "cloud",
+            **CLOUD_DEFAULTS,
             "TMPDIR": str(state.tmp_dir()) + "/",
             "PATH": f"{Path(PY).parent}:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin",
         },
