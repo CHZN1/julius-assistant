@@ -393,6 +393,10 @@ def seatbelt_profile(task: Task, home: Path | None = None, proxy_port: int | Non
             Path(os.path.expanduser(p.replace("~", str(home), 1))) if p.startswith("~") else Path(p)
         )
         lines.append(f'(deny file-read* (subpath "{full}"))')
+    # Julius's own interpreter lives in ~/.julius/env-service: the agent may read that one folder (code and libraries, no secrets) and nothing else under ~/.julius
+    prefix = Path(sys.prefix).resolve()
+    if prefix.is_relative_to(home / ".julius"):
+        lines.append(f'(allow file-read* (subpath "{prefix}"))')
     lines.append(f'(allow file-read* (subpath "{d}"))')
     lines.append("(deny network*)")
     if proxy_port:

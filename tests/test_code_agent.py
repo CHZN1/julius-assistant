@@ -391,3 +391,26 @@ class CacheFileTests(Base):
         (self.proj / "__pycache__" / "app.cpython-312.pyc").write_bytes(b"x")
         (self.proj / "stray.pyc").write_bytes(b"x")
         self.assertEqual(ca.snapshot(self.proj), before)
+
+
+class ServiceInterpreterReadTests(unittest.TestCase):
+    def test_only_the_interpreter_folder_under_dot_julius_is_readable(self):
+        import sys
+        from unittest import mock
+
+        home = Path(tempfile.mkdtemp()).resolve()
+        env = home / ".julius" / "env-service"
+        env.mkdir(parents=True)
+        t = mock.Mock()
+        t.dir = home / "task"
+        with mock.patch.object(sys, "prefix", str(env)):
+            text = ca.seatbelt_profile(t, home=home)
+        lines = text.splitlines()
+        deny = f'(deny file-read* (subpath "{home}/.julius"))'
+        allow = f'(allow file-read* (subpath "{env}"))'
+        self.assertIn(deny, lines)
+        self.assertIn(allow, lines)
+        self.assertLess(lines.index(deny), lines.index(allow))
+        self.assertNotIn(f'(allow file-read* (subpath "{home}/.julius"))', lines)
+        with mock.patch.object(sys, "prefix", "/opt/miniconda3/envs/torch"):
+            self.assertNotIn("env-service", ca.seatbelt_profile(t, home=home))

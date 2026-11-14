@@ -27,3 +27,40 @@ def handle(text: str) -> str | None:
     from julius.music import tool
 
     return tool.index_samples()
+
+
+def convert_reply(s, text: str) -> str | None:
+    """ "convert kick.wav to mp3", "convert all the wav files in the workspace to aiff 48k 24 bit": a convert PLAN through the file agent (preview, then yes or cancel, then undo). Copies go into the audio workspace only."""
+    from julius.music import convert as cv
+
+    req = cv.parse(text)
+    if req is None:
+        return None
+    if req["error"]:
+        return req["error"]
+    spec = req["spec"]
+    fs = s.file_session
+    agent = fs.agent
+    ws = cv.workspace()
+    kind, pattern = cv.selection(req["what"])
+    source = ws
+    if kind == "named":
+        if "." not in pattern:
+            pattern += ".*"
+        if not list(ws.glob(pattern)):
+            for home in ("Documents", "Desktop", "Downloads"):
+                folder = agent.root / home
+                if folder.is_dir() and list(folder.glob(pattern)):
+                    source = folder
+                    break
+    out = agent.propose(
+        "convert",
+        source=str(source),
+        destination=str(ws / "converted" / spec.folder),
+        pattern=pattern,
+        convert=spec.as_dict(),
+        turn=s.turn,
+    )
+    fs._replace_pending()
+    fs._remember_plan(out)
+    return out["message"]

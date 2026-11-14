@@ -126,10 +126,10 @@ def handle_music(s: Session, text: str) -> str | None:
     try:
         from julius.music import commands
 
-        return commands.handle(text)
+        return commands.handle(text) or commands.convert_reply(s, text)
     except Exception as exc:
-        log.console(f"  [sample rescan failed: {type(exc).__name__}: {exc}]", flush=True)
-        return "I couldn't rescan the sample index."
+        log.console(f"  [audio command failed: {type(exc).__name__}: {exc}]", flush=True)
+        return "I couldn't do that audio request."
 
 
 def handle_memory(s: Session, text: str) -> str | None:

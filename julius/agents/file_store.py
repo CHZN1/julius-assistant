@@ -74,7 +74,8 @@ class StoreMixin:
             or not isinstance(plan.get("created"), (int, float))
             or not isinstance(plan.get("turn"), int)
             or not isinstance(plan.get("session"), str)
-            or plan.get("action") not in {"move", "copy", "rename", "create", "trash", "purge"}
+            or plan.get("action")
+            not in {"move", "copy", "convert", "rename", "create", "trash", "purge"}
             or plan.get("status") not in _PLAN_STATUSES
         ):
             raise self._corrupt("A file-history record is invalid.")
@@ -90,7 +91,7 @@ class StoreMixin:
             or not {"size", "sha256"} <= op["fingerprint"].keys()
         ):
             raise self._corrupt("An operation record is invalid.")
-        if plan["action"] in MOVELIKE | {"copy"} and (
+        if plan["action"] in MOVELIKE | {"copy", "convert"} and (
             not isinstance(op["from"], str)
             or not {"mtime_ns", "device", "inode"} <= op["fingerprint"].keys()
         ):

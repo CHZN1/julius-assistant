@@ -49,6 +49,9 @@ class FileSession:
         ):  # a folder added in [files.folders] can be named by voice ("in sandbox")
             if mode != "none" and folder not in standard and folder.is_dir():
                 file_router.EXTRA_FOLDERS[file_router._key(folder.name)] = str(folder)
+                if folder.name == "Julius Audio Workspace":  # "in the audio workspace"
+                    for alias in ("audio workspace", "workspace"):
+                        file_router.EXTRA_FOLDERS[file_router._key(alias)] = str(folder)
 
     def _fuzzy_trash(
         self, out: dict[str, str | bool], args: dict[str, str], text: str, turn: int

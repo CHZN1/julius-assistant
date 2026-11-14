@@ -196,3 +196,5 @@
 {"id": "r197", "cat": "samples", "text": "Update my sample index.", "expect": {"path": "shortcut", "tool": "rescan_samples"}}
 {"id": "r198", "cat": "samples", "text": "Hey Julius, refresh my library please.", "expect": {"path": "shortcut", "tool": "rescan_samples"}}
 {"id": "r199", "cat": "samples", "text": "What is a sample rate?", "expect": {"path": "direct"}}
+{"id": "r200", "cat": "samples", "text": "Convert all the wav files in my workspace to aiff 48k 24 bit.", "expect": {"path": "shortcut", "tool": "convert_audio"}}
+{"id": "r201", "cat": "samples", "text": "Convert CHZN1_Cake_BPM160.wav to mp3.", "expect": {"path": "shortcut", "tool": "convert_audio"}}

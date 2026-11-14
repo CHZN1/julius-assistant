@@ -173,15 +173,32 @@ class FileEntryTests(unittest.TestCase):
         import julius.config as c
 
         names = (c.load_config().get("music") or {}).get("index_allowlist")
-        self.assertEqual(len(names), 15)
-        for n in names:
+        local = [n for n in names if not n.startswith("volume:")]
+        drive = [n for n in names if n.startswith("volume:")]
+        self.assertEqual(len(local), 15)
+        for n in local:
             low = n.casefold()
-            self.assertTrue(
-                "chzn1" in low or low.endswith("new mleodies 2"),
-                n,
-            )
+            self.assertTrue("chzn1" in low or low.endswith("new mleodies 2"), n)
             for banned in ("chzn drum samples", "boomin bass", "surge", "versace", "topsounds"):
                 self.assertNotIn(banned, low)
+        for n in drive:  # the CHZN drive: UUID form only, and none of the groups the user excluded
+            self.assertTrue(n.startswith("volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/"), n)
+            low = n.casefold()
+            for banned in (
+                "drumkits",
+                "monte booker",
+                "chzn drum samples",
+                "midi drumkit",
+                "loop packs 2020",
+                "/logic",
+                "/users",
+                "scaler",
+                "prpht - love",
+                "love me (again)",
+                "backups.backupdb",
+            ):
+                self.assertNotIn(banned, low)
+            self.assertNotIn("/Volumes/", n)
 
 
 class OrAndOfflineTests(unittest.TestCase):
@@ -245,13 +262,13 @@ class OrAndOfflineTests(unittest.TestCase):
         f.write_bytes(b"x")
         a, b, c, d = self._patched(vols, cfgd)
         with a, b, c, d:
-            self.assertEqual(library.scan(db=self.db)["files"], 1)
+            self.assertEqual(library.scan(db=self.db, include_drives=True)["files"], 1)
             self.assertFalse(library.search("drive", db=self.db)[0]["offline"])
             f.unlink()
             (drive / "Beats").rmdir()
             drive.rmdir()  # the drive is unplugged
             self.assertEqual(library.allowlist(), [])
-            r = library.scan(db=self.db)
+            r = library.scan(db=self.db, include_drives=True)
             self.assertEqual(r["removed"], 0)
             hits = library.search("drive", db=self.db)
             self.assertEqual(len(hits), 1)
@@ -265,12 +282,12 @@ class OrAndOfflineTests(unittest.TestCase):
         (drive / "Beats" / "CHZN1_Drive_BPM150.wav").write_bytes(b"x")
         a, b, c, d = self._patched(vols, cfgd)
         with a, b, c, d:
-            library.scan(db=self.db)
+            library.scan(db=self.db, include_drives=True)
             first = library.search("drive", db=self.db)[0]["path"]
             self.assertEqual(first, f"volume:{self.UUID}/Beats/CHZN1_Drive_BPM150.wav")
             drive.rename(vols / "CHZN1")  # same drive, mounted under another name
             library._UUID_CACHE.clear()
-            r = library.scan(db=self.db)
+            r = library.scan(db=self.db, include_drives=True)
             self.assertEqual((r["files"], r["removed"]), (1, 0))
             hits = library.search("drive", db=self.db)
             self.assertEqual([h["path"] for h in hits], [first])
@@ -290,7 +307,7 @@ class OrAndOfflineTests(unittest.TestCase):
             ),
         ):
             self.assertEqual(library.allowlist(), [])
-            self.assertEqual(library.scan(db=self.db)["files"], 0)
+            self.assertEqual(library.scan(db=self.db, include_drives=True)["files"], 0)
             self.assertEqual([st for _p, st in library.entries()], ["offline"])
 
     def test_a_missing_folder_that_is_not_on_a_drive_is_dropped(self):
@@ -300,7 +317,7 @@ class OrAndOfflineTests(unittest.TestCase):
     def test_the_index_is_not_rewalked_on_every_question(self):
         with cfg(self.mine):
             self.assertTrue(library.stale(self.db))
-            library.scan(db=self.db)
+            library.scan(db=self.db, include_drives=True)
             self.assertFalse(library.stale(self.db))
 
 
@@ -342,3 +359,125 @@ class RescanByVoiceTests(unittest.TestCase):
             s = mock.Mock()
             out = turn_mod._command_reply(s, "update my sample index")
         self.assertEqual(out, "Indexed 40.")
+
+
+class PatternAndDriveScanTests(unittest.TestCase):
+    UUID = "BBD8952A-31DB-3D53-B954-06E07A5395C2"
+
+    def setUp(self):
+        self.d = Path(tempfile.mkdtemp())
+        self.vols = self.d / "Volumes"
+        self.drive = self.vols / "CHZN1 1"
+        (self.drive / "Beats").mkdir(parents=True)
+        (self.drive / "Other Pack").mkdir()
+        for n in (
+            "CHZN1_Cake_BPM160.wav",
+            "chzn1_lower_BPM100.mp3",
+            "CZHN1_Typo_BPM120.wav",
+            "CHNZ1_Typo2_BPM110.wav",
+            "PRPHT - Song (Prod. CHZN1).mp3",
+            "PRPHT - Honest.mp3",
+            "notes.txt",
+        ):
+            (self.drive / n).write_bytes(b"xx")
+        (self.drive / "Beats" / "CHZN1_Deep_BPM150.wav").write_bytes(b"xx")
+        (self.drive / "Other Pack" / "CHZN1_Kick.wav").write_bytes(b"xx")
+        self.db = self.d / "i.sqlite3"
+        self.home = self.d / "home"
+        self.home.mkdir()
+
+    def env(self, entries):
+        cfgd = {
+            "music": {"index_allowlist": entries, "volume_labels": {self.UUID: "your CHZN drive"}}
+        }
+        library._UUID_CACHE.clear()
+        return (
+            mock.patch.object(library, "VOLUMES", self.vols),
+            mock.patch.object(library.config, "load_config", return_value=cfgd),
+            mock.patch.object(library, "DB_PATH", self.db),
+            mock.patch.object(
+                library, "volume_uuid", lambda m: self.UUID if m.name.startswith("CHZN1") else None
+            ),
+        )
+
+    def run_env(self, entries):
+        import contextlib
+
+        st = contextlib.ExitStack()
+        for m in self.env(entries):
+            st.enter_context(m)
+        return st
+
+    PATTERNS = [f"volume:{UUID}/CHZN1*", f"volume:{UUID}/CZHN1*", f"volume:{UUID}/CHNZ1*"]
+
+    def test_patterns_approve_only_matching_root_files(self):
+        with self.run_env(self.PATTERNS):
+            r = library.scan(db=self.db, include_drives=True)
+            names = sorted(h["name"] for h in library.search(limit=25, db=self.db))
+        self.assertEqual(r["files"], 4)
+        self.assertEqual(
+            names,
+            ["CHNZ1_Typo2_BPM110", "CHZN1_Cake_BPM160", "CZHN1_Typo_BPM120", "chzn1_lower_BPM100"],
+        )
+
+    def test_patterns_do_not_reach_subfolders_or_other_artists_songs(self):
+        with self.run_env(self.PATTERNS):
+            library.scan(db=self.db, include_drives=True)
+            names = {h["name"] for h in library.search(limit=25, db=self.db)}
+        self.assertNotIn("CHZN1_Deep_BPM150", names)
+        self.assertNotIn("CHZN1_Kick", names)
+        self.assertNotIn("PRPHT - Song (Prod. CHZN1)", names)
+        self.assertNotIn("PRPHT - Honest", names)
+
+    def test_a_plain_search_never_walks_a_drive(self):
+        with self.run_env(self.PATTERNS + [f"volume:{self.UUID}/Beats"]):
+            r = library.scan(db=self.db)  # what a search triggers
+            self.assertEqual(r["files"], 0)
+            self.assertEqual(library.search(limit=25, db=self.db), [])
+            self.assertEqual(library.scan(db=self.db, include_drives=True)["files"], 5)
+
+    def test_a_pattern_entry_keeps_offline_rows_when_the_drive_is_unplugged(self):
+        import shutil
+
+        with self.run_env(self.PATTERNS):
+            library.scan(db=self.db, include_drives=True)
+            shutil.rmtree(self.drive)
+            r = library.scan(db=self.db, include_drives=True)
+            hits = library.search(limit=25, db=self.db)
+        self.assertEqual(r["removed"], 0)
+        self.assertEqual(len(hits), 4)
+        self.assertTrue(all(h["offline"] for h in hits))
+
+    def test_a_pattern_cannot_escape_through_a_denied_folder(self):
+        bad = self.drive / "Logic"
+        bad.mkdir()
+        (bad / "CHZN1_bounce.wav").write_bytes(b"x")
+        with self.run_env([f"volume:{self.UUID}/Logic/CHZN1*"]):
+            self.assertEqual(library.allowlist(), [])
+
+    def test_a_desktop_copy_and_a_drive_copy_are_one_entry_marked_on_drive(self):
+        desk = self.d / "Desktop"
+        desk.mkdir()
+        (desk / "CHZN1_Cake_BPM160.wav").write_bytes(b"xx")
+        entries = [str(desk / "CHZN1_Cake_BPM160.wav")] + self.PATTERNS
+        with self.run_env(entries):
+            library.scan(db=self.db, include_drives=True)
+            hits = library.search("cake", db=self.db)
+            out = tool.find_samples("cake")
+        self.assertEqual(len(hits), 1)
+        self.assertTrue(hits[0]["on_drive"])
+        self.assertIn("also on your CHZN drive", out)
+
+    def test_a_drive_connected_after_being_away_is_scanned_once(self):
+        with self.run_env(self.PATTERNS):
+            self.assertEqual(library.scan_new_drives(self.db)["files"], 4)
+            self.assertEqual(
+                library.scan_new_drives(self.db)["files"], 0
+            )  # already known: not again
+            import shutil
+
+            shutil.move(str(self.drive), str(self.d / "gone"))
+            self.assertEqual(library.scan_new_drives(self.db)["files"], 0)  # unplugged
+            shutil.move(str(self.d / "gone"), str(self.drive))
+            library._UUID_CACHE.clear()
+            self.assertEqual(library.scan_new_drives(self.db)["files"], 4)  # plugged back in

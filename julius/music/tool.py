@@ -167,14 +167,36 @@ def music_theory(
     )
 
 
+def _drive_notes() -> str:
+    """One sentence about approved entries that could not be read now: a drive that is unplugged, or one macOS will not let Julius read."""
+    from julius.music import library
+
+    ents = library.entries()
+    blocked = [p for p, st in ents if st == "blocked"]
+    away = [p for p, st in ents if st == "offline"]
+    out = []
+    if blocked:
+        out.append(
+            f"{len(blocked)} entries on {library.volume_label(blocked[0])} could not be read because macOS is blocking Julius from that drive: allow it under System Settings, Privacy & Security, Files & Folders (Removable Volumes), or add Julius's Python under Full Disk Access."
+        )
+    if away:
+        out.append(
+            f"{len(away)} entries are on {library.volume_label(away[0])}, which isn't connected; they stay in the index."
+        )
+    return " " + " ".join(out) if out else ""
+
+
 def index_samples(**_) -> str:
     """Refresh the index of the user's approved sample folders (names, sizes and dates only)."""
     from julius.music import library
 
-    if not library.allowlist():
+    if not library.entries():
         return "No sample folders or files are approved for indexing yet. They are listed in julius.toml under [music] index_allowlist, and I only ever scan those."
-    r = library.scan()
-    return f"Indexed {r['files']} audio files from {r['folders']} approved folder(s) or file(s); {r['removed']} no longer there. Names, sizes and dates only: nothing was opened, moved or changed."
+    r = library.scan(include_drives=True)
+    return (
+        f"Indexed {r['files']} audio files from {r['folders']} approved folder(s) or file(s); {r['removed']} no longer there. Names, sizes and dates only: nothing was opened, moved or changed."
+        + _drive_notes()
+    )
 
 
 def find_samples(
@@ -212,6 +234,8 @@ def find_samples(
         line = "- " + ", ".join(bits) + ")"
         if h["offline"]:
             line += f" [that's on {h['where']}, which isn't connected]"
+        elif h.get("on_drive"):
+            line += f" [also on {h['drive_where']}]"
         lines.append(line)
     how = (
         "any of the filters"

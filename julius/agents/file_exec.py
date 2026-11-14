@@ -37,7 +37,7 @@ class ExecMixin:
         if plan["action"] == "purge":
             return
         for op in plan["ops"]:
-            if plan["action"] != "copy" and op["from"]:
+            if plan["action"] not in ("copy", "convert") and op["from"]:
                 self.require_write(op["from"])
             if plan["action"] != "purge":
                 self.require_write(op["to"]) if plan["action"] != "trash" else None
@@ -114,6 +114,9 @@ class ExecMixin:
         journal: Callable,
     ) -> None:
         """Copy to a hidden temp file in the destination folder, verify it, then link it in."""
+        if op.get("convert") and src:
+            self._publish_converted(op, src, dst, journal)
+            return
         fd, temp = tempfile.mkstemp(prefix=".julius-stage-", dir=dst.parent)
         os.close(fd)
         try:
@@ -140,6 +143,49 @@ class ExecMixin:
                         "The original changed and was retained. The copied destination needs review.",
                     )
                 src.unlink()
+        finally:
+            Path(temp).unlink(missing_ok=True)
+
+    def _publish_converted(
+        self,
+        op: dict[str, Any],
+        src: Path,
+        dst: Path,
+        journal: Callable,
+    ) -> None:
+        """Write the converted copy to a hidden temp file next to its destination, then link it in; the original is only read."""
+        from julius.music import convert as cv
+
+        why = cv.refuse_destination(dst)
+        if why:
+            raise FileProblem("outside_workspace", why)
+        fd, temp = tempfile.mkstemp(prefix=".julius-stage-", suffix=dst.suffix, dir=dst.parent)
+        os.close(fd)
+        os.unlink(temp)  # the converter must create it, and refuses to overwrite
+        try:
+            try:
+                cv.run(src, temp, op["convert"])
+            except cv.ConvertError as exc:
+                raise FileProblem("convert_failed", str(exc)) from exc
+            if not self._matches(src, op["fingerprint"], identity=True):
+                raise FileProblem("changed", "The source changed. No converted copy was published.")
+            with open(temp, "rb") as f:
+                os.fsync(f.fileno())
+            h = hashlib.sha256()
+            with open(temp, "rb") as f:
+                for block in iter(lambda: f.read(1024 * 1024), b""):
+                    h.update(block)
+            staged = Path(temp).stat()
+            op["publication_fingerprint"] = {
+                "size": staged.st_size,
+                "mtime_ns": staged.st_mtime_ns,
+                "device": staged.st_dev,
+                "inode": staged.st_ino,
+                "sha256": h.hexdigest(),
+            }
+            if journal:
+                journal()
+            os.link(temp, dst, follow_symlinks=False)
         finally:
             Path(temp).unlink(missing_ok=True)
 
@@ -214,6 +260,7 @@ class ExecMixin:
         verbs = {
             "move": "Moved",
             "copy": "Copied",
+            "convert": "Converted",
             "rename": "Renamed",
             "create": "Created",
             "trash": "Moved to the trash:",
@@ -336,7 +383,7 @@ class ExecMixin:
             plan["action"] in MOVELIKE
             and not dst.exists()
             and self._matches(op["from"], op.get("result_fingerprint", op["fingerprint"]))
-        ) or (plan["action"] in {"copy", "create"} and not dst.exists()):
+        ) or (plan["action"] in {"copy", "create", "convert"} and not dst.exists()):
             op["status"] = "undone"
             self._save(state)
             return True

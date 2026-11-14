@@ -34,6 +34,7 @@ class FileAgent(
         "read",
         "move",
         "copy",
+        "convert",
         "rename",
         "create",
         "trash",

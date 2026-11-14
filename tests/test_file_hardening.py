@@ -586,6 +586,7 @@ class PermissionTests(Base):
                 "Desktop": "write",
                 "Downloads": "write",
                 "~/dev/sandbox": "write",
+                "~/Julius Audio Workspace": "write",
             },
         )
 

@@ -104,3 +104,8 @@ Done: evaluation harness, daily-driver service (wake word, hotkeys, memory, barg
 ## License
 
 MIT, see [LICENSE](LICENSE). openWakeWord (Apache-2.0) feature models are downloaded at setup; CREMA-D and RAVDESS, used only to train negatives, are not redistributed.
+
+
+### The service's own Python
+
+The launchd service runs on a private copy of the environment, `~/.julius/env-service` (`conda create -p ~/.julius/env-service --clone torch`), so macOS permissions granted to Julius (for example Removable Volumes or Full Disk Access for the CHZN drive) apply to that interpreter only, never to the shared one. `run_julius.sh` uses it when it exists and falls back to the shared environment by itself; `JULIUS_PYTHON=/path/to/python` overrides. After `pip install` into the shared environment, install the same thing into the service environment too. Re-run `python -m julius.service.service on` with that interpreter if the launchd entry needs rewriting. Rollback: `JULIUS_PYTHON=/opt/miniconda3/envs/torch/bin/python`, or restore `~/.julius/rollback/`.

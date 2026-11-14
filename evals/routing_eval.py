@@ -90,7 +90,18 @@ class Sandbox:
 def shortcut(text, sb, ctx, turn, case_history=None):
     """What the runtime does before the brain: utility session, file session, then the live intent router."""
     from julius.music import commands as music_commands
+    from julius.music import convert as music_convert
 
+    if (
+        music_convert.parse(text) is not None
+    ):  # a convert plan through the file agent, before the brain
+        return {
+            "path": "shortcut",
+            "tool": "convert_audio",
+            "args": "",
+            "ok": True,
+            "detail": "convert",
+        }
     if music_commands.is_rescan(text):  # answered before the brain by a fixed pattern
         return {
             "path": "shortcut",

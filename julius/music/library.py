@@ -4,6 +4,7 @@ Read-only: file names, sizes and dates are read, never audio content, and nothin
 
 from __future__ import annotations
 
+import fnmatch
 import os
 import re
 import sqlite3
@@ -115,8 +116,16 @@ def entries() -> list[tuple[Path, str]]:
             state = "offline"
         else:
             try:
-                ok = p.is_dir() or (p.is_file() and p.suffix.casefold() in policy.AUDIO_EXT)
+                ok = (
+                    p.parent.is_dir()
+                    if is_glob(p)
+                    else p.is_dir() or (p.is_file() and p.suffix.casefold() in policy.AUDIO_EXT)
+                )
                 state = "online" if ok else None
+                if ok and _canon(p).startswith(_VOL_PREFIX):
+                    # a stat can succeed where macOS still refuses to list the folder
+                    with os.scandir(p.parent if (is_glob(p) or p.is_file()) else p) as it:
+                        next(it, None)
             except PermissionError:
                 state = "blocked"
             if state is None and uuid is None and vol is not None and not vol.exists():
@@ -135,6 +144,13 @@ def allowlist() -> list[Path]:
 def _covering(p: Path, ents: list[tuple[Path, str]]) -> tuple[Path, str] | None:
     ps = str(p)
     for root, st in ents:
+        if is_glob(root):
+            rc = _canon(root)
+            parent, _, pat = rc.rpartition("/")
+            pp, _, name = ps.rpartition("/")
+            if pp == parent and fnmatch.fnmatch(name.casefold(), pat.casefold()):
+                return root, st
+            continue
         rs = _canon(root).rstrip("/")
         if ps == rs or ps.startswith(rs + "/"):
             return root, st
@@ -164,12 +180,28 @@ def volume_label(path: Path) -> str:
     return str(labels.get(vol.name) or f"the drive {vol.name}")
 
 
-def _inside(p: Path, roots: list[Path]) -> bool:
+def is_glob(p: Path) -> bool:
+    """A pattern entry ("<folder>/CHZN1*"): the files of that one folder whose names match, case-insensitively, never its subfolders."""
+    return any(ch in p.name for ch in "*?[")
+
+
+def _matches_root(p: Path, root: Path) -> bool:
+    if is_glob(root):
+        try:
+            return p.parent.resolve() == root.parent.resolve() and fnmatch.fnmatch(
+                p.name.casefold(), root.name.casefold()
+            )
+        except OSError:
+            return False
     try:
-        r = p.resolve()
+        r, rr = p.resolve(), root.resolve()
     except OSError:
         return False
-    return any(r == root.resolve() or root.resolve() in r.parents for root in roots)
+    return r == rr or rr in r.parents
+
+
+def _inside(p: Path, roots: list[Path]) -> bool:
+    return any(_matches_root(p, root) for root in roots)
 
 
 def parse_name(stem: str) -> tuple[int | None, str | None]:
@@ -212,14 +244,53 @@ def stale(db: Path | None = None) -> bool:
     return r is None or time.time() - r["v"] > STALE_SECONDS
 
 
-def scan(roots: list[Path] | None = None, db: Path | None = None) -> dict:
-    """Index the allowlisted folders. `roots` can only narrow the allowlist; a folder outside it is refused."""
+def scan(
+    roots: list[Path] | None = None, db: Path | None = None, include_drives: bool = False
+) -> dict:
+    """Index the allowlisted folders. `roots` can only narrow the allowlist; a folder outside it is refused. Entries on an external drive are walked only when asked for (include_drives, "rescan my samples") or when the drive has just been connected, never on a plain search."""
     allowed = allowlist()
     use = allowed if roots is None else [r for r in roots if _inside(r, allowed)]
+    if not include_drives:
+        use = [r for r in use if not _canon(r).startswith(_VOL_PREFIX)]
     if not use:
         return {"folders": 0, "files": 0, "removed": 0, "refused": roots is not None}
     rows, seen = [], 0
     for root in use:
+        if is_glob(root):
+            try:
+                names = sorted(os.listdir(root.parent))
+            except OSError:
+                continue
+            for f in names:
+                p = root.parent / f
+                if (
+                    f.startswith(".")
+                    or p.suffix.casefold() not in policy.AUDIO_EXT
+                    or not fnmatch.fnmatch(f.casefold(), root.name.casefold())
+                    or p.is_symlink()
+                    or policy.denied(p) is not None
+                ):
+                    continue
+                try:
+                    st = p.stat()
+                except OSError:
+                    continue
+                if not p.is_file():
+                    continue
+                bpm, key = parse_name(p.stem)
+                rows.append(
+                    (
+                        _canon(p),
+                        p.stem,
+                        _canon(root.parent),
+                        p.suffix.casefold(),
+                        st.st_size,
+                        st.st_mtime,
+                        bpm,
+                        key,
+                    )
+                )
+            continue
         if root.is_file():
             if root.is_symlink() or policy.denied(root) is not None:
                 continue
@@ -339,7 +410,55 @@ def group(rows: list[dict]) -> list[dict]:
             by[k]["key"] = by[k]["key"] or d["key"]
     for e in by.values():
         e["formats"] = sorted(set(e["formats"]))
-    return list(by.values())
+        e["on_drive"] = False
+    # the same sound in two places (a Desktop copy and a drive copy) is one entry: the copy that is always there, marked "also on the drive"
+    merged: dict[tuple, dict] = {}
+    for e in by.values():
+        k = (
+            e["name"].casefold(),
+            tuple(e["formats"]),
+            e["size"] if len(e["formats"]) == 1 else None,
+        )
+        if k not in merged:
+            merged[k] = e
+            continue
+        a = merged[k]
+        local, drive = (a, e) if not a["path"].startswith(_VOL_PREFIX) else (e, a)
+        if local["path"].startswith(_VOL_PREFIX):
+            continue  # both on drives: keep the first
+        local["on_drive"] = True
+        local["drive_where"] = volume_label(Path(drive["path"]))
+        local["paths"] = local["paths"] + drive["paths"]
+        merged[k] = local
+    return list(merged.values())
+
+
+def scan_new_drives(db: Path | None = None) -> dict:
+    """Scan the entries of a drive that has just been connected (or never scanned), once. A drive that stays connected is not walked again, and a drive that is away is only remembered as away."""
+    ents = entries()
+    by_uuid: dict[str, list[Path]] = {}
+    away: set[str] = set()
+    for p, st in ents:
+        c = _canon(p)
+        if not c.startswith(_VOL_PREFIX):
+            continue
+        u = _uuid_of(c) or ""
+        if st == "online":
+            by_uuid.setdefault(u, []).append(p)
+        elif st == "offline":
+            away.add(u)
+    files = 0
+    with _db(db) as c:
+        for u in away:
+            c.execute("INSERT OR REPLACE INTO meta VALUES (?, 0)", (f"drive:{u}",))
+        known = {r["k"]: r["v"] for r in c.execute("SELECT k, v FROM meta WHERE k LIKE 'drive:%'")}
+    for u, roots in by_uuid.items():
+        if known.get(f"drive:{u}"):
+            continue
+        files += scan(roots, db, include_drives=True)["files"]
+        with _db(db) as c:
+            c.execute("INSERT OR REPLACE INTO meta VALUES (?, 1)", (f"drive:{u}",))
+    return {"files": files}
 
 
 def _norm_key(k: str) -> str:

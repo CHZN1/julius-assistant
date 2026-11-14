@@ -37,4 +37,7 @@ export JULIUS_MODEL="${JULIUS_MODEL:-$PROFILE_MODEL}"
 export JULIUS_FALLBACK_MODEL="${JULIUS_FALLBACK_MODEL:-llama3.2:3b}"
 export JULIUS_VISION="${JULIUS_VISION:-0}"
 export JULIUS_TTS="${JULIUS_TTS:-$PROFILE_VOICE}"
-exec /opt/miniconda3/envs/torch/bin/python -u -m julius
+# The service runs on its own interpreter (a full copy of the torch env at ~/.julius/env-service) so macOS file permissions granted to Julius (the CHZN drive) never apply to the shared torch python. Rollback: JULIUS_PYTHON=/opt/miniconda3/envs/torch/bin/python, or delete the env and this falls back by itself.
+JULIUS_PY="${JULIUS_PYTHON:-$HOME/.julius/env-service/bin/python}"
+[[ -x "$JULIUS_PY" ]] || JULIUS_PY=/opt/miniconda3/envs/torch/bin/python
+exec "$JULIUS_PY" -u -m julius

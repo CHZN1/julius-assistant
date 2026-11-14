@@ -50,7 +50,82 @@ index_allowlist = [   # the ONLY folders and files the sample index ever scans (
     "~/Desktop/Feather Theif Pack/CHZN1_BreakAway_BPM150.mp3",
     "~/Desktop/Feather Theif Pack/CHZN1_LoveMeDead_BPM140.mp3",
     "~/Desktop/Feather Theif Pack/CHZN1_MineForever_BPM155.mp3",
+    # --- the CHZN drive (volume UUID, so a changed mount name does not matter): A2 A3 A4 A5 C1 C3 ---
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/CHZN1 BEATS 2023",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/CHZN1 BEATS 2024",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/April 2022 Beats ",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/August Beats 2022",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/DECEMBER BEATS 2022 ",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/July Beats 2022",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/June Beats 2022",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/March 2022 Beats",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/May Beats 2022",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/NOVEMBER BEATS 2022",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/OCTOBER BEATS 2022",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/September Beats 2022",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/Ali Pack (Prod. CHZN1)",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/BigHam2x Pack (prod. CHZN1)",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/CHZN x Swank Loop Pack 1",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/CHZN1 2024 Melodies",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/CHZN1 AFROPOP DRUMS",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/CHZN1 Sample Pack",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/CHZN1 x Dhill Lab Melodies",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/CHZN1 x KeemChoosin beat stems_BPM82",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/CHZN1 x Swank Space pack",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/CHZN1 x TURBO LAB MASTER",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/CHZN1_RemedyEDM Stems_BPM140 ",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/CHZN1_SeductionStems_BPM106",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/CHZN1_Tekken_BPM130_Stems",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/CHZN1xCallari_SadFaces_BPM133 stems",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/Dex Pack (Prod. CHZN1)",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/Don Huey (CHZN Mixes)",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/EVERYTHING/All Night - PRPHT(Prod. Chzn1)",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/EVERYTHING/BEAT PACK (PROD. CHZN1)",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/EVERYTHING/Bay Area Beat (Prod. Chzn1)",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/EVERYTHING/Beat Pack Lvl 1. (Prod.Chzn1)",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/EVERYTHING/Bounce Bitch Stems BMP135 (Prod. Chzn1)",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/EVERYTHING/CHZN 83 (bpm 120)",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/FUTURE BASS VIBES_CHZN1",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/Faze Pack (prod. CHZN1)",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/Free CHZN1 Diversity Loop Pack ",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/Kev Pack (CHZN1)",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/Lab Pack (Prod. CHZN1)",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/NFN Pack (Prod. CHZN1)",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/New Loop Pack! (Prod. CHZN1)",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/New New Pack (prod. CHZN1)",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/PRPHT - Perfect Ten (Prod. CHZN1)",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/Pack for tino (prod. CHZN1)",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/Play Pack (Prod. CHZN1)",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/SOULPACK (CHZN1)",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/chzn1_mm_tilitends_bpm147 lab stems",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/December 2023",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/May Loops ",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/New Loops July",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/New Loops March",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/November Loops",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/OCTOBER:NOV Loops",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/SEPT LOOPS",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/Sept Loops 2022",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/august loops",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/Candy Land Vibe Pack",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/DIffrent pack",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/Faze pack 2",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/Grizzly City Melody Pack",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/Loop Pack New 2022",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/Mini pack ",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/Molecule Pack",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/NOIR BEAT TAPE",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/NOIR BEAT TAPE (DELUXE)",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/Paco R Pack",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/Sad Boy Sweatweather Pack",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/TOMMY PACK",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/Wave Pack",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/Movies_PRPHT_Vocal Stems",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/New Mleodies",
+    "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/Sync Music Folder (Untagging,Stings, etc)",
 ]
+
+volume_labels = { "BBD8952A-31DB-3D53-B954-06E07A5395C2" = "your CHZN drive" }   # what results call a drive that is not connected
 
 [offline]
 model = "llama3.2:3b"       # loaded only while the API is unreachable
@@ -85,6 +160,7 @@ panel_max_mb = 200              # image cache size in ~/.julius/panel (also drop
 saved_dir = "~/Julius Saved"    # where "save this card" writes (a local folder; a path inside iCloud Drive is refused)
 
 [audio]
+workspace = "~/Julius Audio Workspace"   # the ONLY place Julius renames, organizes or writes converted audio; originals elsewhere are never changed, and nothing is ever written to an external drive
 duplex = true                   # DEFAULT since 11-07: one stream for mic + speakers with echo cancellation; the mic gate is off while Julius talks and speaking over him stops him (julius_duplex.py). Falls back to the gate by itself if echo leaks. JULIUS_DUPLEX=0 turns it off for one run
 duplex_rate = 48000            # stream rate; his voice plays at full quality, only the mic and the echo reference are reduced to 16 kHz
 raw_backfill = false           # true feeds the raw mic for the first words of an interruption (recovers more words but lets Julius's own voice into the transcript); off by request
@@ -118,3 +194,4 @@ Documents = "write"
 Desktop = "write"
 Downloads = "write"
 "~/dev/sandbox" = "write"   # generated test folder for trying the file agent and the coding agent
+"~/Julius Audio Workspace" = "write"   # audio workspace: rename, organize and batch-convert here (preview, confirm, undo)
