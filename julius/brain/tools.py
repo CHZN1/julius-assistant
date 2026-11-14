@@ -859,18 +859,18 @@ def analyze_audio(path: str = "") -> str:
 REGISTRY["analyze_audio"] = analyze_audio
 
 
-def find_samples(query: str = "", bpm: int = 0, key: str = "") -> str:
+def find_samples(query: str = "", bpm: int = 0, key: str = "", either: bool = False) -> str:
     from julius.music import tool as music_tool
 
-    return music_tool.find_samples(query, bpm, key)
+    return music_tool.find_samples(query, bpm, key, "any" if either else "all")
 
 
 REGISTRY["find_samples"] = find_samples
 SCHEMAS.append(
     _utility_schema(
         "find_samples",
-        "Search the user's own sample and loop library by name, BPM or key as written in file names ('find my loops around 150 BPM'). Also use it for 'update my sample index'. Read-only; approved folders only.",
-        {"query": "string", "bpm": "integer", "key": "string"},
+        "Search the user's own loops by name, BPM or key. Set either=true when the user says OR.",
+        {"query": "string", "bpm": "integer", "key": "string", "either": "boolean"},
         [],
     )
 )

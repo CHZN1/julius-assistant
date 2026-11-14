@@ -19,19 +19,65 @@ _BPM = re.compile(r"(?<![a-z])(?:bpm[ _-]?(\d{2,3})|(\d{2,3})[ _-]?bpm)(?![a-z0-
 _KEY = re.compile(r"(?<![A-Za-z])([A-G][#b]?)[ _-]?(maj(?:or)?|min(?:or)?|m)(?![a-z])")
 
 
-def allowlist() -> list[Path]:
-    """The folders and single audio files the user approved, as they exist now. No setting means nothing, and an entry the deny-list rejects is dropped."""
+VOLUMES = Path("/Volumes")
+
+
+def _volume_root(p: Path) -> Path | None:
+    """/Volumes/<name> for a path on an external drive, else None."""
+    try:
+        rel = p.relative_to(VOLUMES)
+    except ValueError:
+        return None
+    return VOLUMES / rel.parts[0] if rel.parts else None
+
+
+def entries() -> list[tuple[Path, str]]:
+    """Every approved folder or file with its state: "online" (there and readable), "offline" (it is on an external drive that is not connected: kept, never dropped), or "blocked" (the drive is connected but macOS will not let this program read it). A missing entry that is not on an external drive is a typo or a deleted file and is dropped, as is anything the deny-list rejects."""
     names = (config.load_config().get("music") or {}).get("index_allowlist") or []
-    out: list[Path] = []
+    out: list[tuple[Path, str]] = []
+    seen: set[str] = set()
     for n in names:
         p = Path(os.path.expanduser(str(n)))
-        if (
-            (p.is_dir() or (p.is_file() and p.suffix.casefold() in policy.AUDIO_EXT))
-            and policy.denied(p) is None
-            and p.resolve() not in [q.resolve() for q in out]
-        ):
-            out.append(p)
+        if policy.denied(p) is not None or str(p) in seen:
+            continue
+        vol = _volume_root(p)
+        try:
+            ok = p.is_dir() or (p.is_file() and p.suffix.casefold() in policy.AUDIO_EXT)
+            state = "online" if ok else None
+        except PermissionError:
+            state = "blocked"
+        if state is None and vol is not None and not vol.exists():
+            state = "offline"
+        if state:
+            seen.add(str(p))
+            out.append((p, state))
     return out
+
+
+def allowlist() -> list[Path]:
+    """The approved folders and single audio files that are readable right now."""
+    return [p for p, st in entries() if st == "online"]
+
+
+def _covering(p: Path, ents: list[tuple[Path, str]]) -> tuple[Path, str] | None:
+    for root, st in ents:
+        if p == root or root in p.parents:
+            return root, st
+        try:
+            r, rr = p.resolve(), root.resolve()
+        except OSError:
+            continue
+        if r == rr or rr in r.parents:
+            return root, st
+    return None
+
+
+def volume_label(path: Path) -> str:
+    vol = _volume_root(path)
+    labels = (config.load_config().get("music") or {}).get("volume_labels") or {}
+    if vol is None:
+        return "an external drive"
+    return str(labels.get(vol.name) or f"the drive {vol.name}")
 
 
 def _inside(p: Path, roots: list[Path]) -> bool:
@@ -66,7 +112,20 @@ def _db(path: Path | None = None) -> sqlite3.Connection:
     c.execute(
         "CREATE TABLE IF NOT EXISTS samples(path TEXT PRIMARY KEY, name TEXT, folder TEXT, ext TEXT, size INTEGER, mtime REAL, bpm INTEGER, key TEXT)"
     )
+    c.execute("CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v REAL)")
     return c
+
+
+STALE_SECONDS = 600
+
+
+def stale(db: Path | None = None) -> bool:
+    """True when the index has never been scanned or the last scan is older than ten minutes (a large drive is not walked on every question)."""
+    import time
+
+    with _db(db) as c:
+        r = c.execute("SELECT v FROM meta WHERE k='scanned'").fetchone()
+    return r is None or time.time() - r["v"] > STALE_SECONDS
 
 
 def scan(roots: list[Path] | None = None, db: Path | None = None) -> dict:
@@ -131,10 +190,14 @@ def scan(roots: list[Path] | None = None, db: Path | None = None) -> dict:
                 if seen >= MAX_FILES:
                     break
     keep = {r[0] for r in rows}
+    ents = entries()
+    online = [(p, st) for p, st in ents if st == "online" and any(p == u for u in use)]
     with _db(db) as c:
         c.executemany("INSERT OR REPLACE INTO samples VALUES (?,?,?,?,?,?,?,?)", rows)
+        c.execute("INSERT OR REPLACE INTO meta VALUES ('scanned', ?)", (__import__("time").time(),))
         old = [r["path"] for r in c.execute("SELECT path FROM samples")]
-        gone = [x for x in old if x not in keep]
+        # only a file that was in a folder we just read and is no longer there is dropped; entries on a drive that is unplugged (or blocked) keep every row
+        gone = [x for x in old if x not in keep and _covering(Path(x), online) is not None]
         c.executemany("DELETE FROM samples WHERE path=?", [(x,) for x in gone])
     return {"folders": len(use), "files": len(rows), "removed": len(gone), "refused": False}
 
@@ -145,25 +208,35 @@ def search(
     key: str = "",
     limit: int = 10,
     db: Path | None = None,
+    match: str = "all",
 ) -> list[dict]:
-    """Matches from the index, limited to what is inside the allowlist right now (a folder taken off the list stops showing at once)."""
-    allowed = allowlist()
-    if not allowed:
+    """Matches from the index, limited to what is inside the allowlist right now (an entry taken off the list stops showing at once). `match` "all" needs every filter given to match; "any" needs at least one (F minor OR about 180 BPM). Entries on a drive that is not connected are returned too, marked offline."""
+    ents = entries()
+    if not ents:
         return []
     words = [w for w in re.split(r"\W+", query.casefold()) if w]
+    any_mode = str(match).casefold() in ("any", "or", "either")
     out = []
     with _db(db) as c:
         for r in c.execute("SELECT * FROM samples ORDER BY name"):
             d = dict(r)
-            if not _inside(Path(d["path"]), allowed):
+            cov = _covering(Path(d["path"]), ents)
+            if cov is None:
                 continue
-            hay = (d["name"] + " " + Path(d["folder"]).name).casefold()
-            if words and not all(w in hay for w in words):
+            tests = []
+            if words:
+                hay = (d["name"] + " " + Path(d["folder"]).name).casefold()
+                tests.append(all(w in hay for w in words))
+            if bpm is not None:
+                tests.append(d["bpm"] is not None and abs(d["bpm"] - bpm) <= 3)
+            if key:
+                tests.append((d["key"] or "").casefold() == _norm_key(key))
+            if tests and not (any(tests) if any_mode else all(tests)):
                 continue
-            if bpm is not None and (d["bpm"] is None or abs(d["bpm"] - bpm) > 3):
-                continue
-            if key and (d["key"] or "").casefold() != _norm_key(key):
-                continue
+            d["state"] = cov[1]
+            d["offline"] = cov[1] != "online"
+            if d["offline"]:
+                d["where"] = volume_label(Path(d["path"]))
             out.append(d)
     return group(out)[: max(1, min(limit, 25))]
 

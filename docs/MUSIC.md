@@ -28,11 +28,13 @@ Ask: "what chords go with A minor", "give me a progression in G major", "what no
 - **Suggestions only.** Nothing is written to your projects, nothing is saved, and no song or artist is named or imitated: a request to write something "in the style of" a named living artist is declined.
 
 
-## Sample index (`julius/music/library.py`, tool `find_samples`, which also refreshes the index)
+## Sample index (`julius/music/library.py`, tool `find_samples`)
 
-Ask: "find my loops around 150 BPM", "do I have a loop in F minor", "update my sample index".
+Ask: "find my loops around 150 BPM", "do I have a loop in F minor".
 
 - **Only what you approve.** The index scans the folders and individual files in `[music] index_allowlist` in `julius.toml` and nothing else, ever: with no setting it scans nothing, a path outside the list is refused even if asked for, and taking an entry off the list hides it at once. A file entry approves that one file, not its neighbours (so only the CHZN1-labelled files of a bought pack can be listed, never the pack). Shipped list: the Free CHZN1 Diversity Loop Pack and New Mleodies 2 folders plus 13 individual CHZN1 files. Purchased or downloaded kits, other people's sounds and loose files are never indexed unless you add them. A sound that exists as both .mp3 and .wav shows as one entry with both formats.
 - **Read-only.** It reads names, sizes and dates, never the audio, and never renames, moves, writes or deletes anything in those folders. Symlinks are not followed, and the deny-list (Logic, GarageBand, `/Library/Audio`, plug-in and sample-library folders) still applies inside approved folders and rejects an allowlist entry that is on it. The index is one small file, `~/.julius/sample_index.sqlite3`.
 - **BPM and key are what the file name says** (`CHZN1_Cake_BPM160.wav`, `Dark_F#m_BPM140`). Measure the real values with `analyze_audio`.
 - Separate from `search_folders`, which only finds the file you name for a BPM/key question.
+- **"or" and "and".** `find_samples` takes `either`: false (default) needs every filter to match, true needs one ("F minor or about 180 BPM"). BPM matches within 3.
+- **Drives that are unplugged.** An approved path on `/Volumes/...` that is not mounted keeps all its index entries, marked offline; results say "that's on <label>, which isn't connected" (`[music] volume_labels`, e.g. `{"CHZN1 1" = "your CHZN drive"}`). Entries are never dropped because a drive is missing. If the drive is mounted but macOS blocks this program, the reply names the permission (Removable Volumes or Full Disk Access). The index refreshes itself on a search when it is more than ten minutes old.

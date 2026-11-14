@@ -188,6 +188,7 @@
 {"id": "r188", "cat": "theory", "text": "Show me a 12 bar blues in E.", "expect": {"path": "tool", "tool": "music_theory", "args_contain": ["blues"]}}
 {"id": "r189", "cat": "samples", "text": "Find my loops around 150 BPM.", "expect": {"path": "tool", "tool": "find_samples"}}
 {"id": "r190", "cat": "samples", "text": "Do I have any loop in F minor?", "expect": {"path": "tool", "tool": "find_samples"}}
-{"id": "r191", "cat": "samples", "text": "Update my sample index.", "expect": {"path": "tool", "tool": "find_samples"}}
 {"id": "r192", "cat": "samples", "text": "Show me my CHZN1 loops.", "expect": {"path": "tool", "tool": "find_samples"}}
 {"id": "r193", "cat": "samples", "text": "What's the BPM of CHZN1_Cake_BPM160.wav?", "expect": {"path": "tool", "tool": "analyze_audio"}}
+{"id": "r194", "cat": "samples", "text": "Do I have a loop in F minor or around 180 BPM?", "expect": {"path": "tool", "tool": "find_samples", "args_contain": ["either"]}}
+{"id": "r195", "cat": "samples", "text": "Find a loop at 150 BPM in G minor.", "expect": {"path": "tool", "tool": "find_samples"}}

@@ -182,3 +182,75 @@ class FileEntryTests(unittest.TestCase):
             )
             for banned in ("chzn drum samples", "boomin bass", "surge", "versace", "topsounds"):
                 self.assertNotIn(banned, low)
+
+
+class OrAndOfflineTests(unittest.TestCase):
+    def setUp(self):
+        self.d = Path(tempfile.mkdtemp())
+        self.mine = self.d / "Pack"
+        self.mine.mkdir()
+        for n in ("A_BPM180.wav", "B_Fm_BPM100.wav", "C_BPM100.wav", "D_Fm_BPM180.wav"):
+            (self.mine / n).write_bytes(b"x")
+        self.db = self.d / "i.sqlite3"
+
+    def names(self, **kw):
+        return sorted(h["name"] for h in library.search(limit=25, db=self.db, **kw))
+
+    def test_and_needs_both_filters_or_needs_either(self):
+        with cfg(self.mine):
+            library.scan(db=self.db)
+            self.assertEqual(self.names(key="F minor", bpm=180), ["D_Fm_BPM180"])
+            self.assertEqual(
+                self.names(key="F minor", bpm=180, match="any"),
+                ["A_BPM180", "B_Fm_BPM100", "D_Fm_BPM180"],
+            )
+            self.assertEqual(self.names(bpm=100, match="any"), ["B_Fm_BPM100", "C_BPM100"])
+
+    def test_the_tool_passes_or_through(self):
+        with cfg(self.mine), mock.patch.object(library, "DB_PATH", self.db):
+            both = tool.find_samples("", 180, "F minor", "all")
+            either = tool.find_samples("", 180, "F minor", "any")
+        self.assertEqual(both.count("\n- "), 1)
+        self.assertEqual(either.count("\n- "), 3)
+        self.assertIn("any of the filters", either)
+
+    def test_an_unplugged_drive_keeps_its_entries_and_says_so(self):
+        vols = self.d / "Volumes"
+        drive = vols / "CHZN1 1"
+        (drive / "Beats").mkdir(parents=True)
+        f = drive / "Beats" / "CHZN1_Drive_BPM150.wav"
+        f.write_bytes(b"x")
+        labels = {
+            "music": {
+                "index_allowlist": [str(drive / "Beats")],
+                "volume_labels": {"CHZN1 1": "your CHZN drive"},
+            }
+        }
+        with (
+            mock.patch.object(library, "VOLUMES", vols),
+            mock.patch.object(library.config, "load_config", return_value=labels),
+            mock.patch.object(library, "DB_PATH", self.db),
+        ):
+            self.assertEqual(library.scan(db=self.db)["files"], 1)
+            self.assertFalse(library.search("drive", db=self.db)[0]["offline"])
+            f.unlink()
+            (drive / "Beats").rmdir()
+            (drive).rmdir()  # the drive is unplugged
+            self.assertEqual(library.allowlist(), [])
+            r = library.scan(db=self.db)
+            self.assertEqual(r["removed"], 0)
+            hits = library.search("drive", db=self.db)
+            self.assertEqual(len(hits), 1)
+            self.assertTrue(hits[0]["offline"])
+            out = tool.find_samples("drive")
+            self.assertIn("that's on your CHZN drive, which isn't connected", out)
+
+    def test_a_missing_folder_that_is_not_on_a_drive_is_dropped(self):
+        with cfg(self.d / "gone"):
+            self.assertEqual(library.entries(), [])
+
+    def test_the_index_is_not_rewalked_on_every_question(self):
+        with cfg(self.mine):
+            self.assertTrue(library.stale(self.db))
+            library.scan(db=self.db)
+            self.assertFalse(library.stale(self.db))

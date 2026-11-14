@@ -177,28 +177,49 @@ def index_samples(**_) -> str:
     return f"Indexed {r['files']} audio files from {r['folders']} approved folder(s) or file(s); {r['removed']} no longer there. Names, sizes and dates only: nothing was opened, moved or changed."
 
 
-def find_samples(query: str = "", bpm: int = 0, key: str = "", **_) -> str:
-    """Search the user's own indexed samples by name, folder, BPM or key as written in the file names."""
+def find_samples(
+    query: str = "", bpm: int = 0, key: str = "", match: str = "all", refresh: bool = False, **_
+) -> str:
+    """Search the user's own indexed samples by name, folder, BPM or key as written in the file names. match="any" when the user says "or"."""
     from julius.music import library
 
-    if not library.allowlist():
+    if not library.entries():
         return "No sample folders or files are approved for indexing yet, so there is nothing to search."
     try:
-        library.scan()  # cheap name-only refresh so new files show up
-        hits = library.search(query, int(bpm) if bpm else None, key, limit=10)
+        if (
+            refresh or library.stale()
+        ):  # name-only refresh of the folders that are connected; unplugged drives keep their entries
+            library.scan()
+        hits = library.search(query, int(bpm) if bpm else None, key, limit=10, match=match)
     except Exception as exc:
         log.event("sample_index_failed", error=type(exc).__name__)
         return "I couldn't read the sample index."
+    blocked = [p for p, st in library.entries() if st == "blocked"]
+    note = (
+        f"\nmacOS is blocking this program from reading {library.volume_label(blocked[0])}; the permission is Removable Volumes or Full Disk Access in System Settings, Privacy & Security."
+        if blocked
+        else ""
+    )
     if not hits:
-        return "Nothing in your indexed samples matches that."
-    lines = [
-        f"- {h['name']} ({'+'.join(h['formats'])}; {Path(h['folder']).name.strip()}"
-        + (f", {h['bpm']} BPM in the name" if h["bpm"] else "")
-        + (f", {h['key']} in the name" if h["key"] else "")
-        + ")"
-        for h in hits
-    ]
+        return "Nothing in your indexed samples matches that." + note
+    lines = []
+    for h in hits:
+        bits = [h["name"] + " (" + "+".join(h["formats"]) + "; " + Path(h["folder"]).name.strip()]
+        if h["bpm"]:
+            bits.append(f"{h['bpm']} BPM in the name")
+        if h["key"]:
+            bits.append(f"{h['key']} in the name")
+        line = "- " + ", ".join(bits) + ")"
+        if h["offline"]:
+            line += f" [that's on {h['where']}, which isn't connected]"
+        lines.append(line)
+    how = (
+        "any of the filters"
+        if str(match).casefold() in ("any", "or", "either")
+        else "all the filters"
+    )
     return (
-        f"{len(hits)} match(es) from your own approved sample folders (BPM and key are only what the file names say; use analyze_audio to measure):\n"
+        f"{len(hits)} match(es) ({how}) from your own approved sample folders (BPM and key are only what the file names say; use analyze_audio to measure; an entry marked not connected is on a drive that is unplugged: say so):\n"
         + "\n".join(lines)
+        + note
     )
