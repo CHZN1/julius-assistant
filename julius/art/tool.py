@@ -7,7 +7,7 @@ import re
 from typing import Any
 
 from julius import log
-from julius.art import faces, pixel, source
+from julius.art import faces, filters, pixel, source
 
 BEFORE_SIDE = 640  # the "before" picture on the card is a downsized copy, kept in memory only
 PREVIEW_SIDE = 1024  # the card shows the art at this size at most; the saved file uses the zoom the user asked for
@@ -270,22 +270,100 @@ def pixel_art_from_words(source_name: str = "", options: str = "") -> str:
     return pixel_art(source_name, **parse_options(options))
 
 
-STYLES = ("pixel_art",)  # step C adds the photo filters here
+STYLES = ("pixel_art", *filters.STYLES)
+
+_STYLE_WORDS = (  # first match wins; pixel art words come first so "retro sprite" and "Game Boy" stay pixel art
+    ("pixel_art", r"pixel|\b(?:8|16)\s?bit\b|sprite|retro|game ?boy|\bgb\b"),
+    ("pop_art", r"pop ?art|warhol"),
+    ("comic", r"comic|halftone|half tone|graphic novel|manga|\bink(?:ed)?\b"),
+    ("pencil", r"pencil|sketch|charcoal|line drawing"),
+    ("watercolor", r"water ?colou?r|gouache|\bwash\b"),
+    ("cel_shade", r"\bcel\b|cel[- ]?shad|toon|cartoon|animated|anime"),
+)
 
 
 def style_name(text: str) -> str:
-    """The style the model named, in whatever words ("pixel art", "8-bit", "retro sprite", "game boy"), as one of STYLES, or "" when there is no such style yet."""
+    """The style the model named, in whatever words ("pixel art", "8-bit", "comic book", "pencil sketch"), as one of STYLES, or "" when there is no such style."""
     t = re.sub(r"[^a-z0-9]+", " ", (text or "pixel_art").casefold()).strip()
-    if not t or re.search(r"pixel|\b(?:8|16)\s?bit\b|sprite|retro|game ?boy|\bgb\b", t):
+    if not t:
         return "pixel_art"
+    for name, pattern in _STYLE_WORDS:
+        if re.search(pattern, t):
+            return name
     return ""
+
+
+def _filter_card(res: Any, before: Any, label: str, s: filters.FilterSettings) -> bool:
+    from julius.ui_bridge import charts
+
+    if charts._panel is None:
+        return False
+    panel, files, turn_fn = charts._panel
+    if files is None:
+        return False
+    shown = filters.png(res)
+    ref = files.put_memory(shown, "png", keep=16)
+    lines = [
+        f"Style: {filters.LABELS[s.style]}",
+        f"Line weight: {s.line}",
+        f"Smoothing: {s.smooth}",
+    ]
+    if s.colors:
+        lines.insert(1, f"Colours: {s.colors}")
+    card = {
+        "title": f"{filters.LABELS[s.style]}: {label}",
+        "kind": "filter",
+        "before": files.put_memory(_before_png(before), "png", keep=16),
+        "after": ref,
+        "export": ref,
+        "small": ref,
+        "alt": f"{filters.LABELS[s.style]} version of {label}",
+        "summary": f"{res.width}×{res.height} px, {filters.LABELS[s.style].lower()}",
+        "settings": lines,
+        "palette": [],
+    }
+    return panel.art(card, turn=turn_fn()) is not None
+
+
+def filter_style(
+    source_name: str = "",
+    style: str = "cel_shade",
+    colors: int = 0,
+    line: int = 0,
+    smooth: int = -1,
+) -> str:
+    """One of the photo filters on the user's picture: loaded, restyled on this computer, shown as a before/after card."""
+    try:
+        img, label, fname = source.load(source_name)
+        res, s = filters.apply(img, filters.FilterSettings(style, colors, line, smooth))
+    except (source.ArtProblem, pixel.PixelProblem) as exc:
+        return str(exc)
+    except Exception as exc:
+        log.event("filter_failed", error=type(exc).__name__)
+        return "I couldn't restyle that."
+    shown = False
+    try:
+        shown = _filter_card(res, img, label, s)
+    except Exception as exc:
+        log.event("filter_card_failed", error=type(exc).__name__)
+    log.event("image_filter", style=s.style, w=res.width, h=res.height)
+    return (
+        f"{filters.LABELS[s.style]} version of {fname}: {res.width} by {res.height} pixels"
+        + (f", {s.colors} colours" if s.colors else "")
+        + f", line weight {s.line}, smoothing {s.smooth}. "
+        + (
+            "The before and after are in the side panel; say save this card to keep the PNG in your saved folder."
+            if shown
+            else "No side panel is open, so there is nothing to save yet."
+        )
+    )
 
 
 def image_style(
     source_name: str = "",
     style: str = "pixel_art",
     size: int = 0,
-    colors: int = 16,
+    colors: int = 0,
     palette: str = "",
     outline: bool = False,
     transparent: bool = False,
@@ -294,6 +372,8 @@ def image_style(
     full_photo: bool = False,
     compare: bool = False,
     retro: bool = False,
+    line: int = 0,
+    smooth: int = -1,
 ) -> str:
     """Restyle the user's own picture. Never creates art from scratch: with no picture named it asks for one."""
     chosen = style_name(style)
@@ -301,11 +381,13 @@ def image_style(
         return (
             f"I can only do these styles so far: {', '.join(s.replace('_', ' ') for s in STYLES)}."
         )
+    if chosen != "pixel_art":
+        return filter_style((source_name or "").strip() or "dropped", chosen, colors, line, smooth)
     # no picture named: the one dropped on the orb, or a question asking for one (nothing is ever drawn from nothing)
     return pixel_art(
         (source_name or "").strip() or "dropped",
         size,
-        colors,
+        colors or 16,
         palette,
         outline,
         transparent,

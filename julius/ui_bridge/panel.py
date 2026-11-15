@@ -310,7 +310,7 @@ def _v_vision(msg: dict, errors: list[str]) -> None:
         errors.append("panel.vision: bad source")
 
 
-ART_KINDS = ("pixel", "compare")
+ART_KINDS = ("pixel", "compare", "filter")
 MAX_ART_PALETTE = 64
 HEX6 = re.compile(r"^[0-9A-F]{6}$")
 

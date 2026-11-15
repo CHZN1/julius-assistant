@@ -216,3 +216,8 @@
 {"id": "r217", "cat": "art", "text": "Hey Julius, snap a picture of me.", "expect": {"path": "shortcut", "tool": "take_photo"}}
 {"id": "r218", "cat": "art", "text": "Make my selfie pixel art, gameboy palette, retro sprite.", "expect": {"path": "shortcut", "tool": "pixel_art"}}
 {"id": "r219", "cat": "art", "text": "Show me a pixel art comparison grid of this photo.", "expect": {"path": "shortcut", "tool": "pixel_art"}}
+{"id": "r220", "cat": "art", "text": "Make my selfie look like a pencil sketch.", "expect": {"path": "tool", "tool": "image_style"}, "fragile": true}
+{"id": "r221", "cat": "art", "text": "Turn this photo into a comic book panel.", "expect": {"path": "tool", "tool": "image_style"}, "fragile": true}
+{"id": "r222", "cat": "art", "text": "Give this picture a watercolor look.", "expect": {"path": "tool", "tool": "image_style"}, "fragile": true}
+{"id": "r223", "cat": "art", "text": "Make this photo pop art.", "expect": {"path": "tool", "tool": "image_style"}, "fragile": true}
+{"id": "r224", "cat": "art", "text": "Make this look like a cartoon, cel shaded.", "expect": {"path": "tool", "tool": "image_style"}, "fragile": true}

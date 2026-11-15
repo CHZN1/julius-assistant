@@ -471,7 +471,9 @@ def save_art_card(
             k += 1
             folder = base / f"{name} ({k})"
         folder.mkdir()
-        if card.get("kind") == "compare":
+        if card.get("kind") == "filter":
+            (folder / "restyled.png").write_bytes(export[0])
+        elif card.get("kind") == "compare":
             (folder / "pixel-art-options.png").write_bytes(export[0])
         else:
             (folder / "pixel-art.png").write_bytes(export[0])

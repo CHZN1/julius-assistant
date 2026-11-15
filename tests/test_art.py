@@ -565,6 +565,8 @@ class CommandTests(unittest.TestCase):
                 "full_photo",
                 "compare",
                 "retro",
+                "line",
+                "smooth",
             },
         )
         self.assertEqual(schema["function"]["parameters"]["required"], ["source", "style"])
@@ -581,9 +583,20 @@ class CommandTests(unittest.TestCase):
             "pixelated",
         ):
             self.assertEqual(art_tool.style_name(t), "pixel_art", t)
-        for t in ("watercolor", "oil painting", "anime"):
+        for t in ("oil painting", "stained glass", "vaporwave"):
             self.assertEqual(art_tool.style_name(t), "", t)
             self.assertIn("only do these styles so far", art_tool.image_style("x.png", t))
+        for t, want in (
+            ("comic book", "comic"),
+            ("halftone ink", "comic"),
+            ("pencil sketch", "pencil"),
+            ("pop art", "pop_art"),
+            ("watercolour", "watercolor"),
+            ("cartoon", "cel_shade"),
+            ("cel shaded", "cel_shade"),
+            ("retro sprite", "pixel_art"),
+        ):
+            self.assertEqual(art_tool.style_name(t), want, t)
 
     def test_image_style_with_no_picture_asks_for_one_and_never_draws(self):
         source.set_drop_source(lambda: None)

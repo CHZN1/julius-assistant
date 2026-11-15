@@ -41,6 +41,20 @@ A photo with a face in it is a **portrait**: Apple's Vision framework finds the 
 
 "Take a photo" / "take a selfie" (also the camera button in the orb) starts a 3-second countdown with a live, mirrored preview in a **panel.camera** card, then takes one full frame. The helper (`visiond live 3`) keeps the camera session open the whole time, so the camera light is on while the preview runs and while the photo is taken, and goes off when the helper exits. Preview frames and the photo come back over the helper's stdout into memory (preview frames in a small separate slot of three, so they never push real pictures out); nothing is written to disk. The photo is held in memory for an hour and is "this" for the art tools until something else is dropped or another photo is taken: "take a selfie and make it pixel art" does both. "Save this card" writes `photo.jpg` and a note to `~/Julius Saved/`; nothing else saves it. The `[vision] camera = false` setting switches it off. "Take a photo" no longer goes to the vision look (which describes a camera frame with Claude); "what am I holding" still does.
 
+## Photo style filters (step C)
+
+`image_style` with `style` = `cel_shade`, `comic`, `pencil`, `pop_art` or `watercolor` (any wording: "comic book", "pencil sketch", "make it a cartoon"). Pillow and numpy only (no OpenCV or scikit-image, so no new licence question); the same input and settings always give the same picture. The picture is worked at up to 900 px on the long side and shown as a **panel.art** card of kind `filter` (before and after, settings as text). "Save this card" writes `restyled.png` and `card.md`. Transparent areas become white paper. Three knobs, each used where it makes sense:
+
+| Style | What it does | colors | line | smooth |
+|---|---|---|---|---|
+| cel_shade | bilateral smoothing, flat colours, black ink lines on strong edges | 6 | 2 | 3 |
+| comic | flat colours, a 45-degree halftone of dots in the shadows, ink lines | 4 | 2 | 2 |
+| pencil | colour-dodge sketch on light paper with grain | none | 2 | 1 |
+| pop_art | luminance in bands mapped to a bold fixed palette, thick ink | 4 | 3 | 2 |
+| watercolor | washes of flat colour, pigment at the edges, paper texture | 14 | 1 | 4 |
+
+`colors` is 2 to 32, `line` 1 to 5 (ink weight, or pencil softness), `smooth` 0 to 5. Left out, each style uses its own defaults.
+
 ## Not built yet
 
 C: style filters (cel-shade, comic ink, pencil sketch, posterize, watercolor-ish). D: tracing guide and drawing digitizer. E: logo to SVG with vtracer. F: pixel grid editor, sprite-sheet slicing and assembly, animation preview. OpenCV and scikit-image licences get verified before C uses either.
