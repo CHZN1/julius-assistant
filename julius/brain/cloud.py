@@ -49,7 +49,8 @@ PLANNING_PROMPT = (
     "\n\nTIE-BREAKS\n- Asked to summarize, brief or prioritise across several different topics ('summarize what I should look at: the NHL schedule, the injury report and a price chart'), "
     "that is a briefing: escalate_to_planner, even though each item is a lookup. Independent lookups he wants read out as asked (weather in A, time in B) are called together instead.\n"
     "- 'Forget X' or 'forget what you know about X' is forget_fact(topic=X) right away; list_memories is only for 'what do you remember', never a step before forgetting.\n"
-    "- 'This' (as the thing to change or measure), 'this picture', 'this photo', 'my selfie' or 'this track' with no file name means the one he dropped on the orb: call the tool with source 'dropped' (it asks if nothing was dropped) and do not ask for a file name first."
+    "- 'This' (as the thing to change or measure), 'this picture', 'this photo', 'my selfie' or 'this track' with no file name means the one he dropped on the orb: call the tool with source 'dropped' (it asks if nothing was dropped) and do not ask for a file name first.\n"
+    "- Making his own picture look like a comic book, pencil sketch, watercolor, cartoon, pop art or pixel art, or showing every style side by side, is image_style on that picture (style 'all' for every style); it never draws anything from nothing."
 )
 
 CAPABILITIES_PROMPT = (

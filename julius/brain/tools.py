@@ -904,7 +904,7 @@ REGISTRY["image_style"] = image_style
 SCHEMAS.append(
     _utility_schema(
         "image_style",
-        "Restyle a picture the user provides (style: pixel_art, cel_shade, comic, pencil, pop_art or watercolor). Only transforms their image, never creates art from scratch. source: its file name, or 'dropped' when he names none (the tool then asks if nothing was dropped). Portraits are cropped to head and shoulders on this Mac (full_photo=true skips that); compare=true shows a grid of sizes and looks; retro=true gives the flat, outlined sprite look; line (1-5) and smooth (0-5) tune the photo styles; leave size, colors, line and smooth out for the defaults.",
+        "Restyle a picture the user provides (style: pixel_art, cel_shade, comic, pencil, pop_art or watercolor; style 'all' shows all five photo styles side by side). Only transforms their image, never creates art from scratch. source: its file name, or 'dropped' when he names none (the tool then asks if nothing was dropped). Portraits are cropped to head and shoulders on this Mac (full_photo=true skips that); compare=true shows a grid of sizes and looks; retro=true gives the flat, outlined sprite look; line (1-5) and smooth (0-5) tune the photo styles; leave size, colors, line and smooth out for the defaults.",
         {
             "source": "string",
             "style": "string",

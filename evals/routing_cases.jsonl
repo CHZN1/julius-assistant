@@ -221,3 +221,9 @@
 {"id": "r222", "cat": "art", "text": "Give this picture a watercolor look.", "expect": {"path": "tool", "tool": "image_style"}, "fragile": true}
 {"id": "r223", "cat": "art", "text": "Make this photo pop art.", "expect": {"path": "tool", "tool": "image_style"}, "fragile": true}
 {"id": "r224", "cat": "art", "text": "Make this look like a cartoon, cel shaded.", "expect": {"path": "tool", "tool": "image_style"}, "fragile": true}
+{"id": "r225", "cat": "art", "text": "Use the camera to take my picture.", "expect": {"path": "shortcut", "tool": "take_photo"}}
+{"id": "r226", "cat": "art", "text": "Can you grab a quick selfie?", "expect": {"path": "shortcut", "tool": "take_photo"}}
+{"id": "r227", "cat": "art", "text": "Take a selfie and make it a pencil sketch.", "expect": {"path": "shortcut", "tool": "take_photo"}}
+{"id": "r228", "cat": "art", "text": "Show me all five styles of my selfie side by side.", "expect": {"path": "tool", "tool": "image_style"}, "fragile": true}
+{"id": "r229", "cat": "art", "text": "Try every photo style on this picture so I can compare.", "expect": {"path": "tool", "tool": "image_style"}, "fragile": true}
+{"id": "r230", "cat": "art", "text": "What camera is best for portraits?", "expect": {"path": "direct"}, "fragile": true}

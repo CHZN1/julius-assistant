@@ -56,6 +56,7 @@ def _card(res: pixel.Result, before: Any, label: str, scale: int, crop: str = ""
             f"Palette: {s.palette or str(s.colors) + ' colours from the picture'}",
             f"Outline: {'on' if s.outline else 'off'}",
             f"Dither: {'on' if s.dither else 'off'}",
+            f"Look: {'retro sprite' if s.retro else 'smooth'}",
             *([f"Crop: {crop}"] if crop else []),
             f"Background: {'transparent' if res.has_alpha else 'kept'}",
             f"Export: {used}× nearest neighbour",
@@ -148,7 +149,7 @@ def pixel_art(
     dither: bool = False,
     full: bool = False,
     compare: bool = False,
-    retro: bool = False,
+    retro: bool | None = None,
 ) -> str:
     """size 0 means the default: 64 for a portrait (a face was found and the picture cropped to head and shoulders), 48 otherwise."""
     try:
@@ -179,6 +180,10 @@ def pixel_art(
                     else "No side panel is open, so there is nothing to show."
                 )
             )
+        if (
+            retro is None
+        ):  # a portrait defaults to the retro sprite look (flat tones, despeckle, bold outline); "smooth" turns it off
+            retro = portrait
         want = int(size or 0) or (PORTRAIT_SIZE if portrait else DEFAULT_SIZE)
         if portrait:
             want = min(want, PORTRAIT_MAX)
@@ -212,6 +217,7 @@ def pixel_art(
         + f": {res.width} by {res.height} pixels, {len(res.palette)} colours"
         + (f" ({s.palette} palette)" if s.palette else "")
         + (", outlined" if s.outline else "")
+        + (", retro sprite look" if s.retro else "")
         + (", dithered" if s.dither else "")
         + (", transparent background" if res.has_alpha else "")
         + f", exported at {s.scale}× so it stays crisp."
@@ -256,9 +262,10 @@ def parse_options(text: str) -> dict[str, Any]:
             t,
         )
     )
-    out["retro"] = bool(
-        re.search(r"\bretro\b|\bsprite\b|\bchunky\b|\bgame ?boy (?:game|sprite)\b", t)
-    )
+    if re.search(r"\bsmooth\b|\bdetailed\b|\bno retro\b|\bnot retro\b|\bphoto ?like\b", t):
+        out["retro"] = False  # asked for the plain look
+    elif re.search(r"\bretro\b|\bsprite\b|\bchunky\b|\bgame ?boy (?:game|sprite)\b", t):
+        out["retro"] = True  # otherwise left out: a portrait gets the retro look by default
     out["compare"] = bool(re.search(r"\bcompar(?:e|ison|ing)\b|\bcomparison grid\b|\boptions\b", t))
     out["transparent"] = bool(
         re.search(r"transparen|no background|cut ?out|remove (?:the )?background", t)
@@ -274,6 +281,7 @@ STYLES = ("pixel_art", *filters.STYLES)
 
 _STYLE_WORDS = (  # first match wins; pixel art words come first so "retro sprite" and "Game Boy" stay pixel art
     ("pixel_art", r"pixel|\b(?:8|16)\s?bit\b|sprite|retro|game ?boy|\bgb\b"),
+    ("all_styles", r"\ball\b|\bevery\b|\beach\b|\bfive\b|side by side|\bstyles\b"),
     ("pop_art", r"pop ?art|warhol"),
     ("comic", r"comic|halftone|half tone|graphic novel|manga|\bink(?:ed)?\b"),
     ("pencil", r"pencil|sketch|charcoal|line drawing"),
@@ -325,6 +333,85 @@ def _filter_card(res: Any, before: Any, label: str, s: filters.FilterSettings) -
     return panel.art(card, turn=turn_fn()) is not None
 
 
+def _style_grid(img: Any) -> tuple[bytes, Any]:
+    """The original and all five styles at their defaults, each labelled, in one picture (3 columns, 2 rows)."""
+    from PIL import Image, ImageDraw, ImageFont
+
+    try:
+        font = ImageFont.load_default(size=14)
+    except TypeError:
+        font = ImageFont.load_default()
+    tile, pad, label_h = 330, 10, 24
+    base = img.convert("RGBA")
+    flat = Image.new("RGB", base.size, (255, 255, 255))
+    flat.paste(base, mask=base.getchannel("A"))
+    tiles = [(flat, "Original")]
+    for st in filters.STYLES:
+        res, _ = filters.apply(img, filters.FilterSettings(st))
+        tiles.append((res, filters.LABELS[st]))
+    cols = 3
+    rows = (len(tiles) + cols - 1) // cols
+    shrunk = []
+    for im, name in tiles:
+        im = im.copy()
+        im.thumbnail((tile, tile))
+        shrunk.append((im, name))
+    cell_h = max(im.height for im, _ in shrunk) + label_h
+    sheet = Image.new(
+        "RGB", (cols * (tile + pad) + pad, rows * (cell_h + pad) + pad), (245, 245, 245)
+    )
+    draw = ImageDraw.Draw(sheet)
+    for i, (im, name) in enumerate(shrunk):
+        x = pad + (i % cols) * (tile + pad)
+        y = pad + (i // cols) * (cell_h + pad)
+        sheet.paste(im, (x + (tile - im.width) // 2, y))
+        draw.text((x + 2, y + im.height + 4), name, fill=(40, 40, 40), font=font)
+    return filters.png(sheet), sheet
+
+
+def filter_compare(source_name: str = "dropped") -> str:
+    """All five styles on one card, next to the original, so they can be judged in one look."""
+    from julius.ui_bridge import charts
+
+    try:
+        img, label, fname = source.load(source_name)
+        data, sheet = _style_grid(img)
+    except (source.ArtProblem, pixel.PixelProblem) as exc:
+        return str(exc)
+    except Exception as exc:
+        log.event("filter_compare_failed", error=type(exc).__name__)
+        return "I couldn't restyle that."
+    shown = False
+    try:
+        if charts._panel is not None and charts._panel[1] is not None:
+            panel, files, turn_fn = charts._panel
+            ref = files.put_memory(data, "png", keep=16)
+            card = {
+                "title": f"All five styles: {label}",
+                "kind": "compare",
+                "before": files.put_memory(_before_png(img), "png", keep=16),
+                "after": ref,
+                "export": ref,
+                "small": ref,
+                "alt": "The original and five restyled versions: cel-shade, comic ink, pencil sketch, pop art, watercolor",
+                "summary": "original, cel-shade, comic ink, pencil sketch, pop art, watercolor (each at its defaults)",
+                "settings": ["Each style at its own default colours, line weight and smoothing"],
+                "palette": [],
+            }
+            shown = panel.art(card, turn=turn_fn()) is not None
+    except Exception as exc:
+        log.event("filter_compare_card_failed", error=type(exc).__name__)
+    log.event("image_filter_compare")
+    return (
+        f"All five styles for {fname}: cel-shade, comic ink, pencil sketch, pop art and watercolor, next to the original. "
+        + (
+            "It's in the side panel. Name one to make it bigger, e.g. the pencil sketch with thicker lines."
+            if shown
+            else "No side panel is open, so there is nothing to show."
+        )
+    )
+
+
 def filter_style(
     source_name: str = "",
     style: str = "cel_shade",
@@ -371,7 +458,7 @@ def image_style(
     dither: bool = False,
     full_photo: bool = False,
     compare: bool = False,
-    retro: bool = False,
+    retro: bool | None = None,
     line: int = 0,
     smooth: int = -1,
 ) -> str:
@@ -381,6 +468,8 @@ def image_style(
         return (
             f"I can only do these styles so far: {', '.join(s.replace('_', ' ') for s in STYLES)}."
         )
+    if chosen == "all_styles":
+        return filter_compare((source_name or "").strip() or "dropped")
     if chosen != "pixel_art":
         return filter_style((source_name or "").strip() or "dropped", chosen, colors, line, smooth)
     # no picture named: the one dropped on the orb, or a question asking for one (nothing is ever drawn from nothing)

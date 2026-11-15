@@ -144,6 +144,22 @@ class FilterToolTests(unittest.TestCase):
         self.run_style("comic book", colors=9)
         self.assertIn("Colours: 9", self.sent[-1]["settings"])
 
+    def test_all_five_styles_come_on_one_card_with_the_original(self):
+        said = self.run_style("all five styles")
+        card = self.sent[-1]
+        self.assertEqual(pn.validate(card), [])
+        self.assertEqual(card["kind"], "compare")
+        self.assertIn("All five styles", said)
+        data, _ = self.files.bytes_of(card["after"])
+        import io
+
+        im = Image.open(io.BytesIO(data))
+        self.assertGreater(im.width, 3 * 300)
+        self.assertGreater(im.height, 2 * 150)  # 6 tiles: the original and five styles
+        self.assertEqual([p for p in (self.root / "p").iterdir() if p.is_file()], [])
+        for words in ("every style", "side by side", "all of them"):
+            self.assertEqual(art_tool.style_name(words), "all_styles", words)
+
     def test_pixel_art_still_gets_its_default_colours(self):
         said = self.run_style("pixel_art")
         self.assertIn("Pixel art from me.png", said)

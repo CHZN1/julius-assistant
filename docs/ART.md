@@ -37,9 +37,13 @@ A photo with a face in it is a **portrait**: Apple's Vision framework finds the 
 
 "Show me a pixel art comparison grid of this photo" (or `compare=true`) shows one card with nine labelled variants: 32, 48 and 64 px, in rows *smooth*, *dither* and *retro sprite*; palette `gameboy` unless another is named. Pick one with "48 pixels, retro".
 
+### Portrait default
+
+A portrait (a face was found and the picture cropped) defaults to 64 px and the **retro sprite look** (flat tones, speckle removed, bold outline); "smooth", "detailed" or `retro=false` turns it off, and a picture with no face keeps the smooth 48 px default.
+
 ## Camera
 
-"Take a photo" / "take a selfie" (also the camera button in the orb) starts a 3-second countdown with a live, mirrored preview in a **panel.camera** card, then takes one full frame. The helper (`visiond live 3`) keeps the camera session open the whole time, so the camera light is on while the preview runs and while the photo is taken, and goes off when the helper exits. Preview frames and the photo come back over the helper's stdout into memory (preview frames in a small separate slot of three, so they never push real pictures out); nothing is written to disk. The photo is held in memory for an hour and is "this" for the art tools until something else is dropped or another photo is taken: "take a selfie and make it pixel art" does both. "Save this card" writes `photo.jpg` and a note to `~/Julius Saved/`; nothing else saves it. The `[vision] camera = false` setting switches it off. "Take a photo" no longer goes to the vision look (which describes a camera frame with Claude); "what am I holding" still does.
+"Take a photo" / "take a selfie" (also the camera button in the orb) starts a 3-second countdown with a live, mirrored preview in a **panel.camera** card, then takes one full frame. The helper (`visiond live 3`) keeps the camera session open the whole time, so the camera light is on while the preview runs and while the photo is taken, and goes off when the helper exits. Preview frames and the photo come back over the helper's stdout into memory (preview frames in a small separate slot of three, so they never push real pictures out); nothing is written to disk. The photo is held in memory for an hour and is "this" for the art tools until something else is dropped or another photo is taken: "take a selfie and make it pixel art" does both. "Save this card" writes `photo.jpg` and a note to `~/Julius Saved/`; nothing else saves it. The `[vision] camera = false` setting switches it off. The camera buttons (one beside the typing box and Send, one beside the keyboard button) say the same words as speaking them. The orb is told when the camera cannot be used (a `panel.camera_status` feed message: `[vision] camera = false`, or macOS permission denied, learned from the first failed attempt): the buttons dim, the tooltip says why instead of "Take a photo", and a click shows the reason. A denied-permission button still tries again on click, in case access was granted since. "Take a photo" no longer goes to the vision look (which describes a camera frame with Claude); "what am I holding" still does.
 
 ## Photo style filters (step C)
 
@@ -52,6 +56,8 @@ A photo with a face in it is a **portrait**: Apple's Vision framework finds the 
 | pencil | colour-dodge sketch on light paper with grain | none | 2 | 1 |
 | pop_art | luminance in bands mapped to a bold fixed palette, thick ink | 4 | 3 | 2 |
 | watercolor | washes of flat colour, pigment at the edges, paper texture | 14 | 1 | 4 |
+
+Say "show me all five styles" (`style` `all`) for one card with the original and all five at their defaults, side by side. "Take a selfie and make it a pencil sketch" takes the photo and applies the style in one go.
 
 `colors` is 2 to 32, `line` 1 to 5 (ink weight, or pencil softness), `smooth` 0 to 5. Left out, each style uses its own defaults.
 

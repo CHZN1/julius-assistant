@@ -111,7 +111,15 @@ def handle_camera(s: Session, text: str) -> str | None:
             turn=s.turn,
         )
         if req["then"] and said.startswith("Got it"):
-            return commands.handle(req["then"]) or said
+            from julius.art import tool as art_tool
+
+            pixel = commands.handle(req["then"])
+            if pixel is not None:
+                return pixel
+            style = art_tool.style_name(req["then"])
+            if style and style != "pixel_art":
+                return art_tool.image_style("", req["then"])
+            return said
         return said
     except Exception as exc:
         log.console(f"  [camera failed: {type(exc).__name__}: {exc}]", flush=True)

@@ -244,6 +244,10 @@ def setup_panel(s: Session) -> None:
     from julius.ui_bridge import charts
 
     charts.set_panel(s.panel_hub, s.panel_files, lambda: s.turn)
+    if (config.load_config().get("vision") or {}).get("camera", True) is False:
+        s.panel_hub.set_camera_status(
+            False, "The camera is switched off in my settings ([vision] camera).", "settings"
+        )
     from julius.art import source as art_source
     from julius.music import tool as music_tool
 

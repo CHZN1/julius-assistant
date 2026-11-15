@@ -113,6 +113,7 @@ SCHEMAS: dict[str, dict[str, str]] = {
         "palette": "list",
     },
     "panel.camera": {"title": "str", "phase": "str", "count": "int", "image": "str", "note": "str"},
+    "panel.camera_status": {"enabled": "bool", "reason": "str", "cause": "str"},
     "panel.theory": {
         "title": "str",
         "kind": "str",
@@ -369,6 +370,7 @@ _EXTRA_CHECKS: dict[str, Callable[[dict, list[str]], None]] = {
     "panel.theory": _v_theory,
     "panel.art": _v_art,
     "panel.camera": _v_camera,
+    "panel.camera_status": lambda m, e: None,
     "panel.images": lambda m, e: _v_images(m["images"], e),
     "panel.clear": _v_clear,
 }
@@ -737,6 +739,28 @@ class PanelHub:
         }
         return self._publish("panel.camera", body, turn)
 
+    def set_camera_status(self, enabled: bool, reason: str = "", cause: str = "") -> None:
+        """Whether the camera button can be used, and why not: switched off in settings, or permission denied. Not a card: the orb enables or disables its camera buttons from it,
+        and a reconnecting client gets the latest in the hello snapshot."""
+        reason = clean(reason, 160)
+        cause = cause if cause in ("settings", "permission") else ""
+        state = {"enabled": bool(enabled), "reason": reason, "cause": cause}
+        with self._lock:
+            if getattr(self, "camera_state", None) == state:
+                return
+        seq, pid = self._next()
+        msg = {
+            "type": "panel.camera_status",
+            "t": round(self.clock(), 3),
+            "panel_id": pid,
+            "turn": None,
+            "seq": seq,
+            **state,
+        }
+        if self._emit(msg):
+            with self._lock:
+                self.camera_state = state
+
     def camera_update(
         self,
         target: str,
@@ -987,7 +1011,10 @@ class PanelHub:
     def snapshot(self) -> dict:
         """The `hello` extras: remembered cards (oldest first) and the file-server base."""
         with self._lock:
-            return {"cards": list(self.cards.values()), "base": self.base}
+            out = {"cards": list(self.cards.values()), "base": self.base}
+            if getattr(self, "camera_state", None):
+                out["camera_status"] = dict(self.camera_state)
+            return out
 
     def lookup(self, panel_id: str | None = None) -> dict | None:
         """A remembered card (the newest when no id) for typed commands like "open source 3"."""

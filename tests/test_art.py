@@ -382,6 +382,14 @@ class PortraitTests(unittest.TestCase):
         self.assertIn("cropped to head and shoulders", said)
         card = self.sent[-1]
         self.assertTrue(any(x == "Crop: head and shoulders" for x in card["settings"]))
+        self.assertIn(
+            "Look: retro sprite", card["settings"]
+        )  # a portrait defaults to the retro look
+        self.assertIn("Outline: on", card["settings"])  # which includes the bold outline
+        self.run_tool(retro=False)
+        self.assertIn("Look: smooth", self.sent[-1]["settings"])
+        self.run_tool(face=False)
+        self.assertIn("Look: smooth", self.sent[-1]["settings"])  # no face, no retro default
         self.assertIn("64 by", said)
         self.assertIn("128 by", self.run_tool(size=500))
         said = self.run_tool(full=True)
@@ -504,7 +512,6 @@ class CommandTests(unittest.TestCase):
                 "dither": False,
                 "full": False,
                 "compare": False,
-                "retro": False,
             },
         )
         d = art_tool.parse_options("")
@@ -515,11 +522,12 @@ class CommandTests(unittest.TestCase):
                 "transparent": False,
                 "dither": False,
                 "full": False,
-                "retro": False,
                 "compare": False,
             },
         )
         self.assertTrue(art_tool.parse_options("make it retro")["retro"])
+        self.assertFalse(art_tool.parse_options("smooth, 64 pixels")["retro"])
+        self.assertNotIn("retro", art_tool.parse_options("64 pixels"))
         self.assertTrue(art_tool.parse_options("gameboy, dither on")["dither"])
         self.assertFalse(art_tool.parse_options("gameboy, dither off")["dither"])
         self.assertFalse(art_tool.parse_options("no dithering please")["dither"])

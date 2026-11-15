@@ -21,7 +21,7 @@ COUNTDOWN_S = 3
 _LEAD = r"^\s*(?:(?:please|hey julius|julius|okay|ok|now|then|and)[ ,]+)*(?:(?:can|could|would) you |i (?:want|need|would like) you to |i want to |i'd like to |let's |lets )?(?:please )?"
 _TAKE = re.compile(
     _LEAD
-    + r"(?:take|snap|grab|shoot)\s+(?:me\s+)?(?:a|an|one|another|my|the)?\s*(?:new |quick |fresh )?(?:selfie|photo|picture|pic|portrait)\b(?!\s+of\s+(?!me\b|myself\b))",
+    + r"(?:use (?:the |my )?(?:camera|webcam) to )?(?:take|snap|grab|shoot)\s+(?:me\s+)?(?:a|an|one|another|my|the)?\s*(?:new |quick |fresh )?(?:selfie|photo|picture|pic|portrait)\b(?!\s+of\s+(?!me\b|myself\b))",
     re.I,
 )
 _QUESTION = re.compile(
@@ -148,10 +148,18 @@ def take(
     try:
         photo = stream(seconds, on_frame, popen, binary)
     except CameraProblem as e:
+        if shown and "permission" in str(e):
+            panel.set_camera_status(
+                False,
+                "Camera permission is off. Allow it in System Settings, Privacy and Security, Camera.",
+                "permission",
+            )
         if card:
             panel.camera_update(card, phase="failed", count=0, summary=str(e))
         return str(e)
     source.hold(photo)
+    if shown:
+        panel.set_camera_status(True)
     if card:
         ref = files.put_memory(photo, "jpg", keep=16)
         panel.camera_update(

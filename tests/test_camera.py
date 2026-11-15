@@ -203,6 +203,36 @@ class TakeTests(unittest.TestCase):
         self.assertEqual(self.sent[-1]["phase"], "failed")
         self.assertIsNone(source.held())
 
+    def test_permission_denied_disables_the_button_until_a_photo_works(self):
+        self.take(popen=popen_with(photo=b"", tail="error camera-permission"))
+        status = [m for m in self.sent if m["type"] == "panel.camera_status"]
+        self.assertEqual(len(status), 1)
+        self.assertEqual((status[0]["enabled"], status[0]["cause"]), (False, "permission"))
+        self.assertIn("System Settings", status[0]["reason"])
+        self.assertEqual(self.panel.snapshot()["camera_status"]["cause"], "permission")
+        self.take()  # allowed now
+        status = [m for m in self.sent if m["type"] == "panel.camera_status"]
+        self.assertEqual(status[-1]["enabled"], True)
+        self.assertTrue(all(pn.validate(m) == [] for m in self.sent))
+        self.take()  # no change, no new message
+        self.assertEqual(len([m for m in self.sent if m["type"] == "panel.camera_status"]), 2)
+
+    def test_camera_status_from_settings_and_in_the_hello_snapshot(self):
+        self.panel.set_camera_status(False, "The camera is switched off.", "settings")
+        self.assertEqual(
+            self.panel.snapshot()["camera_status"],
+            {"enabled": False, "reason": "The camera is switched off.", "cause": "settings"},
+        )
+        self.panel.set_camera_status(False, "x", "bogus")
+        self.assertEqual(self.panel.snapshot()["camera_status"]["cause"], "")
+
+    def test_use_the_camera_to_take_my_picture_is_a_photo_request(self):
+        self.assertIsNotNone(camera.parse("use the camera to take my picture"))
+        self.assertEqual(
+            camera.parse("Take a selfie and make it a pencil sketch")["then"],
+            "and make it a pencil sketch",
+        )
+
     def test_switched_off_in_settings(self):
         said = camera.take({"camera": False}, self.panel, self.files, 1, popen=mock.Mock())
         self.assertIn("switched off", said)
