@@ -85,6 +85,31 @@ class SourceTests(unittest.TestCase):
                 source.check_path(p)
             self.assertIn("licen", str(c.exception))
 
+    def test_photos_libraries_are_never_read_in_place(self):
+        lib = self.mine / "Photos Library.photoslibrary" / "originals" / "A"
+        lib.mkdir(parents=True)
+        p = picture(lib / "IMG_0001.png")
+        picture(self.mine / "export.png")
+        with cfg(self.mine):
+            with self.assertRaises(source.ArtProblem) as c:
+                source.check_path(p)
+            self.assertIn("Photos library", str(c.exception))
+            with self.assertRaises(source.ArtProblem):
+                source.resolve("IMG_0001")  # a name search does not walk into the library
+            self.assertEqual(source.resolve("export")[0], self.mine / "export.png")
+        with cfg(
+            self.mine / "Photos Library.photoslibrary"
+        ):  # listing the library itself as an art folder changes nothing
+            self.assertEqual(source.folders(), [])
+        (self.mine / "Old.aplibrary").mkdir()
+        q = picture(self.mine / "Old.aplibrary" / "x.png")
+        with cfg(self.mine), self.assertRaises(source.ArtProblem):
+            source.check_path(q)
+        link = self.mine / "viaLink.png"
+        link.symlink_to(p)
+        with cfg(self.mine), self.assertRaises(source.ArtProblem):
+            source.check_path(link)
+
     def test_a_licence_file_next_to_loose_files_in_the_approved_root_does_not_block_them(self):
         (self.mine / "LICENSE").write_text("x")
         with cfg(self.mine):

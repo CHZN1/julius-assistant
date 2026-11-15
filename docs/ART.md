@@ -7,6 +7,7 @@ Deterministic image processing only: no generative models, no style-transfer net
 - **An image dropped on the orb:** always allowed (you chose it). It is only read.
 - **A file by name or path:** only inside the folders listed under `[art] folders` in `julius.toml` (default `~/Julius Art`, `~/Pictures`, `~/Desktop`, `~/Downloads`). A path outside them is refused, including a symlink that leads out of them.
 - **Never purchased or licensed asset packs.** A folder below an approved folder is skipped when its name says asset, asset pack, purchased, Unity, Unreal, Kenney, Humble, itch, Envato, stock, licensed, bundle and similar, or when it holds a licence/EULA file (packs ship one). A name search does not even look inside such folders. If the image really is yours, drop it on the orb.
+- **Photos libraries are never read in place:** nothing inside `Photos Library.photoslibrary` (or any `*.photoslibrary`, `*.photolibrary`, `*.aplibrary`) is opened, searched or listed as an art folder, even through a symlink. Export the picture from Photos or drop it on the orb.
 - The protected music locations (Logic, GarageBand, plug-ins, and so on) stay off limits here too (`julius/music/policy.py`).
 - Originals are never changed, moved or copied. Pictures held for a card live in memory only (at most an hour) and reach disk only when you say **save this card**.
 

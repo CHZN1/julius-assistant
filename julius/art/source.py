@@ -28,6 +28,10 @@ _PACK_NAME = re.compile(
     r"graphic[ _-]?river|stock|licensed|licen[cs]e|bundle|game[ _-]?dev[ _-]?market)(?![a-z])",
     re.I,
 )
+# Photo libraries are never read in place (their originals, edits and metadata are managed by Photos): export or drop the picture instead.
+_PHOTO_LIBRARY = re.compile(
+    r"\.(?:photoslibrary|photolibrary|migratedphotolibrary|aplibrary)$", re.I
+)
 _LICENCE_FILE = re.compile(
     r"^(?:licen[cs]e|eula|terms|read[ _-]?me[ _-]?licen[cs]e|copying)(?:[ ._-].*)?$", re.I
 )
@@ -46,12 +50,16 @@ def set_drop_source(fn: Callable[[], Any] | None) -> None:
     _drop_source = fn
 
 
+def _in_photo_library(p: Path) -> bool:
+    return any(_PHOTO_LIBRARY.search(part) for part in p.parts)
+
+
 def folders() -> list[Path]:
     names = (config.load_config().get("art") or {}).get("folders") or DEFAULT_FOLDERS
     out = []
     for n in names:
         p = Path(os.path.expanduser(str(n)))
-        if p.is_dir() and policy.denied(p) is None:
+        if p.is_dir() and policy.denied(p) is None and not _in_photo_library(p.resolve()):
             out.append(p.resolve())
     return out
 
@@ -87,6 +95,10 @@ def check_path(path: Path) -> Path:
         real = p.resolve(strict=True)
     except OSError:
         raise ArtProblem(f"I couldn't find {p.name}.") from None
+    if _in_photo_library(p) or _in_photo_library(real):
+        raise ArtProblem(
+            f"I won't read {real.name} from inside a Photos library. Export it from Photos, or drop it on the orb."
+        )
     why = policy.denied(real)
     if why:
         raise ArtProblem(f"I won't open {real.name}: {why}.")
@@ -132,6 +144,7 @@ def find(name: str, roots: list[Path] | None = None) -> list[Path]:
                 for d in dirs
                 if not d.startswith(".")
                 and not _PACK_NAME.search(d)
+                and not _PHOTO_LIBRARY.search(d)
                 and policy.denied(Path(dirpath) / d) is None
                 and len(Path(dirpath).parts) - base < MAX_DEPTH
             ]

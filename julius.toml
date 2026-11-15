@@ -33,7 +33,7 @@ max_edge = 1568             # pictures are shrunk to this many pixels on the lon
 exclude_owners = ["Julius Orb", "Julius"]   # windows of these apps are never the "frontmost window"
 
 [art]                       # art helpers (julius/art/): deterministic image processing only, no generative models; the original is only read
-folders = ["~/Julius Art", "~/Pictures", "~/Desktop", "~/Downloads"]   # the ONLY folders an image is taken from by name or path (an image dropped on the orb is always allowed). Folders named like an asset pack, or holding a licence file, are skipped: purchased packs are never touched
+folders = ["~/Julius Art", "~/Pictures", "~/Desktop", "~/Downloads"]   # the ONLY folders an image is taken from by name or path (an image dropped on the orb is always allowed). Folders named like an asset pack, or holding a licence file, are skipped (purchased packs are never touched), and so is anything inside a *.photoslibrary (export or drop those pictures instead)
 
 [music]                     # music helpers (julius/music/): read-only analysis of audio files you name; never Logic, GarageBand, /Library/Audio or plug-in folders
 search_folders = ["~/Downloads", "~/Documents", "~/Desktop"]   # where a bare file name is looked for ("what's the BPM of loop.wav")
