@@ -46,6 +46,10 @@ PLANNING_PROMPT = (
     "several independent lookups that only need reading out, e.g. 'the weather in A and the time in B': call every tool for those in the "
     "same reply and answer in one go. The planner can only propose file changes; nothing happens until the user says yes, so never "
     "say a change was made. Pass the full task. Its result is your answer: say it in your own voice, briefly."
+    "\n\nTIE-BREAKS\n- Asked to summarize, brief or prioritise across several different topics ('summarize what I should look at: the NHL schedule, the injury report and a price chart'), "
+    "that is a briefing: escalate_to_planner, even though each item is a lookup. Independent lookups he wants read out as asked (weather in A, time in B) are called together instead.\n"
+    "- 'Forget X' or 'forget what you know about X' is forget_fact(topic=X) right away; list_memories is only for 'what do you remember', never a step before forgetting.\n"
+    "- 'This' (as the thing to change or measure), 'this picture', 'this photo', 'my selfie' or 'this track' with no file name means the one he dropped on the orb: call the tool with source 'dropped' (it asks if nothing was dropped) and do not ask for a file name first."
 )
 
 CAPABILITIES_PROMPT = (

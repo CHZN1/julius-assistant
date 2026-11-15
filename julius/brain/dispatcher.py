@@ -45,6 +45,7 @@ OWNERS = {
     "render_chart": "charts",
     "analyze_audio": "audio",
     "find_samples": "audio",
+    "image_style": "art",
     "music_theory": "theory",
 }
 

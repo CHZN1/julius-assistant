@@ -13,7 +13,7 @@ Deterministic image processing only: no generative models, no style-transfer net
 
 ## Photo to pixel art (step B)
 
-"Turn this photo I just dropped into pixel art", "make sunset.jpg 32 pixels with the gameboy palette, outline, 8x". The `pixel_art` tool takes:
+Two routes reach the same code. A fixed pattern answers the plain phrasings with no model call ("turn this photo I just dropped into pixel art", "make sunset.jpg pixel art, 32 pixels, gameboy palette, outline, 8x"); everything else goes to the brain's **`image_style`** tool ("make my selfie look 8-bit", "turn this into a retro game sprite", "give this pic a Game Boy look"). `image_style(source, style, size, colors, palette, outline, transparent, zoom)` only transforms a picture you provide and never creates art from scratch: with no picture named it uses the one dropped on the orb, or asks for one, and "draw me a dragon" is declined. `style` is `pixel_art` for now (step C's filters will be added as more styles). The settings are:
 
 | Setting | What it does |
 |---|---|
@@ -22,7 +22,7 @@ Deterministic image processing only: no generative models, no style-transfer net
 | palette | a fixed palette instead: `gameboy` (4 greens), `pico8` (16), `c64` (16), `1bit` (black and white) |
 | outline | one dark pixel around the cut-out subject (the canvas grows by one pixel each side), or, on a solid picture, ink on the bright side of strong edges |
 | transparent | the colour that fills the border, and everything of it connected to the border, becomes transparent (works best when the background is clearly different from the subject; a one-colour picture is left alone) |
-| scale | export zoom 1, 2, 4 or 8 (default 4), nearest neighbour so every art pixel stays a crisp square; never larger than 4096 px on a side |
+| scale (zoom) | export zoom 1, 2, 4 or 8 (default 4), nearest neighbour so every art pixel stays a crisp square; never larger than 4096 px on a side |
 
 How it works: area-average downscale (weighted by opacity), snap each pixel to the nearest palette colour, optional background cut-out, optional outline, then the nearest-neighbour export. Half-transparent pixels do not exist in pixel art, so alpha is thresholded.
 

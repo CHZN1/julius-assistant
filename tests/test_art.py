@@ -384,10 +384,51 @@ class CommandTests(unittest.TestCase):
         self.assertIn("24 by 18 pixels", out)
         self.assertIn("4 colours", out)
 
-    def test_it_is_a_spoken_command_not_a_model_tool(self):
+    def test_image_style_is_a_model_tool_that_only_restyles_a_given_picture(self):
         import julius.brain.tools as tools
 
-        self.assertNotIn("pixel_art", tools.REGISTRY)
+        self.assertIn("image_style", tools.REGISTRY)
+        schema = next(x for x in tools.SCHEMAS if x["function"]["name"] == "image_style")
+        desc = schema["function"]["description"]
+        self.assertIn("never creates art from scratch", desc)
+        self.assertEqual(
+            set(schema["function"]["parameters"]["properties"]),
+            {"source", "style", "size", "colors", "palette", "outline", "transparent", "zoom"},
+        )
+        self.assertEqual(schema["function"]["parameters"]["required"], ["source", "style"])
+
+    def test_style_names_in_any_words_map_to_pixel_art_and_unknown_styles_are_declined(self):
+        for t in (
+            "pixel_art",
+            "pixel art",
+            "8-bit",
+            "16 bit",
+            "retro sprite",
+            "Game Boy",
+            "",
+            "pixelated",
+        ):
+            self.assertEqual(art_tool.style_name(t), "pixel_art", t)
+        for t in ("watercolor", "oil painting", "anime"):
+            self.assertEqual(art_tool.style_name(t), "", t)
+            self.assertIn("only do these styles so far", art_tool.image_style("x.png", t))
+
+    def test_image_style_with_no_picture_asks_for_one_and_never_draws(self):
+        source.set_drop_source(lambda: None)
+        self.addCleanup(source.set_drop_source, None)
+        with cfg(Path(tempfile.gettempdir())):
+            out = art_tool.image_style("", "pixel_art")
+        self.assertIn("Which picture", out)
+
+    def test_image_style_makes_the_same_pixels_as_the_command_path(self):
+        with tempfile.TemporaryDirectory() as t:
+            root = Path(t).resolve()
+            picture(root / "me.png")
+            with cfg(root):
+                a = art_tool.image_style("me.png", "pixel art", 24, 4, "", False, False, 4)
+                b = art_tool.pixel_art("me.png", 24, 4, "", False, False, 4)
+        self.assertEqual(a, b)
+        self.assertIn("24 by 18 pixels", a)
 
     def test_shipped_config_lists_art_folders_and_none_is_an_asset_pack(self):
         import julius.config as c
@@ -400,3 +441,23 @@ class CommandTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RoutingCaseFlags(unittest.TestCase):
+    def test_fragile_flags_exist_and_cover_the_known_knife_edge_cases(self):
+        import json
+
+        from julius.paths import REPO_ROOT
+
+        cases = [
+            json.loads(x)
+            for x in (REPO_ROOT / "evals" / "routing_cases.jsonl").read_text().splitlines()
+            if x.strip()
+        ]
+        ids = {c["id"] for c in cases}
+        flagged = {c["id"] for c in cases if c.get("fragile")}
+        self.assertLessEqual({"r101", "r129"}, flagged)
+        self.assertTrue(flagged <= ids)
+        for natural in ("r208", "r209", "r210", "r211", "r212"):
+            self.assertIn(natural, flagged)
+        self.assertTrue((REPO_ROOT / "evals" / "routing_shake.py").exists())

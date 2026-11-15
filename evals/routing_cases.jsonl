@@ -46,7 +46,7 @@
 {"id": "r046", "cat": "utility", "text": "Add a task buy printer paper", "expect": {"path": "shortcut", "tool": "utility", "ok": true}}
 {"id": "r047", "cat": "utility", "text": "List my reminders", "expect": {"path": "shortcut", "tool": "utility", "ok": true}}
 {"id": "r048", "cat": "utility", "text": "What's on my calendar tomorrow?", "expect": {"path": "tool", "tool": "list_planner_items"}}
-{"id": "r049", "cat": "tool", "text": "Is it going to rain tomorrow in Springfield?", "expect": {"path": "tool", "tool_in": ["get_forecast", "get_weather"], "args_contain": ["springfield"], "clarify_ok": true}}
+{"id": "r049", "cat": "tool", "text": "Is it going to rain tomorrow in Springfield?", "expect": {"path": "tool", "tool_in": ["get_forecast", "get_weather"], "args_contain": ["springfield"], "clarify_ok": true}, "fragile": true}
 {"id": "r050", "cat": "tool", "text": "Do I need a jacket in Shelbyville tonight?", "expect": {"path": "tool", "tool_in": ["get_weather", "get_forecast"], "args_contain": ["shelbyville"]}}
 {"id": "r051", "cat": "tool", "text": "What's Ethereum trading at right now?", "expect": {"path": "tool", "tool": "get_quote", "args_contain": ["eth"]}}
 {"id": "r052", "cat": "tool", "text": "How's Tesla stock doing?", "expect": {"path": "tool", "tool": "get_quote", "args_contain": ["tsla"]}}
@@ -69,7 +69,7 @@
 {"id": "r069", "cat": "tool", "text": "Show me what's in my todo.txt file.", "expect": {"path": "tool", "tool_in": ["read_file", "find_files"]}}
 {"id": "r070", "cat": "tool", "text": "Summarize the report in my Downloads called annual_report.pdf.", "expect": {"path": "tool", "tool_in": ["read_document", "find_files"]}}
 {"id": "r071", "cat": "tool", "text": "What's on my reminders list this week?", "expect": {"path": "tool", "tool_in": ["list_planner_items", "list_reminders"]}}
-{"id": "r072", "cat": "parallel", "text": "What's the weather in Springfield and the time in Tokyo?", "expect": {"path": "tool", "tools_all": ["get_weather", "get_datetime"], "clarify_ok": true}}
+{"id": "r072", "cat": "parallel", "text": "What's the weather in Springfield and the time in Tokyo?", "expect": {"path": "tool", "tools_all": ["get_weather", "get_datetime"], "clarify_ok": true}, "fragile": true}
 {"id": "r073", "cat": "direct", "text": "Hey Julius, how's it going?", "expect": {"path": "direct"}}
 {"id": "r074", "cat": "direct", "text": "Hey there.", "expect": {"path": "direct"}}
 {"id": "r075", "cat": "direct", "text": "Explain overfitting simply.", "expect": {"path": "direct"}}
@@ -98,13 +98,13 @@
 {"id": "r098", "cat": "escalate", "text": "Plan my weekend in San Francisco and check the forecast for both days.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
 {"id": "r099", "cat": "research", "text": "Research the best laptops under a thousand dollars and compare the top three.", "expect": {"path": "tool", "tool": "research_task"}}
 {"id": "r100", "cat": "escalate", "text": "Give me an itinerary for two days in Lisbon with the weather each day.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
-{"id": "r101", "cat": "escalate", "text": "Summarize the three most important things I should look at before tonight: the NHL schedule, the NFL injury report, and an Ethereum price chart.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
+{"id": "r101", "cat": "escalate", "text": "Summarize the three most important things I should look at before tonight: the NHL schedule, the NFL injury report, and an Ethereum price chart.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}, "fragile": true}
 {"id": "r102", "cat": "escalate", "text": "Compare the weather in Springfield and Shelbyville.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
 {"id": "r103", "cat": "escalate", "text": "Move all my screenshots from Desktop into a new folder called Screenshots, sorted by month.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
 {"id": "r104", "cat": "escalate", "text": "Rename all the files in my Downloads folder so they start with the date.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
 {"id": "r105", "cat": "escalate", "text": "Check the weather in Springfield, the price of Bitcoin, and the latest NHL scores, then give me a quick briefing.", "expect": {"path": "escalate", "any_of": [{"path": "escalate", "tool": "escalate_to_planner"}, {"path": "tool", "chain_all": ["get_weather", "get_quote", "get_scores"]}]}}
 {"id": "r106", "cat": "escalate_heldout", "text": "Help me plan a four day trip to Vancouver and tell me what the weather will be like.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
-{"id": "r107", "cat": "escalate_heldout", "text": "Which is better for a road trip this weekend, Yosemite or Big Sur? Check the forecast for both and give me a recommendation.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
+{"id": "r107", "cat": "escalate_heldout", "text": "Which is better for a road trip this weekend, Yosemite or Big Sur? Check the forecast for both and give me a recommendation.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}, "fragile": true}
 {"id": "r108", "cat": "escalate_heldout", "text": "Look into the best standing desks, compare a few, and tell me which one to buy.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
 {"id": "r109", "cat": "escalate_heldout", "text": "Put together a morning briefing for me with the weather, the NHL scores, and the top headlines, and tell me what matters most.", "expect": {"path": "escalate", "any_of": [{"path": "escalate", "tool": "escalate_to_planner"}, {"path": "tool", "chain_all": ["get_weather", "get_scores", "get_news"]}]}}
 {"id": "r110", "cat": "escalate_heldout", "text": "Go through my Documents folder and sort everything into folders by project.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
@@ -115,7 +115,7 @@
 {"id": "r115", "cat": "escalate_heldout", "text": "Clean up my downloads by moving old installers and zip files into an Archive folder.", "expect": {"path": "escalate", "tool": "escalate_to_planner"}}
 {"id": "r116", "cat": "parallel", "text": "What's the weather in Shelbyville and what time is it in London?", "expect": {"path": "tool", "tools_all": ["get_weather", "get_datetime"]}}
 {"id": "r117", "cat": "parallel", "text": "Give me the price of Ethereum and the NFL scores.", "expect": {"path": "tool", "tools_all": ["get_quote", "get_scores"]}}
-{"id": "r118", "cat": "parallel", "text": "What's the forecast for Springfield tomorrow, and how's Bitcoin trading?", "expect": {"path": "tool", "tools_all": ["get_forecast", "get_quote"], "clarify_ok": true}}
+{"id": "r118", "cat": "parallel", "text": "What's the forecast for Springfield tomorrow, and how's Bitcoin trading?", "expect": {"path": "tool", "tools_all": ["get_forecast", "get_quote"], "clarify_ok": true}, "fragile": true}
 {"id": "r119", "cat": "parallel", "text": "Tell me the time in Tokyo and the weather in Seattle.", "expect": {"path": "tool", "tools_all": ["get_datetime", "get_weather"]}}
 {"id": "r120", "cat": "files", "text": "Could you possibly get that report.txt out of my Downloads folder and into the bin?", "expect": {"path": "shortcut", "path_in": ["shortcut", "tool"], "tool_in": ["file_request", "files:trash"], "no_denial": true}}
 {"id": "r121", "cat": "files", "text": "I want report.txt gone, just put it in the trash", "expect": {"path": "shortcut", "path_in": ["shortcut", "tool"], "tool_in": ["file_request", "files:trash"], "no_denial": true}}
@@ -126,7 +126,7 @@
 {"id": "r126", "cat": "coding", "text": "Can Opus fix the bug in my demo project for me?", "expect": {"path": "shortcut", "path_in": ["shortcut", "tool"], "tool_in": ["code_request", "code:preview"], "no_denial": true}}
 {"id": "r127", "cat": "coding", "text": "Write a script in the demo project that adds two numbers together", "expect": {"path": "shortcut", "path_in": ["shortcut", "tool", "escalate"], "tool_in": ["code_request", "code:preview", "escalate_to_planner"], "no_denial": true}}
 {"id": "r128", "cat": "memory", "text": "Remember that my sister's birthday is March twelfth", "expect": {"path": "tool", "tool_in": ["remember_fact"], "no_denial": true}}
-{"id": "r129", "cat": "memory", "text": "Please forget what you know about my sister", "expect": {"path": "tool", "tool_in": ["forget_fact"], "no_denial": true}}
+{"id": "r129", "cat": "memory", "text": "Please forget what you know about my sister", "expect": {"path": "tool", "tool_in": ["forget_fact"], "no_denial": true}, "fragile": true}
 {"id": "r130", "cat": "memory", "text": "What do you remember about me?", "expect": {"path": "tool", "tool_in": ["list_memories"], "no_denial": true}}
 {"id": "r131", "cat": "reminder", "text": "Set a reminder for six pm to take out the trash", "expect": {"path": "tool", "path_in": ["tool", "shortcut"], "tool_in": ["set_reminder", "utility"], "no_denial": true}}
 {"id": "r132", "cat": "bare_yes", "text": "Yes", "expect": {"path": "shortcut", "tool": "files:?", "ok": true, "detail_contains": "nothing waiting for a yes"}}
@@ -171,7 +171,7 @@
 {"id": "r171", "cat": "theory", "text": "Give me a chord progression in G major.", "expect": {"path": "tool", "tool": "music_theory", "args_contain": ["g"]}}
 {"id": "r172", "cat": "theory", "text": "What notes are in the D dorian scale?", "expect": {"path": "tool", "tool": "music_theory", "args_contain": ["dorian"]}}
 {"id": "r173", "cat": "theory", "text": "Show me some voicings for Cmaj9.", "expect": {"path": "tool", "tool": "music_theory", "args_contain": ["cmaj9"]}}
-{"id": "r174", "cat": "theory", "text": "Is Am F C G a good progression?", "expect": {"path": "tool", "tool": "music_theory", "args_contain": ["am"]}}
+{"id": "r174", "cat": "theory", "text": "Is Am F C G a good progression?", "expect": {"path": "tool", "tool": "music_theory", "args_contain": ["am"]}, "fragile": true}
 {"id": "r175", "cat": "theory", "text": "Explain the ii V I in Bb major.", "expect": {"path": "tool", "tool": "music_theory", "args_contain": ["bb"]}}
 {"id": "r176", "cat": "theory", "text": "What notes are in an F sharp minor seventh flat five chord?", "expect": {"path": "tool", "tool": "music_theory", "args_contain": ["f#"]}}
 {"id": "r177", "cat": "theory", "text": "What is the circle of fifths?", "expect": {"path": "direct", "path_in": ["direct", "tool"]}}
@@ -202,5 +202,11 @@
 {"id": "r203", "cat": "art", "text": "Make sunset.jpg into 32 pixel art with the gameboy palette.", "expect": {"path": "shortcut", "tool": "pixel_art"}}
 {"id": "r204", "cat": "art", "text": "Pixelate the picture I just dropped, 64 pixels, 8 colors, with an outline and a transparent background.", "expect": {"path": "shortcut", "tool": "pixel_art"}}
 {"id": "r205", "cat": "art", "text": "Can you make profile.png look like an 8-bit sprite?", "expect": {"path": "shortcut", "tool": "pixel_art"}}
-{"id": "r206", "cat": "art", "text": "Draw me a picture of a dragon.", "expect": {"path": "direct"}}
-{"id": "r207", "cat": "art", "text": "What is pixel art?", "expect": {"path": "direct"}}
+{"id": "r206", "cat": "art", "text": "Draw me a picture of a dragon.", "expect": {"path": "direct"}, "fragile": true}
+{"id": "r207", "cat": "art", "text": "What is pixel art?", "expect": {"path": "direct"}, "fragile": true}
+{"id": "r208", "cat": "art", "text": "Can you make my selfie look 8-bit?", "expect": {"path": "tool", "tool": "image_style"}, "fragile": true}
+{"id": "r209", "cat": "art", "text": "Turn this into a retro game sprite.", "expect": {"path": "tool", "tool": "image_style"}, "fragile": true}
+{"id": "r210", "cat": "art", "text": "Give this pic a Game Boy look.", "expect": {"path": "tool", "tool": "image_style"}, "fragile": true}
+{"id": "r211", "cat": "art", "text": "Make a sprite out of this picture.", "expect": {"path": "tool", "tool": "image_style"}, "fragile": true}
+{"id": "r212", "cat": "art", "text": "Make this photo look like a retro game character.", "expect": {"path": "tool", "tool": "image_style"}, "fragile": true}
+{"id": "r213", "cat": "art", "text": "Make me a pixel art dragon.", "expect": {"path": "shortcut", "tool": "pixel_art"}}

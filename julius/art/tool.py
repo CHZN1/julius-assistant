@@ -127,3 +127,36 @@ def parse_options(text: str) -> dict[str, Any]:
 
 def pixel_art_from_words(source_name: str = "", options: str = "") -> str:
     return pixel_art(source_name, **parse_options(options))
+
+
+STYLES = ("pixel_art",)  # step C adds the photo filters here
+
+
+def style_name(text: str) -> str:
+    """The style the model named, in whatever words ("pixel art", "8-bit", "retro sprite", "game boy"), as one of STYLES, or "" when there is no such style yet."""
+    t = re.sub(r"[^a-z0-9]+", " ", (text or "pixel_art").casefold()).strip()
+    if not t or re.search(r"pixel|\b(?:8|16)\s?bit\b|sprite|retro|game ?boy|\bgb\b", t):
+        return "pixel_art"
+    return ""
+
+
+def image_style(
+    source_name: str = "",
+    style: str = "pixel_art",
+    size: int = 48,
+    colors: int = 16,
+    palette: str = "",
+    outline: bool = False,
+    transparent: bool = False,
+    zoom: int = 4,
+) -> str:
+    """Restyle the user's own picture. Never creates art from scratch: with no picture named it asks for one."""
+    chosen = style_name(style)
+    if not chosen:
+        return (
+            f"I can only do these styles so far: {', '.join(s.replace('_', ' ') for s in STYLES)}."
+        )
+    # no picture named: the one dropped on the orb, or a question asking for one (nothing is ever drawn from nothing)
+    return pixel_art(
+        (source_name or "").strip() or "dropped", size, colors, palette, outline, transparent, zoom
+    )

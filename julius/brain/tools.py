@@ -868,6 +868,41 @@ def find_samples(query: str = "", bpm: int = 0, key: str = "", either: bool = Fa
 REGISTRY["find_samples"] = find_samples
 
 
+def image_style(
+    source: str = "",
+    style: str = "pixel_art",
+    size: int = 48,
+    colors: int = 16,
+    palette: str = "",
+    outline: bool = False,
+    transparent: bool = False,
+    zoom: int = 4,
+) -> str:
+    from julius.art import tool as art_tool
+
+    return art_tool.image_style(source, style, size, colors, palette, outline, transparent, zoom)
+
+
+REGISTRY["image_style"] = image_style
+SCHEMAS.append(
+    _utility_schema(
+        "image_style",
+        "Restyle a picture the user provides (style: pixel_art). Only transforms their image, never creates art from scratch. source: its file name, or 'dropped' when he names none (the tool then asks if nothing was dropped).",
+        {
+            "source": "string",
+            "style": "string",
+            "size": "integer",
+            "colors": "integer",
+            "palette": "string",
+            "outline": "boolean",
+            "transparent": "boolean",
+            "zoom": "integer",
+        },
+        ["source", "style"],
+    )
+)
+
+
 SCHEMAS.append(
     _utility_schema(
         "find_samples",
@@ -918,13 +953,13 @@ SCHEMAS += [
     ),
     _utility_schema(
         "forget_fact",
-        "Permanently delete a saved memory when the user asks to forget, delete or remove it. 'topic' is what it is about, e.g. 'Sharks'; leave empty for 'forget that' (the most recent one). You CAN delete memories with this tool: never say you cannot.",
+        "Delete a saved memory. Call it immediately for any forget, delete or remove request, including 'forget what you know about X' (topic = X); never call list_memories first. Leave topic empty for 'forget that' (the most recent one). You CAN delete memories: never say you cannot.",
         {"topic": "string"},
         [],
     ),
     _utility_schema(
         "list_memories",
-        "List what you remember about the user, optionally about one topic.",
+        "List what you remember, only when the user asks what you remember. Never as a step before forgetting something.",
         {"topic": "string"},
         [],
     ),

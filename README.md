@@ -49,7 +49,8 @@ Numbers come from the author's Mac (M-series, 16 GB) and the suites in `evals/`.
 | Suite | Result |
 |---|---|
 | Unit tests (offline) | 897 passing |
-| Routing (135 cases) | 97.0% to 97.8% over repeated runs |
+| Routing (212 cases, 3 runs each) | 212/212 (2026-11-14) |
+| Routing shake test (does a decision survive a new tool, a longer description, a reordered list, a longer prompt?) | known-fragile 14 cases: all robust; all 149 brain cases, 1 run x 4 perturbations: 148 at 100%, one at 75% that rechecks at 95% with 6 runs |
 | File agent (46 scenarios, deterministic) | 46/46 |
 | Live-data guard (14 cases) | 14/14 |
 | Memory (commands, forgetting, recall, capture) | all sections pass |
@@ -100,6 +101,17 @@ Done: evaluation harness, daily-driver service (wake word, hotkeys, memory, barg
 ## Tests
 
 `python -m unittest discover -p "test_*.py"` (offline). Lint: `ruff check .`. Evals under `evals/` that call paid models say so.
+
+## Adding or changing a tool: checklist
+
+The cloud brain gets the whole tool list and one long system prompt on every turn, so a decision with no decisive rule can flip when *anything* in that prefix changes (a new tool, a longer description, a different order, more prompt text). Two cases (r101, r129) broke every time a tool was added until each got an explicit tie-break. So, for every new tool or description or prompt edit:
+
+1. Register the tool (`julius/brain/tools.py`: schema, `REGISTRY`, and an owner in `julius/brain/dispatcher.py`). Keep the description short and say when *not* to use it ("never creates art from scratch").
+2. Add routing cases to `evals/routing_cases.jsonl`: the plain phrasing, natural paraphrases, and a negative. Mark the ones that could plausibly go either way with `"fragile": true`.
+3. Unit tests.
+4. **Run the shake test: `python evals/routing_shake.py`.** It runs the fragile cases (about $0.10) under 7 harmless changes to the tool list and prompt; a case that passes in under 80% of them is fragile and the command exits 1. Fix a fragile case with a decisive rule (a TIE-BREAKS line in `PLANNING_PROMPT`, or a "never when" in the competing tool description), not with luck and not with another pattern trigger. `--mode full` shakes every brain case (4 changes x 1 run, about $0.10 to $2; one run per cell is noisy, so recheck a flagged case with `--only <id> --runs 6`).
+5. Then `python evals/routing_eval.py --runs 3`.
+6. A deterministic, unambiguous command (rescan, convert, a fixed phrase) may be a pattern command answered before the brain. Anything people will say in many different ways gets a tool instead.
 
 ## License
 
