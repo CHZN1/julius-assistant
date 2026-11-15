@@ -56,7 +56,7 @@ class Look:
 # ---- what the user asked for -----------------------------------------------------------------------------------------------------
 _CAMERA = re.compile(
     r"\bwhat(?:'s| is| am)\b.{0,25}\b(?:holding|hold)\b|\bin my hand\b|\blook at me\b|\bwhat do you see\b"
-    r"|\b(?:use|with|from|on) (?:the |my )?(?:camera|webcam)\b|\b(?:take|snap) (?:a |one )?(?:picture|photo|pic)\b"
+    r"|\b(?:use|with|from|on) (?:the |my )?(?:camera|webcam)\b"
     r"|\b(?:look|see|show)\b.{0,25}\b(?:camera|webcam)\b|\bwhat(?:'s| is)\b.{0,12}\bthis (?:thing|object)\b",
     re.I,
 )
@@ -112,6 +112,7 @@ def build(
         "Foundation",
         "CoreGraphics",
         "Carbon",
+        "Vision",
     )
     cmd = ["/usr/bin/clang", "-O2", "-fobjc-arc", str(source)]
     for f in frameworks:

@@ -102,8 +102,19 @@ def shortcut(text, sb, ctx, turn, case_history=None):
             "ok": True,
             "detail": "convert",
         }
+    from julius.art import camera as art_camera
     from julius.art import commands as art_commands
 
+    if (
+        art_camera.parse(text) is not None
+    ):  # take a photo / selfie: a fixed pattern, before the brain
+        return {
+            "path": "shortcut",
+            "tool": "take_photo",
+            "args": "",
+            "ok": True,
+            "detail": "camera",
+        }
     if art_commands.parse(text) is not None:  # pixel art: a fixed pattern, before the brain
         return {
             "path": "shortcut",

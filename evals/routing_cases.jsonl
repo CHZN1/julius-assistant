@@ -210,3 +210,9 @@
 {"id": "r211", "cat": "art", "text": "Make a sprite out of this picture.", "expect": {"path": "tool", "tool": "image_style"}, "fragile": true}
 {"id": "r212", "cat": "art", "text": "Make this photo look like a retro game character.", "expect": {"path": "tool", "tool": "image_style"}, "fragile": true}
 {"id": "r213", "cat": "art", "text": "Make me a pixel art dragon.", "expect": {"path": "shortcut", "tool": "pixel_art"}}
+{"id": "r214", "cat": "art", "text": "Take a photo.", "expect": {"path": "shortcut", "tool": "take_photo"}}
+{"id": "r215", "cat": "art", "text": "Take a selfie.", "expect": {"path": "shortcut", "tool": "take_photo"}}
+{"id": "r216", "cat": "art", "text": "Take a selfie and make it pixel art.", "expect": {"path": "shortcut", "tool": "take_photo"}}
+{"id": "r217", "cat": "art", "text": "Hey Julius, snap a picture of me.", "expect": {"path": "shortcut", "tool": "take_photo"}}
+{"id": "r218", "cat": "art", "text": "Make my selfie pixel art, gameboy palette, retro sprite.", "expect": {"path": "shortcut", "tool": "pixel_art"}}
+{"id": "r219", "cat": "art", "text": "Show me a pixel art comparison grid of this photo.", "expect": {"path": "shortcut", "tool": "pixel_art"}}

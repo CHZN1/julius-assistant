@@ -25,6 +25,7 @@ from julius.brain.backend import (
 from julius.brain.conversation import authority_discussion_reply
 from julius.runtime.brain_turn import ask_streaming
 from julius.runtime.handlers import (
+    handle_camera,
     handle_code,
     handle_files,
     handle_memory,
@@ -152,6 +153,7 @@ def _command_reply(s: Session, text: str) -> str | None:
         return discussion or NOT_CAUGHT
     return (
         handle_panel(s, text)
+        or handle_camera(s, text)
         or handle_vision(s, text)
         or handle_music(s, text)
         or handle_memory(s, text)

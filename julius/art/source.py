@@ -7,6 +7,7 @@ from __future__ import annotations
 import io
 import os
 import re
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -123,6 +124,35 @@ def check_path(path: Path) -> Path:
     return real
 
 
+# A photo taken with the camera is held here, in memory only, and works like a dropped image. It is replaced by the next photo, forgotten after an hour,
+# and passed over when a different file has been dropped since (the newer of the two is "this").
+HELD_TTL_S = 3600
+_held: dict[str, Any] | None = None
+
+
+def hold(jpeg: bytes, clock: Callable[[], float] = time.time) -> None:
+    global _held
+    _held = {"jpeg": jpeg, "t": clock(), "drop": _dropped()}
+
+
+def held(clock: Callable[[], float] = time.time) -> bytes | None:
+    """The camera photo, when there is one that is still fresh and no other file was dropped after it."""
+    global _held
+    if _held is None:
+        return None
+    if clock() - _held["t"] > HELD_TTL_S:
+        _held = None
+        return None
+    if _dropped() != _held["drop"]:
+        return None  # something else was dropped since: that is the newer picture
+    return _held["jpeg"]
+
+
+def forget_held() -> None:
+    global _held
+    _held = None
+
+
 def _dropped() -> Path | None:
     pending = _drop_source() if _drop_source else None
     for item in (pending or {}).get("items", []):
@@ -158,20 +188,32 @@ def find(name: str, roots: list[Path] | None = None) -> list[Path]:
     return hits
 
 
+_THIS = (
+    "dropped",
+    "this",
+    "this image",
+    "this picture",
+    "this photo",
+    "the image",
+    "that image",
+    "dropped image",
+    "dropped file",
+    "my selfie",
+    "the selfie",
+    "this selfie",
+    "the photo",
+    "that photo",
+    "the picture",
+    "that picture",
+    "camera photo",
+    "my photo",
+)
+
+
 def resolve(source: str) -> tuple[Path, bool]:
     """(path, dropped): the image the user means. A dropped image is the user's own choice and skips the folder rules (it is still only read)."""
     raw = (source or "").strip().strip("\"'")
-    if not raw or raw.casefold() in (
-        "dropped",
-        "this",
-        "this image",
-        "this picture",
-        "this photo",
-        "the image",
-        "that image",
-        "dropped image",
-        "dropped file",
-    ):
+    if not raw or raw.casefold() in _THIS:
         found = _dropped()
         if found is None:
             raise ArtProblem("Which picture? Name it, or drop it on the orb first.")
@@ -189,6 +231,32 @@ def resolve(source: str) -> tuple[Path, bool]:
             f"AMBIGUOUS: {len(hits)} images are called {raw} ({shown}). Ask which folder."
         )
     return check_path(hits[0]), False
+
+
+CAMERA_NAME = "camera photo"
+
+
+def load(source: str) -> tuple[Any, str, str]:
+    """(RGBA picture, label, file name to say): the camera photo held in memory when the user means "this", else the file `resolve` finds."""
+    raw = (source or "").strip().strip("\"'")
+    if raw.casefold() in _THIS or not raw:
+        jpeg = held()
+        if jpeg is not None:
+            return decode(jpeg, CAMERA_NAME), CAMERA_NAME, CAMERA_NAME
+    path, _dropped_flag = resolve(source)
+    return open_image(path), path.stem, path.name
+
+
+def decode(raw: bytes, name: str = "image") -> Any:
+    from PIL import Image, ImageOps, UnidentifiedImageError
+
+    Image.MAX_IMAGE_PIXELS = MAX_PIXELS
+    try:
+        with Image.open(io.BytesIO(raw)) as im:
+            im.load()
+            return ImageOps.exif_transpose(im.copy()).convert("RGBA")
+    except (UnidentifiedImageError, OSError, ValueError, SyntaxError):
+        raise ArtProblem(f"{name} isn't a readable image.") from None
 
 
 def open_image(path: Path) -> Any:

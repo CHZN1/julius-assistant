@@ -871,23 +871,40 @@ REGISTRY["find_samples"] = find_samples
 def image_style(
     source: str = "",
     style: str = "pixel_art",
-    size: int = 48,
+    size: int = 0,
     colors: int = 16,
     palette: str = "",
     outline: bool = False,
     transparent: bool = False,
     zoom: int = 4,
+    dither: bool = False,
+    full_photo: bool = False,
+    compare: bool = False,
+    retro: bool = False,
 ) -> str:
     from julius.art import tool as art_tool
 
-    return art_tool.image_style(source, style, size, colors, palette, outline, transparent, zoom)
+    return art_tool.image_style(
+        source,
+        style,
+        size,
+        colors,
+        palette,
+        outline,
+        transparent,
+        zoom,
+        dither,
+        full_photo,
+        compare,
+        retro,
+    )
 
 
 REGISTRY["image_style"] = image_style
 SCHEMAS.append(
     _utility_schema(
         "image_style",
-        "Restyle a picture the user provides (style: pixel_art). Only transforms their image, never creates art from scratch. source: its file name, or 'dropped' when he names none (the tool then asks if nothing was dropped).",
+        "Restyle a picture the user provides (style: pixel_art). Only transforms their image, never creates art from scratch. source: its file name, or 'dropped' when he names none (the tool then asks if nothing was dropped). Portraits are cropped to head and shoulders on this Mac (full_photo=true skips that); compare=true shows a grid of sizes and looks; retro=true gives the flat, outlined sprite look; leave size out for the default.",
         {
             "source": "string",
             "style": "string",
@@ -897,6 +914,10 @@ SCHEMAS.append(
             "outline": "boolean",
             "transparent": "boolean",
             "zoom": "integer",
+            "dither": "boolean",
+            "full_photo": "boolean",
+            "compare": "boolean",
+            "retro": "boolean",
         },
         ["source", "style"],
     )

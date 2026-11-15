@@ -343,6 +343,8 @@ def save_card(
         return save_vision_card(card, files, cfg_value, now)
     if card is not None and card.get("type") == "panel.art":
         return save_art_card(card, files, cfg_value, now)
+    if card is not None and card.get("type") == "panel.camera":
+        return save_camera_card(card, files, cfg_value, now)
     if card is None or card.get("type") != "panel.research":
         return "I don't have a card to save."
     try:
@@ -417,6 +419,39 @@ def save_vision_card(
     return f"Saved to {base.name}, in a folder called {folder.name}."
 
 
+def save_camera_card(
+    card: dict, files: Any, cfg_value: str | None, now: Callable[[], float] = time.time
+) -> str:
+    """A camera photo reaches disk only here: the picture and a short note, in their own folder."""
+    if card.get("phase") != "done":
+        return "There is no finished photo to save."
+    got = files.bytes_of(card.get("image", "")) if files is not None else None
+    if got is None:
+        return "That photo is no longer available, so I can't save it."
+    try:
+        base = saved_dir(cfg_value)
+        base.mkdir(parents=True, exist_ok=True)
+        stamp = time.strftime("%Y-%m-%d %H%M", time.localtime(now()))
+        folder = base / f"{stamp} camera photo"
+        k = 1
+        while folder.exists():
+            k += 1
+            folder = base / f"{stamp} camera photo ({k})"
+        folder.mkdir()
+        (folder / f"photo.{got[1]}").write_bytes(got[0])
+        (folder / "card.md").write_text(
+            f"# Camera photo\n\n*{time.strftime('%Y-%m-%d %H:%M', time.localtime(now()))}.*\n\n![photo](photo.{got[1]})\n",
+            encoding="utf-8",
+        )
+    except SaveRefused as e:
+        return str(e)
+    except OSError as e:
+        log.event("panel_save_failed", error=type(e).__name__)
+        return "I couldn't save that photo."
+    log.event("panel_card_saved", images=1, kind="camera")
+    return f"Saved to {base.name}, in a folder called {folder.name}."
+
+
 def save_art_card(
     card: dict, files: Any, cfg_value: str | None, now: Callable[[], float] = time.time
 ) -> str:
@@ -436,8 +471,11 @@ def save_art_card(
             k += 1
             folder = base / f"{name} ({k})"
         folder.mkdir()
-        (folder / "pixel-art.png").write_bytes(export[0])
-        (folder / "pixel-art-1x.png").write_bytes(small[0])
+        if card.get("kind") == "compare":
+            (folder / "pixel-art-options.png").write_bytes(export[0])
+        else:
+            (folder / "pixel-art.png").write_bytes(export[0])
+            (folder / "pixel-art-1x.png").write_bytes(small[0])
         lines = "\n".join(f"- {x}" for x in card.get("settings") or [])
         pal = " ".join(f"#{c}" for c in card.get("palette") or [])
         (folder / "card.md").write_text(

@@ -7,7 +7,7 @@ from __future__ import annotations
 import re
 
 _LEAD = r"^\s*(?:(?:please|hey julius|julius|okay|ok|now|then|and)[ ,]+)*(?:(?:can|could|would) you |i (?:want|need|would like) you to |i want to |i'd like to )?(?:please )?"
-_VERB = r"(?:make|turn|convert|change|create|render|process|run|give|do|redo|pixelate|pixelize|pixelise|pixel[- ]?art)\b"
+_VERB = r"(?:make|turn|convert|change|create|render|process|run|give|do|redo|show|compare|pixelate|pixelize|pixelise|pixel[- ]?art)\b"
 _ART = re.compile(
     r"pixel[- ]?art|pixel(?:ate|ize|ise)d?\b|\b(?:8|16)[- ]?bit (?:sprite|style|art|look|graphics|version)",
     re.I,

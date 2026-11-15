@@ -131,6 +131,10 @@ class PanelFiles:
         self._mem: dict[
             str, tuple[bytes, float]
         ] = {}  # in-memory images (vision looks): never written to disk
+        self._live: dict[
+            str, bytes
+        ] = {}  # the newest few camera preview frames (a separate, tiny slot: previews never push real pictures out of memory)
+        self._live_n = 0
         self.prune()
 
     def put_memory(self, data: bytes, ext: str, ttl_s: int = 3600, keep: int = 6) -> str:
@@ -148,14 +152,27 @@ class PanelFiles:
                 del self._mem[next(iter(self._mem))]
         return f"/p/{name}"
 
+    def put_live(self, data: bytes) -> str:
+        """A camera preview frame: held in memory only, the newest 3 kept, each under a fresh name so the page never shows a cached frame."""
+        with self._lock:
+            self._live_n += 1
+            name = f"live{self._live_n:08d}{secrets.token_hex(3)}.jpg"
+            self._live[name] = data
+            while len(self._live) > 3:
+                del self._live[next(iter(self._live))]
+        return f"/p/{name}"
+
     def read_ref(self, token: str, name: str) -> tuple[bytes, str] | None:
         """(bytes, extension) for token + name, from memory or disk, or None."""
         if not hmac.compare_digest(token.encode(), self.token.encode()) or not NAME.match(name):
             return None
         with self._lock:
             held = self._mem.get(name)
+            live = self._live.get(name)
         if held is not None:
             return held[0], name.rsplit(".", 1)[1]
+        if live is not None:
+            return live, "jpg"
         p = self.open_ref(token, name)
         if p is None:
             return None

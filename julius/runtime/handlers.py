@@ -96,6 +96,28 @@ def handle_panel(s: Session, text: str) -> str | None:
         return None
 
 
+def handle_camera(s: Session, text: str) -> str | None:
+    """ "Take a photo", "take a selfie", "take a selfie and make it pixel art": a countdown with a live preview, then one frame held in memory. No model call, no upload."""
+    from julius.art import camera, commands
+
+    req = camera.parse(text)
+    if req is None:
+        return None
+    try:
+        said = camera.take(
+            config.load_config().get("vision") or {},
+            panel=getattr(s, "panel_hub", None),
+            files=getattr(s, "panel_files", None),
+            turn=s.turn,
+        )
+        if req["then"] and said.startswith("Got it"):
+            return commands.handle(req["then"]) or said
+        return said
+    except Exception as exc:
+        log.console(f"  [camera failed: {type(exc).__name__}: {exc}]", flush=True)
+        return "I couldn't take a photo."
+
+
 def handle_vision(s: Session, text: str) -> str | None:
     """ "What am I holding", "what's on my screen", "look at this image": one picture, only on request, answered by Claude vision and shown in a card."""
     from julius.agents import vision

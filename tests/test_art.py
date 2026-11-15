@@ -260,6 +260,11 @@ class CardAndSaveTests(unittest.TestCase):
         charts.set_panel(self.panel, self.files, lambda: 4)
         self.addCleanup(charts.set_panel, None, None)
         self.addCleanup(self.tmp.cleanup)
+        patch = mock.patch.object(
+            art_tool.faces, "detect", return_value=[]
+        )  # no real helper in tests
+        self.detect = patch.start()
+        self.addCleanup(patch.stop)
 
     def run_tool(self, **kw):
         with cfg(self.mine):
@@ -305,6 +310,140 @@ class CardAndSaveTests(unittest.TestCase):
         charts.set_panel(None, None)
         said = self.run_tool(size=16)
         self.assertIn("No side panel", said)
+
+
+class PortraitTests(unittest.TestCase):
+    """Face crop, preprocessing, luminance mapping, dithering, strong-edge outline and the comparison grid."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name).resolve()
+        self.mine = self.root / "Pictures"
+        self.mine.mkdir()
+        im = Image.new(
+            "RGB", (1200, 900), (235, 230, 220)
+        )  # a flat, bright wall: the case that came out as mush
+        d = ImageDraw.Draw(im)
+        d.ellipse((450, 200, 750, 560), fill=(225, 180, 150))  # head
+        d.rectangle((300, 560, 900, 900), fill=(190, 190, 200))  # shoulders
+        d.ellipse((520, 330, 560, 360), fill=(60, 40, 30))
+        d.ellipse((640, 330, 680, 360), fill=(60, 40, 30))
+        im.save(self.mine / "me.png")
+        self.face = (450 / 1200, 200 / 900, 300 / 1200, 360 / 900)
+        hub = ev.EventHub()
+        self.sent = []
+        hub._send = lambda m: self.sent.append(m)
+        self.files = pf.PanelFiles(self.root / "p")
+        self.panel = pn.PanelHub(hub, base="http://127.0.0.1:1/tok")
+        charts.set_panel(self.panel, self.files, lambda: 4)
+        self.addCleanup(charts.set_panel, None, None)
+        self.addCleanup(self.tmp.cleanup)
+
+    def run_tool(self, face=True, **kw):
+        with (
+            cfg(self.mine),
+            mock.patch.object(art_tool.faces, "detect", return_value=[self.face] if face else []),
+        ):
+            return art_tool.pixel_art("me", **kw)
+
+    def test_the_crop_is_head_and_shoulders_with_margin_and_stays_inside_the_picture(self):
+        from julius.art import faces
+
+        box = faces.head_and_shoulders((1200, 900), self.face)
+        left, top, right, bottom = box
+        self.assertTrue(0 <= left < 450 and right > 750, box)  # wider than the face
+        self.assertTrue(top < 200 and bottom > 560, box)  # room above and below
+        edge = faces.head_and_shoulders((1200, 900), (0.9, 0.7, 0.2, 0.3))
+        self.assertTrue(0 <= edge[0] and edge[2] <= 1200 and 0 <= edge[1] and edge[3] <= 900)
+
+    def test_no_face_or_no_helper_means_the_whole_picture(self):
+        from julius.art import faces
+
+        im = Image.new("RGB", (100, 80))
+        with mock.patch.object(faces, "detect", return_value=[]):
+            out, found, focus = faces.portrait_crop(im)
+        self.assertEqual((out.size, found, focus), ((100, 80), False, None))
+        boom = mock.Mock(side_effect=OSError("no helper"))
+        self.assertEqual(faces.detect(im, runner=boom, binary=Path("/nope")), [])
+
+    def test_the_helper_gets_the_picture_on_stdin_and_the_largest_face_wins(self):
+        from julius.art import faces
+
+        out = mock.Mock(stdout=b'{"w":10,"h":10,"faces":[[0.4,0.3,0.3,0.4],[0.1,0.1,0.02,0.02]]}\n')
+        runner = mock.Mock(return_value=out)
+        got = faces.detect(Image.new("RGB", (50, 50)), runner=runner, binary=Path("/x/visiond"))
+        self.assertEqual(got, [(0.4, 0.3, 0.3, 0.4)])  # the tiny one is dropped
+        args, kw = runner.call_args
+        self.assertEqual(args[0], ["/x/visiond", "faces"])
+        self.assertTrue(kw["input"].startswith(b"\xff\xd8"))  # a JPEG, sent on stdin: no file
+
+    def test_a_portrait_defaults_to_64_wide_caps_at_128_and_full_photo_skips_the_crop(self):
+        said = self.run_tool()
+        self.assertIn("cropped to head and shoulders", said)
+        card = self.sent[-1]
+        self.assertTrue(any(x == "Crop: head and shoulders" for x in card["settings"]))
+        self.assertIn("64 by", said)
+        self.assertIn("128 by", self.run_tool(size=500))
+        said = self.run_tool(full=True)
+        self.assertNotIn("cropped", said)
+        self.assertIn("48 by 36", said)
+        self.assertTrue(any(x == "Crop: full photo" for x in self.sent[-1]["settings"]))
+        self.assertIn("48 by 36", self.run_tool(face=False))
+
+    def test_a_flat_low_contrast_photo_uses_all_four_gameboy_tones(self):
+        from julius.art import pixel
+
+        flat = Image.effect_noise((200, 200), 6).convert("RGB")
+        flat = Image.blend(flat, Image.new("RGB", (200, 200), (200, 190, 180)), 0.9)
+        d = ImageDraw.Draw(flat)
+        d.ellipse((60, 60, 140, 150), fill=(190, 150, 130))
+        r = pixel.render(flat, pixel.Settings(size=48, palette="gameboy"))
+        self.assertEqual(len(r.palette), 4)  # a naive nearest-colour mapping would give one or two
+
+    def test_dither_is_ordered_deterministic_and_changes_the_pixels(self):
+        from julius.art import pixel
+
+        ramp = Image.linear_gradient("L").resize((128, 64)).convert("RGB")
+        a = pixel.render(ramp, pixel.Settings(size=64, palette="gameboy"))
+        b = pixel.render(ramp, pixel.Settings(size=64, palette="gameboy", dither=True))
+        c = pixel.render(ramp, pixel.Settings(size=64, palette="gameboy", dither=True))
+        self.assertEqual(b.small.tobytes(), c.small.tobytes())
+        self.assertNotEqual(a.small.tobytes(), b.small.tobytes())
+
+    def test_the_outline_is_only_on_strong_edges_one_pixel_and_the_darkest_colour(self):
+        import numpy as np
+
+        from julius.art import pixel
+
+        soft = Image.linear_gradient("L").resize((96, 96)).convert("RGB")  # no edge anywhere
+        r = pixel.render(soft, pixel.Settings(size=48, palette="gameboy", outline=True))
+        plain = pixel.render(soft, pixel.Settings(size=48, palette="gameboy"))
+        self.assertEqual(r.small.tobytes(), plain.small.tobytes())
+        hard = Image.new("RGB", (96, 96), (240, 240, 240))
+        ImageDraw.Draw(hard).rectangle((30, 30, 66, 66), fill=(20, 20, 20))
+        r = pixel.render(hard, pixel.Settings(size=48, palette="gameboy", outline=True))
+        a = np.asarray(r.small)[..., :3].reshape(-1, 3)
+        ink = np.array([0x0F, 0x38, 0x0F])
+        marked = (a == ink).all(axis=1).sum()
+        self.assertGreater(marked, 0)
+        edge_len = 4 * 36 * 48 / 96
+        self.assertLess(
+            marked, edge_len * 3 + 400
+        )  # a thin line plus the dark square, not a fat border
+
+    def test_the_comparison_grid_is_nine_labelled_variants_in_one_card(self):
+        said = self.run_tool(compare=True)
+        card = self.sent[-1]
+        self.assertEqual(pn.validate(card), [])
+        self.assertEqual(card["kind"], "compare")
+        self.assertIn("32, 48 and 64", said)
+        data, _ = self.files.bytes_of(card["after"])
+        im = Image.open(__import__("io").BytesIO(data))
+        self.assertGreater(im.width, 3 * 150)
+        self.assertGreater(im.height, 2 * 150)
+        self.assertEqual(
+            [p for p in (self.root / "p").iterdir() if p.is_file()], []
+        )  # nothing on disk
 
 
 class CommandTests(unittest.TestCase):
@@ -362,10 +501,30 @@ class CommandTests(unittest.TestCase):
                 "palette": "gameboy",
                 "outline": True,
                 "transparent": True,
+                "dither": False,
+                "full": False,
+                "compare": False,
+                "retro": False,
             },
         )
         d = art_tool.parse_options("")
-        self.assertEqual(d, {"outline": False, "transparent": False})
+        self.assertEqual(
+            d,
+            {
+                "outline": False,
+                "transparent": False,
+                "dither": False,
+                "full": False,
+                "retro": False,
+                "compare": False,
+            },
+        )
+        self.assertTrue(art_tool.parse_options("make it retro")["retro"])
+        self.assertTrue(art_tool.parse_options("gameboy, dither on")["dither"])
+        self.assertFalse(art_tool.parse_options("gameboy, dither off")["dither"])
+        self.assertFalse(art_tool.parse_options("no dithering please")["dither"])
+        self.assertTrue(art_tool.parse_options("full photo, 64 pixels")["full"])
+        self.assertTrue(art_tool.parse_options("show me a comparison grid")["compare"])
         self.assertEqual(
             art_tool.parse_options("pico-8 palette, no outline, not transparent")["palette"],
             "pico8",
@@ -393,7 +552,20 @@ class CommandTests(unittest.TestCase):
         self.assertIn("never creates art from scratch", desc)
         self.assertEqual(
             set(schema["function"]["parameters"]["properties"]),
-            {"source", "style", "size", "colors", "palette", "outline", "transparent", "zoom"},
+            {
+                "source",
+                "style",
+                "size",
+                "colors",
+                "palette",
+                "outline",
+                "transparent",
+                "zoom",
+                "dither",
+                "full_photo",
+                "compare",
+                "retro",
+            },
         )
         self.assertEqual(schema["function"]["parameters"]["required"], ["source", "style"])
 
