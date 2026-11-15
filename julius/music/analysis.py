@@ -22,7 +22,8 @@ HOP = 256
 MAX_SECONDS = 90.0  # analysed window; longer files are read from the middle
 MAX_BYTES = 400 * 1024 * 1024
 BPM_RANGE = (50.0, 200.0)
-FOLD = (80.0, 160.0)
+# Below this share of harmonic (pitched) energy there is no key to name: drum-only loops measured at most 0.011, the quietest melodic loops at least 0.017 (evals/music_filename_eval.py keys)
+MIN_HARMONIC_SHARE = 0.015
 
 NAMES_MAJOR = ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"]
 NAMES_MINOR = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "G#", "A", "Bb", "B"]
@@ -46,6 +47,8 @@ class Analysis:
     key: str = ""
     key_confidence: float = 0.0
     key_runner_up: str = ""
+    key_clear: bool = True
+    filename_bpm: int | None = None
     analysed_seconds: float = 0.0
     note: str = ""
 
@@ -123,61 +126,98 @@ def _parabolic(values: Any, i: int) -> float:
     return float(i) if d == 0 else float(i) + 0.5 * (a - c) / d
 
 
+PRIOR_CENTER = 130.0  # chosen on the dev half of the filename eval (evals/music_filename_eval.py), checked on the held-out half
+PRIOR_WIDTH = 0.7  # octaves
+HARMONICS = (1, 2, 3, 4)
+SWITCH = 1.1  # a 3:2 or 4:3 faster reading wins when its beat grid hits onsets this much better than the first choice
+
+
+def _acf(env: Any) -> Any:
+    import numpy as np
+
+    e = env - env.mean()
+    n = len(e)
+    f = np.fft.rfft(e, 2 * n)
+    ac = np.fft.irfft(f * np.conj(f))[:n]
+    return ac / (ac[0] + 1e-12)
+
+
+def _pulse(env: Any, period: float) -> float:
+    """Beat strength: the mean onset strength on a grid of this period (frames), at the best phase, relative to the file's mean. A real beat grid lands on the hits; a wrong 3:2 or 4:3 grid half-lands on weak ones."""
+    import numpy as np
+
+    k = int((len(env) - period - 1) // period)
+    if k < 4:
+        return 0.0
+    idx = np.rint(np.arange(0, period, 1.0)[:, None] + period * np.arange(k)[None, :]).astype(int)
+    return float(env[idx].mean(axis=1).max() / (env.mean() + 1e-9))
+
+
+def _beat_strength(env: Any, bpm: float, fps: float) -> float:
+    """_pulse at the best tempo within 2% of bpm (a grid has to be exact to line up over a whole file)."""
+    import numpy as np
+
+    return max(_pulse(env, fps * 60.0 / (bpm * (1 + d))) for d in np.arange(-0.02, 0.0201, 0.0006))
+
+
 def tempo(y: Any) -> tuple[float, float, list[float]]:
-    """(bpm, confidence 0-1, alternative readings such as half or double time)."""
+    """(bpm, confidence 0-1, alternative readings such as half or double time).
+
+    Each tempo from 55 to 200 BPM is scored by how well the onset-strength autocorrelation repeats at one, two, three and four of its beats (a comb, so a pattern
+    that repeats every 1.5 beats does not beat the real beat), times a soft preference for the middle of the range. The first choice is then checked against its
+    3:2 and 4:3 faster readings, which are the usual mistake on triplet-feel material; the faster one wins only when its beat grid lands clearly better."""
     import librosa
     import numpy as np
 
     env_raw = librosa.onset.onset_strength(y=y, sr=SR, hop_length=HOP)
-    env = env_raw
-    if len(env) < 64 or float(np.max(env)) <= 1e-6:
+    if len(env_raw) < 64 or float(np.max(env_raw)) <= 1e-6:
         raise AudioProblem("There isn't a clear beat in that audio.")
-    env = env - env.mean()
-    n = len(env)
-    f = np.fft.rfft(env, 2 * n)
-    ac = np.fft.irfft(f * np.conj(f))[:n]
-    ac = ac / (ac[0] + 1e-12)
+    n = len(env_raw)
     fps = SR / HOP
-    lo, hi = int(fps * 60 / BPM_RANGE[1]), int(fps * 60 / BPM_RANGE[0])
-    hi = min(hi, n - 2)
-    lags = np.arange(lo, hi + 1)
-    bpms = 60.0 * fps / lags
-    # a gentle preference for 70-180 BPM, flat inside it, so slow or fast material is not forced to a middle value
-    prior = np.exp(-0.5 * (np.log2(np.clip(bpms, 1, None) / 120.0) / 1.3) ** 2)
-    score = ac[lags] * prior
+    ac = _acf(env_raw)
+    grid = np.arange(55.0, 200.01, 1.0)
+    comb = np.zeros(len(grid))
+    for j, b in enumerate(grid):
+        lag = fps * 60.0 / b
+        v = [ac[int(round(lag * m))] for m in HARMONICS if int(round(lag * m)) < n - 1]
+        comb[j] = max(float(np.mean(v)), 0.0) if v else 0.0
+    prior = np.exp(-0.5 * (np.log2(grid / PRIOR_CENTER) / PRIOR_WIDTH) ** 2)
+    score = comb * prior
     i = int(np.argmax(score))
-    lag = float(_parabolic(ac, int(lags[i])))
-    bpm = float(60.0 * fps / lag)
-    peak = float(ac[lags[i]])
-
-    def at(b: float) -> float:
-        k = int(round(fps * 60.0 / b))
-        if k < 1 or k + 1 >= n:
-            return 0.0
-        return float(np.max(ac[max(1, k - 1) : k + 2]))
-
-    # runner-up: the strongest lag that is not this tempo or a simple multiple/fraction of it
-    related = [bpm * r for r in (0.5, 2 / 3, 0.75, 1.0, 4 / 3, 1.5, 2.0)]
-    other = 0.0
-    for j, b in enumerate(bpms):
-        if any(abs(b - r) / r < 0.06 for r in related):
-            continue
-        other = max(other, float(score[j]))
+    bpm = float(grid[i])
     top = float(score[i])
+    # runner-up: the strongest score that is not this tempo or a simple multiple/fraction of it
+    related = [bpm * r for r in (0.5, 2 / 3, 0.75, 1.0, 4 / 3, 1.5, 2.0)]
+    other = max(
+        (
+            float(score[j])
+            for j, b in enumerate(grid)
+            if not any(abs(b - r) / r < 0.06 for r in related)
+        ),
+        default=0.0,
+    )
     confidence = max(0.0, min(1.0, (top - other) / (top + 1e-9) * 2.0)) if top > 0 else 0.0
-    confidence *= max(0.0, min(1.0, peak / 0.25))
+    confidence *= max(0.0, min(1.0, float(comb[i]) / 0.25))
     alternatives = []
     for r in (0.5, 2.0):
         b = bpm * r
-        if BPM_RANGE[0] <= b <= BPM_RANGE[1] and at(b) >= 0.6 * peak:
+        if BPM_RANGE[0] <= b <= BPM_RANGE[1] and float(np.interp(b, grid, comb)) >= 0.6 * float(
+            comb[i]
+        ):
             alternatives.append(float(b))
-    # most music sits between 80 and 160 BPM: when the half or double reading is nearly as strong and lands there, prefer it
-    if not FOLD[0] <= bpm < FOLD[1]:
-        for b in list(alternatives):
-            if FOLD[0] <= b < FOLD[1]:
-                alternatives = [x for x in alternatives if x != b] + [bpm]
-                bpm = b
-                break
+    # 3:2 and 4:3 faster readings: take one only when its beat grid clearly lands better
+    base = _beat_strength(env_raw, bpm, fps)
+    best_b, best_p = bpm, base
+    for q in (1.5, 4 / 3):
+        b = bpm * q
+        if b > BPM_RANGE[1]:
+            continue
+        p = _beat_strength(env_raw, b, fps)
+        if p > SWITCH * base and p > best_p:
+            best_b, best_p = b, p
+    if best_b != bpm:
+        alternatives = [bpm] + [a for a in alternatives if abs(a - best_b) / best_b > 0.05]
+        bpm = best_b
     bpm = _refine(env_raw=env_raw, bpm=bpm)
     return bpm, round(confidence, 2), [round(x, 1) for x in alternatives]
 
@@ -204,8 +244,8 @@ def _refine(env_raw: Any, bpm: float) -> float:
 
 
 # ---- key -----------------------------------------------------------------------------------------------------------------------------------------------------
-def key_of(y: Any) -> tuple[str, float, str]:
-    """(key like 'A minor', confidence 0-1, runner-up key)."""
+def key_features(y: Any) -> dict[str, Any]:
+    """Everything the key decision uses: the best and second-best key, the correlations, and how tonal the audio is (harmonic share of the energy and how peaked the pitch-class profile is)."""
     import librosa
     import numpy as np
 
@@ -225,12 +265,45 @@ def key_of(y: Any) -> tuple[str, float, str]:
             r = float(np.corrcoef(profile, ref)[0, 1])
             scores.append((r, f"{names[tonic]} {mode}"))
     scores.sort(reverse=True)
-    (r1, k1), (r2, k2) = scores[0], scores[1]
-    confidence = max(0.0, min(1.0, (r1 - r2) / 0.12)) * max(0.0, min(1.0, (r1 - 0.2) / 0.5))
-    return k1, round(confidence, 2), k2
+    p = profile / (profile.sum() + 1e-12)
+    entropy = float(
+        -(p * np.log2(p + 1e-12)).sum() / np.log2(12)
+    )  # 1 = every pitch class equally present, lower = a few dominate
+    e_total = float(np.mean(y**2)) + 1e-12
+    return {
+        "key": scores[0][1],
+        "runner_up": scores[1][1],
+        "r1": scores[0][0],
+        "r2": scores[1][0],
+        "harmonic_share": float(np.mean(harmonic**2)) / e_total,
+        "entropy": entropy,
+    }
+
+
+def key_of(y: Any) -> tuple[str, float, str]:
+    """(key like 'A minor', confidence 0-1, runner-up key). Confidence is 0 when the audio is not tonal enough to name a key at all (see key_is_clear)."""
+    f = key_features(y)
+    if f["harmonic_share"] < MIN_HARMONIC_SHARE:
+        raise AudioProblem("No clear key: this is mostly drums or other unpitched sound.")
+    confidence = max(0.0, min(1.0, (f["r1"] - f["r2"]) / 0.12)) * max(
+        0.0, min(1.0, (f["r1"] - 0.2) / 0.5)
+    )
+    return f["key"], round(confidence, 2), f["runner_up"]
 
 
 # ---- the whole thing -----------------------------------------------------------------------------------------------------------------------------------------
+def _filename_bpm(p: Path) -> int | None:
+    """The BPM written in the file name (CHZN1_Mango_bpm94), if any: shown beside the measured one, never used to correct it."""
+    from julius.music import library
+
+    return library.parse_name(p.stem)[0]
+
+
+def bpm_agrees(a: Analysis) -> bool:
+    """True when there is no filename BPM or it is within 2% of the measured one."""
+    return a.filename_bpm is None or abs(a.bpm - a.filename_bpm) / a.filename_bpm <= 0.02
+
+
 def analyze(path: str | Path) -> Analysis:
     p = check_path(path)
     y, total, seconds = load(p)
@@ -238,10 +311,12 @@ def analyze(path: str | Path) -> Analysis:
         raise AudioProblem(f"{p.name} is too short to find a tempo or key (under 3 seconds).")
     bpm, bpm_conf, alts = tempo(y)
     note = ""
+    key_clear = True
     try:
         key, key_conf, runner = key_of(y)
-    except AudioProblem as exc:
-        key, key_conf, runner, note = "", 0.0, "", str(exc)
+    except AudioProblem:
+        key, key_conf, runner = "", 0.0, ""
+        key_clear = False
     if total > seconds + 1:
         note = (note + " " if note else "") + f"Analysed {int(seconds)} seconds from the middle."
     return Analysis(
@@ -254,6 +329,8 @@ def analyze(path: str | Path) -> Analysis:
         key=key,
         key_confidence=key_conf,
         key_runner_up=runner,
+        key_clear=key_clear,
+        filename_bpm=_filename_bpm(p),
         analysed_seconds=round(seconds, 1),
         note=note,
     )
@@ -272,11 +349,15 @@ def table_rows(a: Analysis) -> list[list[str]]:
         ["Tempo", f"{bpm} BPM", f"{level(a.bpm_confidence)} ({a.bpm_confidence:.2f})"],
         [
             "Key",
-            a.key or "not found",
+            a.key or ("no clear key" if not a.key_clear else "not found"),
             f"{level(a.key_confidence)} ({a.key_confidence:.2f})" if a.key else "",
         ],
         ["Duration", clock(a.duration), ""],
     ]
+    if a.filename_bpm is not None:
+        rows.insert(
+            1, ["Filename says", f"{a.filename_bpm} BPM", "agrees" if bpm_agrees(a) else "differs"]
+        )
     if a.key and a.key_runner_up and a.key_confidence < 0.66:
         rows.append(["Also possible", a.key_runner_up, ""])
     return rows
@@ -292,11 +373,20 @@ def spoken(a: Analysis) -> str:
     key = (
         f" Key: {a.key} ({level(a.key_confidence)} confidence)."
         if a.key
+        else " No clear key: it is mostly drums or other unpitched sound."
+        if not a.key_clear
         else " I couldn't find a key."
+    )
+    name_bpm = (
+        f" The file name says {a.filename_bpm} BPM; the measured tempo is {a.bpm:g}. Give both and don't pick one."
+        if not bpm_agrees(a)
+        else f" That matches the {a.filename_bpm} BPM in the file name."
+        if a.filename_bpm is not None
+        else ""
     )
     if a.key and a.key_confidence < 0.66 and a.key_runner_up:
         key += f" It might also be {a.key_runner_up}."
     return (
-        f"{a.name}: about {a.bpm:g} BPM ({level(a.bpm_confidence)} confidence).{alt}{key} Length {clock(a.duration)}."
-        + (f" {a.note}" if a.note else "")
+        f"{a.name}: about {a.bpm:g} BPM ({level(a.bpm_confidence)} confidence).{alt}{name_bpm}{key} Length {clock(a.duration)}."
+        + (f" {a.note}" if a.note and a.key_clear else "")
     )

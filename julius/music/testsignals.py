@@ -37,7 +37,12 @@ def _tone(freq: float, n: int, rng: np.random.Generator) -> np.ndarray:
 
 
 def render(
-    bpm: float, key: str, seconds: float = 30.0, seed: int = 0, drums: bool = True
+    bpm: float,
+    key: str,
+    seconds: float = 30.0,
+    seed: int = 0,
+    drums: bool = True,
+    tonal: bool = True,
 ) -> np.ndarray:
     """Mono float32 audio. `key` like 'A minor' or 'F# major'."""
     tonic_name, mode = key.split()
@@ -49,7 +54,7 @@ def render(
     bar = beat * 4
     prog = _MINOR if mode == "minor" else _MAJOR
     k = 0
-    while k * bar < seconds:
+    while tonal and k * bar < seconds:
         root, shape = prog[k % len(prog)]
         start = int(k * bar * SR)
         n = min(int(bar * SR), total - start)

@@ -99,9 +99,42 @@ class Accuracy(Base):
     def test_octave_alternative_is_reported(self):
         a = analysis.analyze(self.clip("o.wav", 90, "C major", 25.0, 2))
         self.assertTrue(
-            any(abs(b - 2 * a.bpm) / (2 * a.bpm) < 0.03 for b in a.bpm_alternatives)
+            any(
+                abs(b - f * a.bpm) / (f * a.bpm) < 0.03
+                for b in a.bpm_alternatives
+                for f in (0.5, 2)
+            )
             or a.bpm_alternatives == []
         )
+
+    def test_a_drum_only_loop_has_no_clear_key_and_a_melodic_one_does(self):
+        import soundfile as sf
+
+        drums = self.dir / "drums_BPM120.wav"
+        sf.write(
+            str(drums), testsignals.render(120, "A minor", 20.0, 4, tonal=False), testsignals.SR
+        )
+        a = analysis.analyze(drums)
+        self.assertEqual((a.key, a.key_clear), ("", False))
+        self.assertIn("No clear key", analysis.spoken(a))
+        self.assertIn(
+            "No clear key", [r for r in analysis.table_rows(a) if r[0] == "Key"][0][1].capitalize()
+        )
+        b = analysis.analyze(self.clip("melody.wav", 120, "A minor", 20.0, 4))
+        self.assertTrue(b.key_clear and b.key)
+
+    def test_filename_bpm_is_shown_beside_the_measured_one_not_trusted(self):
+        a = analysis.analyze(self.clip("loop_BPM94.wav", 120, "D major", 20.0, 5))
+        self.assertEqual(a.filename_bpm, 94)
+        self.assertFalse(analysis.bpm_agrees(a))
+        self.assertIn("file name says 94", analysis.spoken(a))
+        self.assertIn(["Filename says", "94 BPM", "differs"], analysis.table_rows(a))
+        c = analysis.analyze(self.clip("loop_bpm120.wav", 120, "D major", 20.0, 5))
+        self.assertTrue(analysis.bpm_agrees(c))
+        self.assertIn("matches the 120", analysis.spoken(c))
+        d = analysis.analyze(self.clip("plain.wav", 120, "D major", 20.0, 5))
+        self.assertIsNone(d.filename_bpm)
+        self.assertNotIn("file name", analysis.spoken(d))
 
     def test_duration_and_confidence_fields(self):
         a = analysis.analyze(self.clip("d.wav", 120, "A minor", 20.0, 3))
