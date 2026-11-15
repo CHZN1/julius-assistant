@@ -14,6 +14,8 @@ A per-install token lives in `~/.julius/ui_token` (created on first start with m
 |---|---|---|
 | `GET /v1/ping` | none | `{"ok": true}` when the token is right |
 | `POST /v1/typed` | `{"text": "..."}` | Queued exactly like a line typed in the terminal: same pipeline as speech, wakes him for that turn. Answer is spoken and shown (`[ui] typed_reply = "both"`, default) or shown only (`"text"`). |
+| `POST /v1/photo` | raw JPEG bytes (`Content-Type: image/jpeg`, at most 4 MiB), optional `?auto=1` | The photo the user kept with Use Photo in the orb's camera window. Held in memory as "this" (never written to disk unless the user says save this card) and shown as a still card; `auto=1` means the orb used it by itself after its timeout. A follow-up the user asked for ("take a selfie and make it a pencil sketch") runs now. |
+| `POST /v1/camera` | `{"event": "opened" \| "closed" \| "denied"}` | The camera window opened, was closed (camera off), or macOS refused the camera. A closed window with no photo drops a waiting follow-up. |
 | `POST /v1/drop` | `{"paths": ["/abs/path", ...]}` | Files dropped on the orb. Staged only; nothing runs (see below). |
 
 Responses are `{"ok": true, ...}` or `{"ok": false, "error": "..."}` with the status codes below.

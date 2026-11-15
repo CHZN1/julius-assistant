@@ -423,8 +423,6 @@ def save_camera_card(
     card: dict, files: Any, cfg_value: str | None, now: Callable[[], float] = time.time
 ) -> str:
     """A camera photo reaches disk only here: the picture and a short note, in their own folder."""
-    if card.get("phase") != "done":
-        return "There is no finished photo to save."
     got = files.bytes_of(card.get("image", "")) if files is not None else None
     if got is None:
         return "That photo is no longer available, so I can't save it."
@@ -452,6 +450,21 @@ def save_camera_card(
     return f"Saved to {base.name}, in a folder called {folder.name}."
 
 
+def _write_sprite(folder: Path, one: bytes) -> None:
+    """The sprite at 1x and, by nearest-neighbour zoom of that 1x, at 4x and 8x: every sprite pixel stays a crisp square."""
+    import io
+
+    from PIL import Image
+
+    (folder / "sprite-1x.png").write_bytes(one)
+    with Image.open(io.BytesIO(one)) as im:
+        im = im.convert("RGBA")
+        for k in (4, 8):
+            out = io.BytesIO()
+            im.resize((im.width * k, im.height * k), Image.NEAREST).save(out, "PNG", optimize=True)
+            (folder / f"sprite-{k}x.png").write_bytes(out.getvalue())
+
+
 def save_art_card(
     card: dict, files: Any, cfg_value: str | None, now: Callable[[], float] = time.time
 ) -> str:
@@ -475,6 +488,8 @@ def save_art_card(
             (folder / "restyled.png").write_bytes(export[0])
         elif card.get("kind") == "compare":
             (folder / "pixel-art-options.png").write_bytes(export[0])
+        elif card.get("kind") == "sprite":
+            _write_sprite(folder, small[0])
         else:
             (folder / "pixel-art.png").write_bytes(export[0])
             (folder / "pixel-art-1x.png").write_bytes(small[0])
@@ -484,8 +499,12 @@ def save_art_card(
             f"# {card.get('title', 'Pixel art')}\n\n"
             f"*{time.strftime('%Y-%m-%d %H:%M', time.localtime(now()))}. {card.get('summary', '')}.*\n\n"
             f"{lines}\n\n**Palette:** {pal}\n\n"
-            "`pixel-art.png` is the export (nearest-neighbour zoom, so every pixel is a crisp square); `pixel-art-1x.png` is the same art at one pixel per art pixel. "
-            "The original picture was only read and is not copied here.\n",
+            + (
+                "`sprite-1x.png` is one pixel per sprite pixel, transparent background; `sprite-4x.png` and `sprite-8x.png` are nearest-neighbour zooms of it. "
+                if card.get("kind") == "sprite"
+                else "`pixel-art.png` is the export (nearest-neighbour zoom, so every pixel is a crisp square); `pixel-art-1x.png` is the same art at one pixel per art pixel. "
+            )
+            + "The original picture was only read and is not copied here.\n",
             encoding="utf-8",
         )
     except SaveRefused as e:

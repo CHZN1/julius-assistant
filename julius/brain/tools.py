@@ -881,6 +881,12 @@ def image_style(
     full_photo: bool = False,
     compare: bool = False,
     retro: bool = False,
+    line: int = 0,
+    smooth: int = -1,
+    head: int = 0,
+    chibi: bool = False,
+    big_eyes: bool = False,
+    nose: bool = False,
 ) -> str:
     from julius.art import tool as art_tool
 
@@ -897,6 +903,12 @@ def image_style(
         full_photo,
         compare,
         retro,
+        line,
+        smooth,
+        head,
+        chibi,
+        big_eyes,
+        nose,
     )
 
 
@@ -904,7 +916,7 @@ REGISTRY["image_style"] = image_style
 SCHEMAS.append(
     _utility_schema(
         "image_style",
-        "Restyle a picture the user provides (style: pixel_art, cel_shade, comic, pencil, pop_art or watercolor; style 'all' shows all five photo styles side by side). Only transforms their image, never creates art from scratch. source: its file name, or 'dropped' when he names none (the tool then asks if nothing was dropped). Portraits are cropped to head and shoulders on this Mac (full_photo=true skips that); compare=true shows a grid of sizes and looks; retro=true gives the flat, outlined sprite look; line (1-5) and smooth (0-5) tune the photo styles; leave size, colors, line and smooth out for the defaults.",
+        "Restyle a picture the user provides (style: pixel_art, sprite, cel_shade, comic, pencil, pop_art or watercolor; style 'all' shows all five photo styles side by side; style 'sprite' builds a game sprite of the face, head-only, from its measured features: 'make me a sprite', 'turn me into a Game Boy character', 'make this look like a retro game character'; 'pixel art', 'pixelate' and a Game Boy look are pixel_art). Only transforms their image, never creates art from scratch. source: its file name, or 'dropped' when he names none (the tool then asks if nothing was dropped). Portraits are cropped to head and shoulders on this Mac (full_photo=true skips that); compare=true shows a grid of sizes and looks; retro=true gives the flat, outlined sprite look; line (1-5) and smooth (0-5) tune the photo styles; for a sprite: head 16 (default), 24 or 32, palette gameboy (default), pico8 or nes, chibi, big_eyes, nose; leave size, colors, line and smooth out for the defaults.",
         {
             "source": "string",
             "style": "string",
@@ -920,6 +932,10 @@ SCHEMAS.append(
             "retro": "boolean",
             "line": "integer",
             "smooth": "integer",
+            "head": "integer",
+            "chibi": "boolean",
+            "big_eyes": "boolean",
+            "nose": "boolean",
         },
         ["source", "style"],
     )

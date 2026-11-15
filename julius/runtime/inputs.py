@@ -59,6 +59,37 @@ def ui_typed(s: Session, text: str) -> dict:
     return {"queued": True}
 
 
+def ui_photo(s: Session, jpeg: bytes, auto: bool = False) -> dict:
+    """A photo from the orb's camera window (Use Photo, or the automatic use after the shot): held in memory, shown as a still, and the follow-up ("make it pixel art") queued
+    like a typed line."""
+    from julius.art import camera
+
+    then = camera.received(
+        jpeg, getattr(s, "panel_hub", None), getattr(s, "panel_files", None), s.turn, auto
+    )
+    if then:
+        entry = uichannel.TypedText(then)
+        entry.queued_at = time.monotonic()
+        s.typed.append(entry)
+    return {"held": True, "then": bool(then)}
+
+
+def ui_camera(s: Session, event: str) -> dict:
+    """What happened to the orb's camera window: closed (a pending follow-up is dropped) or denied (the camera buttons say why)."""
+    from julius.art import camera
+
+    if event == "closed":
+        camera.cancel_pending()
+    elif event == "denied" and getattr(s, "panel_hub", None) is not None:
+        camera.cancel_pending()
+        s.panel_hub.set_camera_status(
+            False,
+            "Camera permission is off. Allow it in System Settings, Privacy and Security, Camera.",
+            "permission",
+        )
+    return {}
+
+
 def start_ui_channel(s: Session) -> None:
     """Open the orb's local channel (typed text and file drops), unless running without devices."""
     if s.no_devices:
@@ -67,7 +98,12 @@ def start_ui_channel(s: Session) -> None:
         s.drop_stage = dropstage.DropStage(
             lambda p: files.agent().resolve(p), lambda p: files.agent().mode_of(p)
         )
-        handlers = {"typed": lambda t: ui_typed(s, t), "drop": lambda p: ui_drop(s, p)}
+        handlers = {
+            "typed": lambda t: ui_typed(s, t),
+            "drop": lambda p: ui_drop(s, p),
+            "photo": lambda data, auto=False: ui_photo(s, data, auto),
+            "camera": lambda event: ui_camera(s, event),
+        }
         s.ui_channel = uichannel.start_from_config(config.load_config().get("ui"), handlers)
     except Exception as exc:
         s.ui_channel = None

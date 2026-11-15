@@ -201,14 +201,14 @@
 {"id": "r202", "cat": "art", "text": "Turn this photo I just dropped on the orb into pixel art.", "expect": {"path": "shortcut", "tool": "pixel_art"}}
 {"id": "r203", "cat": "art", "text": "Make sunset.jpg into 32 pixel art with the gameboy palette.", "expect": {"path": "shortcut", "tool": "pixel_art"}}
 {"id": "r204", "cat": "art", "text": "Pixelate the picture I just dropped, 64 pixels, 8 colors, with an outline and a transparent background.", "expect": {"path": "shortcut", "tool": "pixel_art"}}
-{"id": "r205", "cat": "art", "text": "Can you make profile.png look like an 8-bit sprite?", "expect": {"path": "shortcut", "tool": "pixel_art"}}
+{"id": "r205", "cat": "art", "text": "Can you make profile.png look like an 8-bit sprite?", "expect": {"path": "tool", "tool": "image_style", "args_contain": ["sprite"]}, "fragile": true}
 {"id": "r206", "cat": "art", "text": "Draw me a picture of a dragon.", "expect": {"path": "direct"}, "fragile": true}
 {"id": "r207", "cat": "art", "text": "What is pixel art?", "expect": {"path": "direct"}, "fragile": true}
 {"id": "r208", "cat": "art", "text": "Can you make my selfie look 8-bit?", "expect": {"path": "tool", "tool": "image_style"}, "fragile": true}
-{"id": "r209", "cat": "art", "text": "Turn this into a retro game sprite.", "expect": {"path": "tool", "tool": "image_style"}, "fragile": true}
-{"id": "r210", "cat": "art", "text": "Give this pic a Game Boy look.", "expect": {"path": "tool", "tool": "image_style"}, "fragile": true}
-{"id": "r211", "cat": "art", "text": "Make a sprite out of this picture.", "expect": {"path": "tool", "tool": "image_style"}, "fragile": true}
-{"id": "r212", "cat": "art", "text": "Make this photo look like a retro game character.", "expect": {"path": "tool", "tool": "image_style"}, "fragile": true}
+{"id": "r209", "cat": "art", "text": "Turn this into a retro game sprite.", "expect": {"path": "tool", "tool": "image_style", "args_contain": ["sprite"]}, "fragile": true}
+{"id": "r210", "cat": "art", "text": "Give this pic a Game Boy look.", "expect": {"path": "tool", "tool": "image_style", "args_contain": ["pixel"]}, "fragile": true}
+{"id": "r211", "cat": "art", "text": "Make a sprite out of this picture.", "expect": {"path": "tool", "tool": "image_style", "args_contain": ["sprite"]}, "fragile": true}
+{"id": "r212", "cat": "art", "text": "Make this photo look like a retro game character.", "expect": {"path": "tool", "tool": "image_style", "args_contain": ["sprite"]}, "fragile": true}
 {"id": "r213", "cat": "art", "text": "Make me a pixel art dragon.", "expect": {"path": "shortcut", "tool": "pixel_art"}}
 {"id": "r214", "cat": "art", "text": "Take a photo.", "expect": {"path": "shortcut", "tool": "take_photo"}}
 {"id": "r215", "cat": "art", "text": "Take a selfie.", "expect": {"path": "shortcut", "tool": "take_photo"}}
@@ -227,3 +227,9 @@
 {"id": "r228", "cat": "art", "text": "Show me all five styles of my selfie side by side.", "expect": {"path": "tool", "tool": "image_style"}, "fragile": true}
 {"id": "r229", "cat": "art", "text": "Try every photo style on this picture so I can compare.", "expect": {"path": "tool", "tool": "image_style"}, "fragile": true}
 {"id": "r230", "cat": "art", "text": "What camera is best for portraits?", "expect": {"path": "direct"}, "fragile": true}
+{"id": "r231", "cat": "art", "text": "Make me a sprite.", "expect": {"path": "tool", "tool": "image_style", "args_contain": ["sprite"]}, "fragile": true}
+{"id": "r232", "cat": "art", "text": "Make a game sprite of me.", "expect": {"path": "tool", "tool": "image_style", "args_contain": ["sprite"]}, "fragile": true}
+{"id": "r233", "cat": "art", "text": "Turn me into a Game Boy character.", "expect": {"path": "tool", "tool": "image_style", "args_contain": ["sprite"]}, "fragile": true}
+{"id": "r234", "cat": "art", "text": "Make my selfie a 24 pixel chibi sprite with big eyes.", "expect": {"path": "tool", "tool": "image_style", "args_contain": ["sprite"]}, "fragile": true}
+{"id": "r235", "cat": "art", "text": "Pixelate this photo.", "expect": {"path": "shortcut", "tool": "pixel_art"}}
+{"id": "r236", "cat": "art", "text": "Make this a pixel art portrait.", "expect": {"path": "shortcut", "tool": "pixel_art"}}

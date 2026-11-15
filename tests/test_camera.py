@@ -1,6 +1,6 @@
-"""Stage 5c-art camera: "take a photo / selfie" (countdown with live preview, held in memory, used like a dropped image, saved only on request)."""
+"""Stage 5c-art camera: "take a photo / selfie" opens the orb's camera window; the photo comes back over the UI channel, is held in memory, works like a dropped image,
+and is saved only on request."""
 
-import base64
 import io
 import tempfile
 import unittest
@@ -14,44 +14,16 @@ import julius.ui_bridge.events as ev
 import julius.ui_bridge.panel as pn
 import julius.ui_bridge.panel_emit as pe
 import julius.ui_bridge.panelfiles as pf
+import julius.ui_bridge.uichannel as uc
 from julius.art import camera, source
 from julius.art import tool as art_tool
+from tests.test_uichannel import Base
 
 
 def jpeg(color=(200, 150, 120), size=(64, 48)) -> bytes:
     out = io.BytesIO()
     Image.new("RGB", size, color).save(out, "JPEG")
     return out.getvalue()
-
-
-def b64(b: bytes) -> str:
-    return base64.b64encode(b).decode()
-
-
-class FakeProc:
-    def __init__(self, lines, code=0):
-        self.stdout = iter(lines)
-        self.killed = False
-        self.code = code
-
-    def wait(self, timeout=None):
-        return self.code
-
-    def poll(self):
-        return self.code
-
-    def kill(self):
-        self.killed = True
-
-
-def popen_with(frames=3, photo=None, tail="ok 1280x720"):
-    photo = photo if photo is not None else jpeg()
-    lines = [f"frame {b64(jpeg())}\n" for _ in range(frames)]
-    if photo:
-        lines.append(f"photo {b64(photo)}\n")
-    if tail:
-        lines.append(tail + "\n")
-    return mock.Mock(return_value=FakeProc(lines))
 
 
 class ParseTests(unittest.TestCase):
@@ -62,11 +34,13 @@ class ParseTests(unittest.TestCase):
             ("hey julius, take a selfie", ""),
             ("can you take a picture", ""),
             ("snap a selfie", ""),
-            ("take a selfie and make it pixel art", "and make it pixel art"),
+            ("use the camera to take my picture", ""),
+            ("take a selfie and make it pixel art", "make it pixel art"),
             (
                 "take a photo then turn it into pixel art, gameboy palette",
-                "then turn it into pixel art, gameboy palette",
+                "turn it into pixel art, gameboy palette",
             ),
+            ("Take a selfie and make it a pencil sketch.", "make it a pencil sketch"),
         ]:
             got = camera.parse(text)
             self.assertIsNotNone(got, text)
@@ -92,34 +66,7 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(vision.parse("what am I holding").source, "camera")
 
 
-class StreamTests(unittest.TestCase):
-    def test_frames_go_to_the_callback_and_the_photo_comes_back(self):
-        got = []
-        p = jpeg((1, 2, 3))
-        out = camera.stream(3, got.append, popen_with(frames=4, photo=p), Path("/x/visiond"))
-        self.assertEqual(out, p)
-        self.assertEqual(len(got), 4)
-
-    def test_errors_become_sentences(self):
-        for tail, text in [
-            ("error camera-permission", "camera permission"),
-            ("error camera-busy", "can't use the camera"),
-            ("error no-frame", "couldn't take a photo"),
-        ]:
-            with self.assertRaises(camera.CameraProblem) as c:
-                camera.stream(3, lambda b: None, popen_with(photo=b"", tail=tail), Path("/x"))
-            self.assertIn(text, str(c.exception))
-        with self.assertRaises(camera.CameraProblem):
-            camera.stream(3, lambda b: None, mock.Mock(side_effect=OSError), Path("/x"))
-
-    def test_a_failing_preview_does_not_lose_the_photo(self):
-        def boom(b):
-            raise RuntimeError
-
-        self.assertTrue(camera.stream(3, boom, popen_with(), Path("/x")))
-
-
-class TakeTests(unittest.TestCase):
+class FlowTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name).resolve()
@@ -129,49 +76,111 @@ class TakeTests(unittest.TestCase):
         self.files = pf.PanelFiles(self.root / "p")
         self.panel = pn.PanelHub(hub, base="http://127.0.0.1:1/tok")
         self.addCleanup(self.tmp.cleanup)
-        self.addCleanup(source.forget_held)
+        for f in (source.forget_held, camera.cancel_pending):
+            f()
+            self.addCleanup(f)
         self.addCleanup(source.set_drop_source, None)
-        source.forget_held()
         source.set_drop_source(None)
 
-    def take(self, **kw):
-        kw.setdefault("popen", popen_with())
-        kw.setdefault("binary", Path("/x"))
-        return camera.take({}, self.panel, self.files, 7, **kw)
+    def opens(self):
+        return [m for m in self.sent if m["type"] == "panel.camera_open"]
 
-    def test_countdown_card_updates_then_the_photo_and_nothing_on_disk(self):
-        said = self.take()
-        self.assertTrue(said.startswith("Got it"))
-        self.assertTrue(all(pn.validate(m) == [] for m in self.sent), self.sent)
-        card = self.sent[0]
-        self.assertEqual((card["type"], card["turn"]), ("panel.camera", 7))
-        self.assertEqual(
-            (card["phase"], card["count"]), ("done", 0)
-        )  # the remembered card is folded forward, so a reconnect sees the photo
-        updates = [m for m in self.sent if m["type"] == "panel.update"]
-        self.assertGreaterEqual(len(updates), 4)
-        self.assertEqual(updates[-1]["phase"], "done")
-        self.assertTrue(all(u["image"].endswith(".jpg") for u in updates))
+    def test_the_request_asks_the_orb_to_open_the_window_and_start_the_countdown(self):
+        said = camera.request({}, self.panel)
+        (m,) = self.opens()
+        self.assertEqual((m["autostart"], m["auto_use_s"]), (True, 0))
+        self.assertEqual(pn.validate(m), [])
+        self.assertIn("Counting down", said)
+
+    def test_a_follow_up_makes_the_orb_use_the_photo_by_itself_after_five_seconds(self):
+        camera.request({}, self.panel, "make it pixel art")
+        self.assertEqual(self.opens()[0]["auto_use_s"], camera.AUTO_USE_S)
+
+    def test_switched_off_or_no_orb(self):
+        self.assertIn("switched off", camera.request({"camera": False}, self.panel))
+        self.assertEqual(self.opens(), [])
+        self.assertIn("needs the Julius orb", camera.request({}, None))
+
+    def test_the_photo_is_held_in_memory_shown_as_a_still_and_the_follow_up_comes_back_once(self):
+        camera.request({}, self.panel, "make it pixel art")
+        then = camera.received(jpeg((10, 200, 10), (160, 120)), self.panel, self.files, 7)
+        self.assertEqual(then, "make it pixel art")
+        self.assertEqual(camera.take_pending(), "")  # once
+        card = [m for m in self.sent if m["type"] == "panel.camera"][0]
+        self.assertEqual((card["turn"], pn.validate(card)), (7, []))
         self.assertEqual([p for p in (self.root / "p").iterdir() if p.is_file()], [])
-        self.assertIsNotNone(source.held())
-
-    def test_previews_never_push_real_pictures_out_of_memory(self):
-        keep = self.files.put_memory(b"x" * 10, "png", keep=16)
-        self.take(popen=popen_with(frames=40))
-        self.assertIsNotNone(self.files.bytes_of(keep))
-        self.assertLessEqual(len(self.files._live), 3)
-
-    def test_the_held_photo_works_like_a_dropped_image(self):
-        self.take(popen=popen_with(photo=jpeg((10, 200, 10), (160, 120))))
         img, label, name = source.load("dropped")
         self.assertEqual((img.size, label, name), ((160, 120), "camera photo", "camera photo"))
         for words in ("this", "my selfie", ""):
             self.assertEqual(source.load(words)[1], "camera photo")
 
+    def test_a_photo_without_a_follow_up_returns_nothing_to_do(self):
+        camera.request({}, self.panel)
+        self.assertEqual(camera.received(jpeg(), self.panel, self.files, 1), "")
+
+    def test_closing_the_window_drops_the_follow_up(self):
+        from julius.runtime import inputs
+
+        s = mock.Mock(panel_hub=self.panel)
+        camera.request({}, self.panel, "make it pixel art")
+        inputs.ui_camera(s, "closed")
+        self.assertEqual(camera.take_pending(), "")
+
+    def test_a_stale_follow_up_is_ignored(self):
+        camera.request({}, self.panel, "make it pixel art")
+        self.assertEqual(camera.take_pending(clock=lambda: 1e12), "")
+
+    def test_permission_denied_dims_the_buttons_and_a_photo_turns_them_back_on(self):
+        from julius.runtime import inputs
+
+        s = mock.Mock(panel_hub=self.panel)
+        inputs.ui_camera(s, "denied")
+        st = [m for m in self.sent if m["type"] == "panel.camera_status"]
+        self.assertEqual((st[-1]["enabled"], st[-1]["cause"]), (False, "permission"))
+        self.assertIn("System Settings", st[-1]["reason"])
+        self.assertEqual(self.panel.snapshot()["camera_status"]["cause"], "permission")
+        camera.received(jpeg(), self.panel, self.files, 1)
+        st = [m for m in self.sent if m["type"] == "panel.camera_status"]
+        self.assertEqual(st[-1]["enabled"], True)
+        self.assertTrue(all(pn.validate(m) == [] for m in self.sent))
+
+    def test_camera_status_from_settings_and_in_the_hello_snapshot(self):
+        self.panel.set_camera_status(False, "The camera is switched off.", "settings")
+        self.assertEqual(
+            self.panel.snapshot()["camera_status"],
+            {"enabled": False, "reason": "The camera is switched off.", "cause": "settings"},
+        )
+        self.panel.set_camera_status(False, "x", "bogus")
+        self.assertEqual(self.panel.snapshot()["camera_status"]["cause"], "")
+
+    def test_the_ui_photo_handler_queues_the_follow_up_like_a_typed_line(self):
+        from julius.runtime import inputs
+
+        s = mock.Mock(panel_hub=self.panel, panel_files=self.files, turn=3, typed=[])
+        camera.request({}, self.panel, "make it pixel art")
+        res = inputs.ui_photo(s, jpeg(), auto=True)
+        self.assertEqual(res, {"held": True, "then": True})
+        (entry,) = s.typed
+        self.assertEqual(
+            (str(entry), getattr(entry, "from_ui", False)), ("make it pixel art", True)
+        )
+
+    def test_the_held_photo_follows_the_art_commands(self):
+        charts.set_panel(self.panel, self.files, lambda: 7)
+        self.addCleanup(charts.set_panel, None, None)
+        camera.received(jpeg((120, 90, 70), (320, 240)), self.panel, self.files, 7)
+        with mock.patch.object(art_tool.faces, "detect", return_value=[]):
+            from julius.art import commands
+
+            said = commands.handle("make it pixel art, gameboy palette")
+        self.assertIn("Pixel art from camera photo", said)
+        self.assertEqual(self.sent[-1]["type"], "panel.art")
+        self.assertEqual([p for p in (self.root / "p").iterdir() if p.is_file()], [])
+
     def test_a_file_dropped_after_the_photo_is_the_newer_picture(self):
         drop = {"items": []}
         source.set_drop_source(lambda: drop)
-        self.take()
+        camera.received(jpeg(), self.panel, self.files, 1)
         self.assertIsNotNone(source.held())
         newer = self.root / "x.png"
         Image.new("RGB", (30, 30)).save(newer)
@@ -185,73 +194,54 @@ class TakeTests(unittest.TestCase):
         self.assertIsNotNone(source.held(clock=lambda: now[0] + 100))
         self.assertIsNone(source.held(clock=lambda: now[0] + source.HELD_TTL_S + 1))
 
-    def test_take_a_selfie_and_make_it_pixel_art_uses_the_held_photo(self):
-        charts.set_panel(self.panel, self.files, lambda: 7)
-        self.addCleanup(charts.set_panel, None, None)
-        self.take(popen=popen_with(photo=jpeg((120, 90, 70), (320, 240))))
-        with mock.patch.object(art_tool.faces, "detect", return_value=[]):
-            from julius.art import commands
-
-            said = commands.handle("and make it pixel art, gameboy palette")
-        self.assertIn("Pixel art from camera photo", said)
-        self.assertEqual(self.sent[-1]["type"], "panel.art")
-        self.assertEqual([p for p in (self.root / "p").iterdir() if p.is_file()], [])
-
-    def test_failure_marks_the_card_and_says_why(self):
-        said = self.take(popen=popen_with(photo=b"", tail="error camera-permission"))
-        self.assertIn("camera permission", said)
-        self.assertEqual(self.sent[-1]["phase"], "failed")
-        self.assertIsNone(source.held())
-
-    def test_permission_denied_disables_the_button_until_a_photo_works(self):
-        self.take(popen=popen_with(photo=b"", tail="error camera-permission"))
-        status = [m for m in self.sent if m["type"] == "panel.camera_status"]
-        self.assertEqual(len(status), 1)
-        self.assertEqual((status[0]["enabled"], status[0]["cause"]), (False, "permission"))
-        self.assertIn("System Settings", status[0]["reason"])
-        self.assertEqual(self.panel.snapshot()["camera_status"]["cause"], "permission")
-        self.take()  # allowed now
-        status = [m for m in self.sent if m["type"] == "panel.camera_status"]
-        self.assertEqual(status[-1]["enabled"], True)
-        self.assertTrue(all(pn.validate(m) == [] for m in self.sent))
-        self.take()  # no change, no new message
-        self.assertEqual(len([m for m in self.sent if m["type"] == "panel.camera_status"]), 2)
-
-    def test_camera_status_from_settings_and_in_the_hello_snapshot(self):
-        self.panel.set_camera_status(False, "The camera is switched off.", "settings")
-        self.assertEqual(
-            self.panel.snapshot()["camera_status"],
-            {"enabled": False, "reason": "The camera is switched off.", "cause": "settings"},
-        )
-        self.panel.set_camera_status(False, "x", "bogus")
-        self.assertEqual(self.panel.snapshot()["camera_status"]["cause"], "")
-
-    def test_use_the_camera_to_take_my_picture_is_a_photo_request(self):
-        self.assertIsNotNone(camera.parse("use the camera to take my picture"))
-        self.assertEqual(
-            camera.parse("Take a selfie and make it a pencil sketch")["then"],
-            "and make it a pencil sketch",
-        )
-
-    def test_switched_off_in_settings(self):
-        said = camera.take({"camera": False}, self.panel, self.files, 1, popen=mock.Mock())
-        self.assertIn("switched off", said)
-        self.assertEqual(self.sent, [])
-
     def test_save_this_card_is_the_only_way_to_disk(self):
-        self.take()
+        camera.received(jpeg(), self.panel, self.files, 1)
         saved = self.root / "Julius Saved"
         said = pe.save_card(self.panel, self.files, str(saved))
         self.assertIn("Saved to", said)
         (folder,) = list(saved.iterdir())
         self.assertEqual(sorted(p.name for p in folder.iterdir()), ["card.md", "photo.jpg"])
 
-    def test_nothing_to_save_while_the_countdown_runs(self):
-        card = self.panel.camera({"phase": "countdown", "count": 3}, turn=1)
-        self.assertIsNotNone(card)
-        self.assertIn(
-            "no finished photo", pe.save_card(self.panel, self.files, str(self.root / "s"))
+
+class ChannelTests(Base):
+    """POST /v1/photo and POST /v1/camera."""
+
+    def setUp(self):
+        super().setUp()
+        self.photos, self.events = [], []
+        self.ch.handlers["photo"] = lambda data, auto=False: (
+            self.photos.append((data, auto)) or {"held": True}
         )
+        self.ch.handlers["camera"] = lambda e: self.events.append(e) or {}
+
+    def post_photo(self, data, ctype="image/jpeg", path="/v1/photo", **kw):
+        return self.req(path=path, raw=data, headers={"Content-Type": ctype}, **kw)
+
+    def test_a_jpeg_is_accepted_and_the_auto_flag_comes_through(self):
+        status, out = self.post_photo(jpeg())
+        self.assertEqual((status, out["held"]), (200, True))
+        status, _ = self.post_photo(jpeg(), path="/v1/photo?auto=1")
+        self.assertEqual(status, 200)
+        self.assertEqual([a for _, a in self.photos], [False, True])
+
+    def test_wrong_type_not_a_jpeg_and_too_large_are_refused(self):
+        self.assertEqual(self.post_photo(jpeg(), ctype="application/json")[0], 415)
+        self.assertEqual(self.post_photo(b"not a jpeg at all")[0], 400)
+        try:  # the server refuses on the header and may hang up before the whole body is sent
+            self.assertEqual(self.post_photo(b"\xff\xd8" + b"0" * (uc.MAX_PHOTO + 1))[0], 413)
+        except ConnectionError:
+            pass
+        self.assertEqual(self.photos, [])
+
+    def test_the_token_is_still_required(self):
+        self.assertEqual(self.post_photo(jpeg(), auth=False)[0], 401)
+
+    def test_camera_events(self):
+        for e in ("opened", "closed", "denied"):
+            self.assertEqual(self.req(path="/v1/camera", body={"event": e})[0], 200)
+        self.assertEqual(self.events, ["opened", "closed", "denied"])
+        self.assertEqual(self.req(path="/v1/camera", body={"event": "explode"})[0], 400)
+        self.assertEqual(self.req(path="/v1/camera", body={})[0], 400)
 
 
 if __name__ == "__main__":

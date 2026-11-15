@@ -105,6 +105,7 @@ SCHEMAS: dict[str, dict[str, str]] = {
         "kind": "str",
         "before": "str",
         "after": "str",
+        "compare": "str",
         "export": "str",
         "small": "str",
         "alt": "str",
@@ -112,7 +113,8 @@ SCHEMAS: dict[str, dict[str, str]] = {
         "settings": "list",
         "palette": "list",
     },
-    "panel.camera": {"title": "str", "phase": "str", "count": "int", "image": "str", "note": "str"},
+    "panel.camera": {"title": "str", "image": "str", "note": "str"},
+    "panel.camera_open": {"autostart": "bool", "auto_use_s": "int"},
     "panel.camera_status": {"enabled": "bool", "reason": "str", "cause": "str"},
     "panel.theory": {
         "title": "str",
@@ -130,9 +132,6 @@ SCHEMAS: dict[str, dict[str, str]] = {
         "shown": "int?",
         "more": "bool?",
         "summary": "str?",
-        "phase": "str?",
-        "count": "int?",
-        "image": "str?",
     },
     "panel.clear": {"scope": "str", "target": "str?", "reason": "str"},
 }
@@ -269,23 +268,12 @@ def _v_files(msg: dict, errors: list[str]) -> None:
         _check(ITEM_FIELDS, it, f"items[{i}]", errors)
 
 
-CAMERA_PHASES = ("countdown", "shooting", "done", "failed")
-
-
 def _v_camera(msg: dict, errors: list[str]) -> None:
-    if msg["phase"] not in CAMERA_PHASES:
-        errors.append("panel.camera: bad phase")
-    if msg["image"] and not IMAGE_REF.match(str(msg["image"])):
+    if not IMAGE_REF.match(str(msg["image"])):
         errors.append("panel.camera.image: not a panel file reference")
-    if not 0 <= msg["count"] <= 10:
-        errors.append("panel.camera.count: 0 to 10")
 
 
 def _v_update(msg: dict, errors: list[str]) -> None:
-    if msg.get("phase") is not None and msg["phase"] not in CAMERA_PHASES:
-        errors.append("panel.update: bad phase")
-    if msg.get("image") and not IMAGE_REF.match(str(msg["image"])):
-        errors.append("panel.update.image: not a panel file reference")
     for i, it in enumerate(msg.get("items") or []):
         _check(ITEM_FIELDS, it, f"items[{i}]", errors)
     if msg.get("status") is not None and msg["status"] not in FILE_STATUSES:
@@ -311,7 +299,7 @@ def _v_vision(msg: dict, errors: list[str]) -> None:
         errors.append("panel.vision: bad source")
 
 
-ART_KINDS = ("pixel", "compare", "filter")
+ART_KINDS = ("pixel", "compare", "filter", "sprite")
 MAX_ART_PALETTE = 64
 HEX6 = re.compile(r"^[0-9A-F]{6}$")
 
@@ -320,6 +308,10 @@ def _v_art(msg: dict, errors: list[str]) -> None:
     for k in ("before", "after", "export", "small"):
         if not IMAGE_REF.match(str(msg[k])):
             errors.append(f"panel.art.{k}: not a panel file reference")
+    if msg["compare"] and not IMAGE_REF.match(str(msg["compare"])):
+        errors.append(
+            "panel.art.compare: not a panel file reference"
+        )  # optional: a second result shown beside the first
     if msg["kind"] not in ART_KINDS:
         errors.append("panel.art: bad kind")
     if not all(isinstance(x, str) for x in msg["settings"]):
@@ -371,6 +363,7 @@ _EXTRA_CHECKS: dict[str, Callable[[dict, list[str]], None]] = {
     "panel.art": _v_art,
     "panel.camera": _v_camera,
     "panel.camera_status": lambda m, e: None,
+    "panel.camera_open": lambda m, e: None,
     "panel.images": lambda m, e: _v_images(m["images"], e),
     "panel.clear": _v_clear,
 }
@@ -714,6 +707,7 @@ class PanelHub:
             "kind": kind if kind in ART_KINDS else "pixel",
             "before": str(card.get("before") or ""),
             "after": str(card.get("after") or ""),
+            "compare": str(card.get("compare") or ""),
             "export": str(card.get("export") or ""),
             "small": str(card.get("small") or ""),
             "alt": clean(card.get("alt"), CAPS["alt"]),
@@ -728,16 +722,28 @@ class PanelHub:
         return self._publish("panel.art", body, turn)
 
     def camera(self, card: dict, turn: int | None = None) -> str | None:
-        """The camera card: a live preview with a countdown, then the photo. `image` is a panel file reference ("" before the first frame); it changes through camera_update."""
-        phase = str(card.get("phase") or "countdown")
+        """The still from the orb's camera window ("Use Photo"): `image` is a panel file reference to the in-memory photo."""
         body = {
-            "title": clean(card.get("title") or "Camera", CAPS["title"]),
-            "phase": phase if phase in CAMERA_PHASES else "countdown",
-            "count": max(0, min(10, int(card.get("count") or 0))),
+            "title": clean(card.get("title") or "Photo", CAPS["title"]),
             "image": str(card.get("image") or ""),
             "note": clean(card.get("note"), CAPS["note"]),
         }
         return self._publish("panel.camera", body, turn)
+
+    def camera_open(self, autostart: bool = False, auto_use_s: int = 0) -> bool:
+        """Ask the orb to open its camera window (a native window, not a card). `autostart` starts the 3-second countdown at once; `auto_use_s` > 0 means a request
+        continues after the shot, so the photo is used by itself that many seconds after the shot when nobody presses Retake or Use Photo."""
+        seq, pid = self._next()
+        msg = {
+            "type": "panel.camera_open",
+            "t": round(self.clock(), 3),
+            "panel_id": pid,
+            "turn": None,
+            "seq": seq,
+            "autostart": bool(autostart),
+            "auto_use_s": max(0, min(30, int(auto_use_s))),
+        }
+        return self._emit(msg) is not None
 
     def set_camera_status(self, enabled: bool, reason: str = "", cause: str = "") -> None:
         """Whether the camera button can be used, and why not: switched off in settings, or permission denied. Not a card: the orb enables or disables its camera buttons from it,
@@ -760,18 +766,6 @@ class PanelHub:
         if self._emit(msg):
             with self._lock:
                 self.camera_state = state
-
-    def camera_update(
-        self,
-        target: str,
-        *,
-        phase: str | None = None,
-        count: int | None = None,
-        image: str | None = None,
-        summary: str | None = None,
-    ) -> bool:
-        """The next preview frame, countdown number or phase of an existing camera card (folded into the remembered card, so a reconnect sees the latest)."""
-        return self._push(target, phase=phase, count=count, image=image, summary=summary)
 
     def theory(self, card: dict, turn: int | None = None) -> str | None:
         """A theory card: a key, scale, chord or progression with computed note names and MIDI numbers, drawn by the UI as a piano and a chord chart."""

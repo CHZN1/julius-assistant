@@ -3,6 +3,8 @@
 A tiny HTTP server on 127.0.0.1 (default port 8775), JSON in, JSON out, no third-party packages.
   POST /v1/typed   {"text": "..."}                  text typed in the orb; goes through the same pipeline as speech
   POST /v1/drop    {"paths": ["/abs/path", ...]}    files dropped on the orb; staged only (see julius_dropstage.py), nothing runs
+  POST /v1/photo   raw JPEG bytes (Content-Type image/jpeg)  a photo the orb's camera window took; held in memory only (see julius/art/camera.py)
+  POST /v1/camera  {"event": "opened"|"closed"|"denied"}     what happened to the orb's camera window
   GET  /v1/ping                                     authenticated liveness check
 
 Safety, in the order the checks run:
@@ -10,7 +12,7 @@ Safety, in the order the checks run:
   2. any Origin header is refused: the native app sends none, a web page always does
   3. rate limit (all requests, failures included, so guessing the token is slow): 20 per 10 s
   4. Authorization: Bearer <per-install token> (~/.julius/ui_token, created with mode 0600), constant-time compare
-  5. body at most 16 KiB, Content-Type application/json, valid JSON object
+  5. body at most 16 KiB, Content-Type application/json, valid JSON object (a photo: at most 4 MiB, Content-Type image/jpeg, JPEG magic bytes)
   6. endpoint validation: typed text 1..2000 chars and never a slash command (/quit and /stop are keyboard commands, not UI commands); at most 50 paths, strings only
 Every request is appended to ~/.julius/ui_audit.log as one JSON line (time, endpoint, status, sizes; never the token and never the typed text)."""
 
@@ -32,6 +34,8 @@ from julius import log
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8775
 MAX_BODY = 16 * 1024
+MAX_PHOTO = 4 * 1024 * 1024  # one camera frame as JPEG (1280x720 is about 150 KB)
+CAMERA_EVENTS = ("opened", "closed", "denied")
 MAX_TEXT = 2000
 MAX_PATHS = 50
 MAX_PATH_LEN = 4096
@@ -155,9 +159,22 @@ class Channel:
         self._authenticate(headers)
         if method == "GET" and path == "/v1/ping":
             return 200, {"ok": True}
-        if method != "POST" or path not in ("/v1/typed", "/v1/drop"):
+        route = path.split("?")[0]
+        if method == "POST" and route == "/v1/photo":
+            data = self._read_photo(headers, body_reader)
+            res = self._handler("photo", "photos are not available")(data, "auto=1" in path)
+            self.audit("photo", 200, bytes=len(data))
+            return 200, {"ok": True, **(res or {})}
+        if method != "POST" or path not in ("/v1/typed", "/v1/drop", "/v1/camera"):
             raise Refused(404, "no such endpoint")
         body = self._read_json(headers, body_reader)
+        if path == "/v1/camera":
+            event = body.get("event")
+            if event not in CAMERA_EVENTS:
+                raise Refused(400, "unknown camera event")
+            res = self._handler("camera", "the camera is not available")(event)
+            self.audit("camera", 200, event=event)
+            return 200, {"ok": True, **(res or {})}
         if path == "/v1/typed":
             text = validate_typed(body)
             log.event("ui_typed", stage="received", chars=len(text))  # never the text itself
@@ -184,6 +201,21 @@ class Channel:
             and hmac.compare_digest(auth[7:].strip().encode(), self.token.encode())
         ):
             raise Refused(401, "bad token")
+
+    @staticmethod
+    def _read_photo(headers: Any, body_reader: Any) -> bytes:
+        if (headers.get("Content-Type") or "").split(";")[0].strip().lower() != "image/jpeg":
+            raise Refused(415, "Content-Type must be image/jpeg")
+        try:
+            length = int(headers.get("Content-Length") or "")
+        except ValueError:
+            raise Refused(411, "Content-Length required") from None
+        if length < 4 or length > MAX_PHOTO:
+            raise Refused(413, "photo too large")
+        data = body_reader(length)
+        if data[:2] != b"\xff\xd8":
+            raise Refused(400, "not a JPEG")
+        return data
 
     @staticmethod
     def _read_json(headers: Any, body_reader: Any) -> dict:

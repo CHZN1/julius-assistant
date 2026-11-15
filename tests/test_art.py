@@ -465,7 +465,6 @@ class CommandTests(unittest.TestCase):
                 "Pixelate the picture I just dropped, 64 pixels, 8 colors, with an outline.",
                 "dropped",
             ),
-            ("Can you make profile.png look like an 8-bit sprite?", "profile.png"),
             ("hey julius, convert ~/Pictures/me.jpeg to pixel art", "~/Pictures/me.jpeg"),
             ("pixelate this", "dropped"),
         ]:
@@ -575,6 +574,10 @@ class CommandTests(unittest.TestCase):
                 "retro",
                 "line",
                 "smooth",
+                "head",
+                "chibi",
+                "big_eyes",
+                "nose",
             },
         )
         self.assertEqual(schema["function"]["parameters"]["required"], ["source", "style"])
@@ -585,7 +588,6 @@ class CommandTests(unittest.TestCase):
             "pixel art",
             "8-bit",
             "16 bit",
-            "retro sprite",
             "Game Boy",
             "",
             "pixelated",
@@ -602,7 +604,8 @@ class CommandTests(unittest.TestCase):
             ("watercolour", "watercolor"),
             ("cartoon", "cel_shade"),
             ("cel shaded", "cel_shade"),
-            ("retro sprite", "pixel_art"),
+            ("retro sprite", "sprite"),
+            ("game sprite", "sprite"),
         ):
             self.assertEqual(art_tool.style_name(t), want, t)
 

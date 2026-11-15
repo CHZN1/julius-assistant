@@ -5,9 +5,12 @@ come back. Nothing is uploaded and nothing is written to disk. When there is no 
 
 from __future__ import annotations
 
+import contextlib
 import io
 import json
+import os
 import subprocess
+import tempfile
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -84,3 +87,45 @@ def portrait_crop(
         min(1.0, ((fy + fh) * h - box[1]) / ch),
     )
     return img.crop(box), True, focus
+
+
+def landmarks(
+    img: Any, runner: Callable = subprocess.run, binary: Path | None = None
+) -> tuple[dict | None, Any]:
+    """(the main face's landmarks, the person mask) for the sprite builder, both from Apple Vision inside the one-shot helper (`landmarks`), on this Mac only.
+    The landmarks are fractions of the picture with the origin top-left; the mask is a grayscale picture (white = person) or None. (None, None) when there is
+    no face or the helper cannot run."""
+    from PIL import Image
+
+    try:
+        from julius.agents import vision
+
+        im = img.convert("RGB")
+        im.thumbnail((SEND_SIDE, SEND_SIDE))
+        buf = io.BytesIO()
+        im.save(buf, "JPEG", quality=92)
+        fd, name = tempfile.mkstemp(suffix=".png", prefix="julius_mask_")
+        os.close(fd)
+        try:
+            r = runner(
+                [str(binary or vision.build()), "landmarks", name],
+                input=buf.getvalue(),
+                capture_output=True,
+                timeout=60,
+            )
+            line = (r.stdout or b"").decode("utf-8", "replace").strip().splitlines()[-1:] or [""]
+            data = json.loads(line[0])
+            found = [
+                f for f in data.get("faces", []) if f.get("points") and len(f.get("box", [])) == 4
+            ]
+            mask = None
+            if data.get("mask"):
+                with Image.open(name) as m:
+                    mask = m.convert("L").copy()
+        finally:
+            with contextlib.suppress(OSError):
+                os.unlink(name)
+    except Exception:
+        return None, None
+    found = [f for f in found if f["box"][2] >= MIN_FACE]
+    return (found[0] if found else None), mask

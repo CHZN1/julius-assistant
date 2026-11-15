@@ -1,23 +1,22 @@
 """Take a photo with the camera, for art: "take a photo", "take a selfie", "take a selfie and make it pixel art".
 
-A 3-second countdown with a live (mirrored) preview in the side panel, then one full frame. The helper (visiond `live`) keeps the camera session open the whole time,
-so the macOS camera light is on while the preview runs and while the photo is taken, and goes off when the helper exits. Preview frames and the photo travel over the helper's
-stdout into memory; nothing is written to disk. The photo is held in memory (see `source.hold`) and then works like a dropped image. "Save this card" is the only way it is saved."""
+The orb app owns the camera. Julius asks it (a `panel.camera_open` feed message) to open its floating camera window: a live mirrored preview, a shutter, a 3-second
+countdown, then Retake or Use Photo. Closing the window or Esc stops the camera at once, so the camera light is off whenever the window is closed. Use Photo sends the
+JPEG to `POST /v1/photo` and Julius holds it in memory (see `source.hold`), where it works like a dropped image. Nothing is written to disk: "save this card" is the only way.
+
+"Take a selfie and make it X" remembers X; it runs after Use Photo, or after the shot when nobody answers within AUTO_USE_S seconds (the orb uses the photo by itself)."""
 
 from __future__ import annotations
 
-import base64
 import re
-import subprocess
-import threading
-from collections.abc import Callable
-from pathlib import Path
+import time
 from typing import Any
 
 from julius import log
 from julius.art import source
 
-COUNTDOWN_S = 3
+AUTO_USE_S = 5
+PENDING_TTL_S = 600
 _LEAD = r"^\s*(?:(?:please|hey julius|julius|okay|ok|now|then|and)[ ,]+)*(?:(?:can|could|would) you |i (?:want|need|would like) you to |i want to |i'd like to |let's |lets )?(?:please )?"
 _TAKE = re.compile(
     _LEAD
@@ -28,11 +27,11 @@ _QUESTION = re.compile(
     r"^\s*(?:(?:hey julius|julius|okay|ok)[ ,]+)*(?:what|how|why|who|which|when|where|is|are|does|do you|explain|tell me)\b",
     re.I,
 )
-_THEN = re.compile(r"\b(?:and|then|so)\b.+", re.I)
+_THEN = re.compile(r"\b(?:and|then|so)\b\s*(.+)", re.I)
 
-
-class CameraProblem(Exception):
-    """Something Julius says instead of taking the photo."""
+_pending: dict[str, Any] | None = (
+    None  # {"then": text, "t": monotonic}: what to do with the next photo
+)
 
 
 def parse(text: str) -> dict | None:
@@ -45,129 +44,57 @@ def parse(text: str) -> dict | None:
         return None
     rest = t[m.end() :].strip(" .,!?")
     then = _THEN.match(rest)
-    return {"then": then.group(0) if then else ""}
+    return {"then": then.group(1).strip() if then else ""}
 
 
-def _why(line: str) -> str:
-    if "permission" in line:
-        return "I need camera permission. You can allow it in System Settings, under Privacy and Security, then Camera."
-    if "busy" in line or "no-camera" in line:
-        return "I can't use the camera right now."
-    return "I couldn't take a photo."
-
-
-def stream(
-    seconds: float,
-    on_frame: Callable[[bytes], None],
-    popen: Callable = subprocess.Popen,
-    binary: Path | None = None,
-) -> bytes:
-    """Run the helper's live mode: calls on_frame with each preview JPEG and returns the final photo JPEG. Raises CameraProblem."""
-    from julius.agents import vision
-
-    try:
-        proc = popen(
-            [str(binary or vision.build()), "live", str(seconds)],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-        )
-    except (OSError, vision.VisionProblem):
-        raise CameraProblem("I couldn't take a photo.") from None
-    timer = threading.Timer(seconds + 25, proc.kill)  # a stuck helper must not keep the camera on
-    timer.start()
-    photo, last = None, ""
-    try:
-        for raw in proc.stdout:
-            line = raw.strip()
-            kind, _, rest = line.partition(" ")
-            if kind == "frame":
-                try:
-                    on_frame(base64.b64decode(rest))
-                except Exception as exc:  # a preview problem must not lose the photo
-                    log.event("camera_preview_failed", error=type(exc).__name__)
-            elif kind == "photo":
-                photo = base64.b64decode(rest)
-            else:
-                last = line
-        proc.wait(timeout=10)
-    except (OSError, ValueError, subprocess.SubprocessError):
-        proc.kill()
-        raise CameraProblem("I couldn't take a photo.") from None
-    finally:
-        timer.cancel()
-        if proc.poll() is None:
-            proc.kill()
-    if photo is None or not last.startswith("ok"):
-        raise CameraProblem(_why(last))
-    return photo
-
-
-def take(
-    cfg: dict | None = None,
-    panel: Any = None,
-    files: Any = None,
-    turn: int | None = None,
-    popen: Callable = subprocess.Popen,
-    binary: Path | None = None,
-    seconds: float = COUNTDOWN_S,
-) -> str:
-    """Countdown with a live preview, capture, hold the photo in memory. Returns what Julius says (problems included, never raises)."""
+def request(cfg: dict | None, panel: Any, then: str = "", autostart: bool = True) -> str:
+    """Ask the orb to open its camera window; returns what Julius says. Never raises."""
+    global _pending
     if (cfg or {}).get("camera", True) is False:
         return "The camera is switched off in my settings."
-    card = None
-    state = {"count": int(seconds), "t0": None}
-    shown = panel is not None and files is not None
-    if shown:
-        card = panel.camera(
-            {
-                "title": "Say cheese",
-                "phase": "countdown",
-                "count": int(seconds),
-                "note": "The camera light is on.",
-            },
-            turn=turn,
-        )
+    if panel is None or not panel.camera_open(autostart, AUTO_USE_S if then else 0):
+        return "The camera window needs the Julius orb app, and I can't reach it right now."
+    _pending = {"then": then, "t": time.monotonic()} if then else None
+    log.event("camera_requested", then=bool(then))
+    return (
+        "Opening the camera. Counting down from three, then I'll take it."
+        if autostart
+        else "Opening the camera."
+    )
 
-    import time
 
-    def on_frame(jpeg: bytes) -> None:
-        if not shown or card is None:
-            return
-        now = time.monotonic()
-        if state["t0"] is None:
-            state["t0"] = now
-        left = max(0, int(seconds - (now - state["t0"]) + 0.999))
-        panel.camera_update(
-            card,
-            image=files.put_live(jpeg),
-            count=left,
-            phase="countdown" if left > 0 else "shooting",
-        )
+def take_pending(clock: Any = time.monotonic) -> str:
+    """What was asked to happen after the photo ("make it pixel art"), once; "" when nothing, or when it has gone stale."""
+    global _pending
+    p, _pending = _pending, None
+    if not p or clock() - p["t"] > PENDING_TTL_S:
+        return ""
+    return p["then"]
 
-    try:
-        photo = stream(seconds, on_frame, popen, binary)
-    except CameraProblem as e:
-        if shown and "permission" in str(e):
-            panel.set_camera_status(
-                False,
-                "Camera permission is off. Allow it in System Settings, Privacy and Security, Camera.",
-                "permission",
+
+def cancel_pending() -> None:
+    global _pending
+    _pending = None
+
+
+def received(
+    jpeg: bytes, panel: Any = None, files: Any = None, turn: int | None = None, auto: bool = False
+) -> str:
+    """A photo came back from the orb's camera window: hold it in memory, show it as a still in the panel, return the follow-up request ("" when none)."""
+    source.hold(jpeg)
+    if panel is not None and files is not None:
+        try:
+            ref = files.put_memory(jpeg, "jpg", keep=16)
+            panel.camera(
+                {
+                    "title": "Photo",
+                    "image": ref,
+                    "note": "Held in memory only. Say save this card to keep it, or tell me what to make from it.",
+                },
+                turn=turn,
             )
-        if card:
-            panel.camera_update(card, phase="failed", count=0, summary=str(e))
-        return str(e)
-    source.hold(photo)
-    if shown:
-        panel.set_camera_status(True)
-    if card:
-        ref = files.put_memory(photo, "jpg", keep=16)
-        panel.camera_update(
-            card,
-            phase="done",
-            count=0,
-            image=ref,
-            summary="Held in memory only. Say save this card to keep it.",
-        )
-    log.event("camera_photo", bytes=len(photo))
-    return "Got it. The photo is held in memory only; say save this card to keep it, or tell me what to make from it."
+            panel.set_camera_status(True)
+        except Exception as exc:
+            log.event("camera_card_failed", error=type(exc).__name__)
+    log.event("camera_photo", bytes=len(jpeg), auto=auto)
+    return take_pending()

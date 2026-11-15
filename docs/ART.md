@@ -43,7 +43,26 @@ A portrait (a face was found and the picture cropped) defaults to 64 px and the 
 
 ## Camera
 
-"Take a photo" / "take a selfie" (also the camera button in the orb) starts a 3-second countdown with a live, mirrored preview in a **panel.camera** card, then takes one full frame. The helper (`visiond live 3`) keeps the camera session open the whole time, so the camera light is on while the preview runs and while the photo is taken, and goes off when the helper exits. Preview frames and the photo come back over the helper's stdout into memory (preview frames in a small separate slot of three, so they never push real pictures out); nothing is written to disk. The photo is held in memory for an hour and is "this" for the art tools until something else is dropped or another photo is taken: "take a selfie and make it pixel art" does both. "Save this card" writes `photo.jpg` and a note to `~/Julius Saved/`; nothing else saves it. The `[vision] camera = false` setting switches it off. The camera buttons (one beside the typing box and Send, one beside the keyboard button) say the same words as speaking them. The orb is told when the camera cannot be used (a `panel.camera_status` feed message: `[vision] camera = false`, or macOS permission denied, learned from the first failed attempt): the buttons dim, the tooltip says why instead of "Take a photo", and a click shows the reason. A denied-permission button still tries again on click, in case access was granted since. "Take a photo" no longer goes to the vision look (which describes a camera frame with Claude); "what am I holding" still does.
+The camera belongs to the **orb app**, not to the backend. Clicking a camera button in the orb (beside the text box or on a card) opens a separate floating window: always on top, dark and translucent like the orb, remembering where you put it. It shows a live mirrored preview and a round shutter button and does **not** take a picture by itself.
+
+1. **Shutter** (the button, or Space) starts a 3-second countdown, then captures one frame and turns the camera off.
+2. **Retake** goes back to the live preview; **Use Photo** sends that one frame to the backend (`POST /v1/photo`, localhost, bearer token) and closes the window. The photo is held in memory for an hour as "this" for the art tools. Nothing is written to disk unless you say "save this card" (`photo.jpg` and a note in `~/Julius Saved/`).
+3. **Close** (the window's button) or **Esc** stops the camera immediately. The camera light is on only while the live preview or the countdown is showing, and is off whenever the window is closed (or showing a shot you are deciding about).
+
+By voice, "take a photo" or "take a selfie" opens the same window and starts the countdown by itself. "Take a selfie and make it pencil sketch" continues to the style after you press Use Photo, or by itself 5 seconds after the shot if you do not respond. The `[vision] camera = false` setting and a macOS camera refusal switch the buttons off with a short explanation (`panel.camera_status`). The first use makes macOS ask Julius Orb for camera permission.
+
+## Sprite mode
+
+`image_style` with `style` = `sprite` ("make me a sprite", "make a game sprite of me", "turn me into a Game Boy character") builds a head-only game sprite from **measurements**, not from a model. "Pixel art" and "pixelate" stay on the photo filter above; the two are shown side by side so the difference is visible.
+
+Apple Vision, inside the one-shot helper (`visiond landmarks`, on this Mac only), supplies the face landmarks (jaw contour, eyes, brows, nose, mouth) and a person mask. `julius/art/sprite.py` then builds the head cell by cell at sprite scale:
+
+- **Head shape** from the jaw contour closed over the forehead; **hair** is one solid, simplified mass cut from the person mask above and beside the face (dark facial hair inside the jaw line is kept as a beard); both are reduced to the grid by coverage, holes filled, specks removed.
+- **Eyes** are 1 or 2 pixel marks, **brows** and **mouth** short lines (the corners step up for a smile; a second row when open), the **nose** is one optional pixel.
+- **Colours**: skin and hair are measured in the photo and each mapped to the nearest palette shade. `gameboy` (default) maps by lightness: outline = darkest shade, skin one of the lightest, hair darker than the skin; `pico8` and `nes` (a 16-colour NES-like selection) take the nearest colour. The outline is 1 px in the darkest shade, the background transparent.
+- **Options**: `head` 16 (default, on a 32x32 canvas), 24 or 32; `palette`; `chibi` (rounder head, features low and wide-set); `big_eyes` (2x2 with a glint).
+
+Same picture and options always give the same sprite. The card (**panel.art**, kind `sprite`) shows the photo, the sprite and the pixel-art filter output in a row; "save this card" writes `sprite-1x.png` (transparent), `sprite-4x.png` and `sprite-8x.png` (nearest-neighbour zooms) and `card.md`. Without a face in the picture it says so instead of guessing. The body comes later, in the Sprite studio stage.
 
 ## Photo style filters (step C)
 

@@ -7,7 +7,7 @@ import re
 from typing import Any
 
 from julius import log
-from julius.art import faces, filters, pixel, source
+from julius.art import faces, filters, pixel, source, sprite
 
 BEFORE_SIDE = 640  # the "before" picture on the card is a downsized copy, kept in memory only
 PREVIEW_SIDE = 1024  # the card shows the art at this size at most; the saved file uses the zoom the user asked for
@@ -277,10 +277,15 @@ def pixel_art_from_words(source_name: str = "", options: str = "") -> str:
     return pixel_art(source_name, **parse_options(options))
 
 
-STYLES = ("pixel_art", *filters.STYLES)
+STYLES = ("pixel_art", "sprite", *filters.STYLES)
 
-_STYLE_WORDS = (  # first match wins; pixel art words come first so "retro sprite" and "Game Boy" stay pixel art
-    ("pixel_art", r"pixel|\b(?:8|16)\s?bit\b|sprite|retro|game ?boy|\bgb\b"),
+_STYLE_WORDS = (  # first match wins. "pixel art" and "pixelate" are the photo filter; a "sprite" or a game character is built from the face
+    ("pixel_art", r"pixel"),
+    (
+        "sprite",
+        r"sprite|\bavatar\b|(?:game ?boy|\bgb\b|retro|video ?game|\b(?:8|16)\s?bit|game)\s+(?:character|avatar|guy|hero|person)|\bcharacter\b",
+    ),
+    ("pixel_art", r"\b(?:8|16)\s?bit\b|retro|game ?boy|\bgb\b"),
     ("all_styles", r"\ball\b|\bevery\b|\beach\b|\bfive\b|side by side|\bstyles\b"),
     ("pop_art", r"pop ?art|warhol"),
     ("comic", r"comic|halftone|half tone|graphic novel|manga|\bink(?:ed)?\b"),
@@ -446,6 +451,100 @@ def filter_style(
     )
 
 
+SPRITE_SHOW = (
+    8  # the sprite is shown at this zoom (4x for a 32 pixel head: the card stays one size)
+)
+
+
+def _sprite_card(
+    sp: Any, crop: Any, compared: bytes, label: str, st: pixel.Result | None, note: str
+) -> bool:
+    from julius.ui_bridge import charts
+
+    if charts._panel is None:
+        return False
+    panel, files, turn_fn = charts._panel
+    if files is None:
+        return False
+    k = max(1, min(SPRITE_SHOW, 256 // sp.canvas))
+    o = sp.options
+    shown = files.put_memory(sp.png(k), "png", keep=16)
+    card = {
+        "title": f"Sprite: {label}",
+        "kind": "sprite",
+        "before": files.put_memory(_before_png(crop), "png", keep=16),
+        "after": shown,
+        "compare": files.put_memory(compared, "png", keep=16) if compared else "",
+        "export": files.put_memory(sp.png(8), "png", keep=16),
+        "small": files.put_memory(sp.png(1), "png", keep=16),
+        "alt": f"{o.head} pixel head sprite of {label}",
+        "summary": f"{o.head}×{o.head} head on a {sp.canvas}×{sp.canvas} canvas, {len(sp.palette)} colours, built from your face's measurements",
+        "settings": [
+            f"Head: {o.head} px on a {sp.canvas} px canvas",
+            f"Palette: {o.palette}",
+            f"Proportions: {'chibi' if o.chibi else 'normal'}",
+            f"Big eyes: {'on' if o.big_eyes else 'off'}",
+            f"Nose: {'on' if o.nose else 'off'}",
+            "Outline: 1 px, darkest shade; background transparent",
+            "Export: 1x, 4x and 8x nearest neighbour",
+            note,
+        ],
+        "palette": sp.palette,
+    }
+    return panel.art(card, turn=turn_fn()) is not None
+
+
+def sprite_style(
+    source_name: str = "dropped",
+    head: int = 0,
+    palette: str = "",
+    chibi: bool = False,
+    big_eyes: bool = False,
+    nose: bool = False,
+) -> str:
+    """A game sprite of the face in the user's picture: measured with Apple Vision on this Mac, built cell by cell (no generative model), shown next to the
+    photo and next to the plain pixel-art filter, and held in the side panel until "save this card"."""
+    try:
+        img, label, fname = source.load(source_name)
+        face, mask = faces.landmarks(img)
+        if face is None:
+            return "I couldn't find a face to build a sprite from. A clear, front-facing photo works best."
+        opts = sprite.Options(head or sprite.DEFAULT_HEAD, palette, chibi, big_eyes, nose).clean()
+        sp = sprite.build(img, face, mask, opts)
+        crop, _found, focus = faces.portrait_crop(img)
+        res = pixel.render(
+            crop,
+            pixel.Settings(PORTRAIT_SIZE, 16, opts.palette, False, False, 4, False, True),
+            focus,
+        )
+        k = max(1, 256 // max(res.width, res.height))
+        compared = res.png(k)[0]
+    except (source.ArtProblem, pixel.PixelProblem, sprite.SpriteProblem) as exc:
+        return str(exc)
+    except Exception as exc:
+        log.event("sprite_failed", error=type(exc).__name__)
+        return "I couldn't build a sprite from that."
+    shown = False
+    try:
+        shown = _sprite_card(
+            sp, crop, compared, label, res, "Pixel art filter shown for comparison"
+        )
+    except Exception as exc:
+        log.event("sprite_card_failed", error=type(exc).__name__)
+    o = sp.options
+    log.event("sprite", head=o.head, palette=o.palette, chibi=o.chibi, big_eyes=o.big_eyes)
+    return (
+        f"Sprite of {fname}: a {o.head} by {o.head} pixel head on a {sp.canvas} by {sp.canvas} canvas, {o.palette} palette, "
+        f"{'chibi' if o.chibi else 'normal'} proportions{', big eyes' if o.big_eyes else ''}{', with a nose' if o.nose else ''}, "
+        "built from the measurements of the face, not generated. "
+        + (
+            "The photo, the sprite and the plain pixel-art version are side by side in the panel; say save this card to keep the 1x, 4x and 8x PNGs."
+            if shown
+            else "No side panel is open, so there is nothing to save yet."
+        )
+    )
+
+
 def image_style(
     source_name: str = "",
     style: str = "pixel_art",
@@ -461,6 +560,10 @@ def image_style(
     retro: bool | None = None,
     line: int = 0,
     smooth: int = -1,
+    head: int = 0,
+    chibi: bool = False,
+    big_eyes: bool = False,
+    nose: bool = False,
 ) -> str:
     """Restyle the user's own picture. Never creates art from scratch: with no picture named it asks for one."""
     chosen = style_name(style)
@@ -470,6 +573,10 @@ def image_style(
         )
     if chosen == "all_styles":
         return filter_compare((source_name or "").strip() or "dropped")
+    if chosen == "sprite":
+        return sprite_style(
+            (source_name or "").strip() or "dropped", head, palette, chibi, big_eyes, nose
+        )
     if chosen != "pixel_art":
         return filter_style((source_name or "").strip() or "dropped", chosen, colors, line, smooth)
     # no picture named: the one dropped on the orb, or a question asking for one (nothing is ever drawn from nothing)

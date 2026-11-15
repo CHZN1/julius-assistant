@@ -97,33 +97,19 @@ def handle_panel(s: Session, text: str) -> str | None:
 
 
 def handle_camera(s: Session, text: str) -> str | None:
-    """ "Take a photo", "take a selfie", "take a selfie and make it pixel art": a countdown with a live preview, then one frame held in memory. No model call, no upload."""
-    from julius.art import camera, commands
+    """ "Take a photo", "take a selfie", "take a selfie and make it pixel art": opens the orb's camera window with the countdown running. No model call, no upload."""
+    from julius.art import camera
 
     req = camera.parse(text)
     if req is None:
         return None
     try:
-        said = camera.take(
-            config.load_config().get("vision") or {},
-            panel=getattr(s, "panel_hub", None),
-            files=getattr(s, "panel_files", None),
-            turn=s.turn,
+        return camera.request(
+            config.load_config().get("vision") or {}, getattr(s, "panel_hub", None), req["then"]
         )
-        if req["then"] and said.startswith("Got it"):
-            from julius.art import tool as art_tool
-
-            pixel = commands.handle(req["then"])
-            if pixel is not None:
-                return pixel
-            style = art_tool.style_name(req["then"])
-            if style and style != "pixel_art":
-                return art_tool.image_style("", req["then"])
-            return said
-        return said
     except Exception as exc:
         log.console(f"  [camera failed: {type(exc).__name__}: {exc}]", flush=True)
-        return "I couldn't take a photo."
+        return "I couldn't open the camera."
 
 
 def handle_vision(s: Session, text: str) -> str | None:

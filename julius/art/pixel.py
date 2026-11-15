@@ -52,12 +52,31 @@ PALETTES: dict[str, list[str]] = {
         "6C5EB5",
         "959595",
     ],  # fmt: skip
+    "nes": [
+        "000000",
+        "7C7C7C",
+        "BCBCBC",
+        "FCFCFC",
+        "A81000",
+        "F83800",
+        "FCA044",
+        "FCE0A8",
+        "503000",
+        "AC7C00",
+        "005800",
+        "00A800",
+        "0058F8",
+        "3CBCFC",
+        "6844FC",
+        "D800CC",
+    ],  # fmt: skip  (a 16-colour NES-like selection)
     "1bit": ["000000", "FFFFFF"],
 }
 ALIASES = {
     "game boy": "gameboy", "gb": "gameboy", "dmg": "gameboy",
     "pico-8": "pico8", "pico 8": "pico8", "pico": "pico8",
     "commodore": "c64", "commodore 64": "c64", "c 64": "c64",
+    "nes-like": "nes", "nes like": "nes", "famicom": "nes", "8 bit nes": "nes", "nintendo": "nes",
     "1 bit": "1bit", "1-bit": "1bit", "one bit": "1bit", "black and white": "1bit", "monochrome": "1bit",
 }  # fmt: skip
 
