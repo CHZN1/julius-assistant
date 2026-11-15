@@ -100,6 +100,18 @@ SCHEMAS: dict[str, dict[str, str]] = {
         "cost_usd": "num",
         "est_cost_usd": "num",
     },
+    "panel.art": {
+        "title": "str",
+        "kind": "str",
+        "before": "str",
+        "after": "str",
+        "export": "str",
+        "small": "str",
+        "alt": "str",
+        "summary": "str",
+        "settings": "list",
+        "palette": "list",
+    },
     "panel.theory": {
         "title": "str",
         "kind": "str",
@@ -278,6 +290,25 @@ def _v_vision(msg: dict, errors: list[str]) -> None:
         errors.append("panel.vision: bad source")
 
 
+ART_KINDS = ("pixel",)
+MAX_ART_PALETTE = 64
+HEX6 = re.compile(r"^[0-9A-F]{6}$")
+
+
+def _v_art(msg: dict, errors: list[str]) -> None:
+    for k in ("before", "after", "export", "small"):
+        if not IMAGE_REF.match(str(msg[k])):
+            errors.append(f"panel.art.{k}: not a panel file reference")
+    if msg["kind"] not in ART_KINDS:
+        errors.append("panel.art: bad kind")
+    if not all(isinstance(x, str) for x in msg["settings"]):
+        errors.append("panel.art.settings: not text")
+    if len(msg["palette"]) > MAX_ART_PALETTE or not all(
+        isinstance(c, str) and HEX6.match(c) for c in msg["palette"]
+    ):
+        errors.append("panel.art.palette: colours as 6 hex digits")
+
+
 def _v_theory(msg: dict, errors: list[str]) -> None:
     if msg["kind"] not in THEORY_KINDS:
         errors.append("panel.theory: bad kind")
@@ -316,6 +347,7 @@ _EXTRA_CHECKS: dict[str, Callable[[dict, list[str]], None]] = {
     "panel.table": _v_table,
     "panel.vision": _v_vision,
     "panel.theory": _v_theory,
+    "panel.art": _v_art,
     "panel.images": lambda m, e: _v_images(m["images"], e),
     "panel.clear": _v_clear,
 }
@@ -649,6 +681,28 @@ class PanelHub:
             "est_cost_usd": round(float(card.get("est_cost_usd") or 0.0), 6),
         }
         return self._publish("panel.vision", body, turn)
+
+    def art(self, card: dict, turn: int | None = None) -> str | None:
+        """An art card: the picture before and after (pixel art), the settings used and the palette. The four images are panel file references to in-memory pictures:
+        `before` (a downsized copy of the original), `after` (what the card shows), `export` (the PNG that "save this card" writes) and `small` (the same at 1x)."""
+        kind = str(card.get("kind") or "")
+        body = {
+            "title": clean(card.get("title") or "Pixel art", CAPS["title"]),
+            "kind": kind if kind in ART_KINDS else "pixel",
+            "before": str(card.get("before") or ""),
+            "after": str(card.get("after") or ""),
+            "export": str(card.get("export") or ""),
+            "small": str(card.get("small") or ""),
+            "alt": clean(card.get("alt"), CAPS["alt"]),
+            "summary": clean(card.get("summary"), CAPS["summary"]),
+            "settings": [clean(x, 80) for x in (card.get("settings") or [])[:8]],
+            "palette": [
+                str(c).upper()
+                for c in (card.get("palette") or [])[:MAX_ART_PALETTE]
+                if HEX6.match(str(c).upper())
+            ],
+        }
+        return self._publish("panel.art", body, turn)
 
     def theory(self, card: dict, turn: int | None = None) -> str | None:
         """A theory card: a key, scale, chord or progression with computed note names and MIDI numbers, drawn by the UI as a piano and a chord chart."""

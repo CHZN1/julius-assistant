@@ -198,3 +198,9 @@
 {"id": "r199", "cat": "samples", "text": "What is a sample rate?", "expect": {"path": "direct"}}
 {"id": "r200", "cat": "samples", "text": "Convert all the wav files in my workspace to aiff 48k 24 bit.", "expect": {"path": "shortcut", "tool": "convert_audio"}}
 {"id": "r201", "cat": "samples", "text": "Convert CHZN1_Cake_BPM160.wav to mp3.", "expect": {"path": "shortcut", "tool": "convert_audio"}}
+{"id": "r202", "cat": "art", "text": "Turn this photo I just dropped on the orb into pixel art.", "expect": {"path": "shortcut", "tool": "pixel_art"}}
+{"id": "r203", "cat": "art", "text": "Make sunset.jpg into 32 pixel art with the gameboy palette.", "expect": {"path": "shortcut", "tool": "pixel_art"}}
+{"id": "r204", "cat": "art", "text": "Pixelate the picture I just dropped, 64 pixels, 8 colors, with an outline and a transparent background.", "expect": {"path": "shortcut", "tool": "pixel_art"}}
+{"id": "r205", "cat": "art", "text": "Can you make profile.png look like an 8-bit sprite?", "expect": {"path": "shortcut", "tool": "pixel_art"}}
+{"id": "r206", "cat": "art", "text": "Draw me a picture of a dragon.", "expect": {"path": "direct"}}
+{"id": "r207", "cat": "art", "text": "What is pixel art?", "expect": {"path": "direct"}}

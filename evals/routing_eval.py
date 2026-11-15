@@ -102,6 +102,16 @@ def shortcut(text, sb, ctx, turn, case_history=None):
             "ok": True,
             "detail": "convert",
         }
+    from julius.art import commands as art_commands
+
+    if art_commands.parse(text) is not None:  # pixel art: a fixed pattern, before the brain
+        return {
+            "path": "shortcut",
+            "tool": "pixel_art",
+            "args": "",
+            "ok": True,
+            "detail": "pixel art",
+        }
     if music_commands.is_rescan(text):  # answered before the brain by a fixed pattern
         return {
             "path": "shortcut",

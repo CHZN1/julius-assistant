@@ -32,6 +32,9 @@ screen = true               # "what's on my screen" (frontmost window), "the who
 max_edge = 1568             # pictures are shrunk to this many pixels on the long edge before they are sent
 exclude_owners = ["Julius Orb", "Julius"]   # windows of these apps are never the "frontmost window"
 
+[art]                       # art helpers (julius/art/): deterministic image processing only, no generative models; the original is only read
+folders = ["~/Julius Art", "~/Pictures", "~/Desktop", "~/Downloads"]   # the ONLY folders an image is taken from by name or path (an image dropped on the orb is always allowed). Folders named like an asset pack, or holding a licence file, are skipped: purchased packs are never touched
+
 [music]                     # music helpers (julius/music/): read-only analysis of audio files you name; never Logic, GarageBand, /Library/Audio or plug-in folders
 search_folders = ["~/Downloads", "~/Documents", "~/Desktop"]   # where a bare file name is looked for ("what's the BPM of loop.wav")
 index_allowlist = [   # the ONLY folders and files the sample index ever scans (your own work); anything not listed is never indexed. A file entry approves that one file only. Read-only; the deny-list still applies

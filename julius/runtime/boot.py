@@ -244,9 +244,11 @@ def setup_panel(s: Session) -> None:
     from julius.ui_bridge import charts
 
     charts.set_panel(s.panel_hub, s.panel_files, lambda: s.turn)
+    from julius.art import source as art_source
     from julius.music import tool as music_tool
 
     music_tool.set_drop_source(lambda: s.drop_stage.pending() if s.drop_stage else None)
+    art_source.set_drop_source(lambda: s.drop_stage.pending() if s.drop_stage else None)
     log.console(
         f"  [side panel: images on http://127.0.0.1:{server.port} (this machine only)]", flush=True
     )

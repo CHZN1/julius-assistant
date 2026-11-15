@@ -341,6 +341,8 @@ def save_card(
     card = find_card(panel)
     if card is not None and card.get("type") == "panel.vision":
         return save_vision_card(card, files, cfg_value, now)
+    if card is not None and card.get("type") == "panel.art":
+        return save_art_card(card, files, cfg_value, now)
     if card is None or card.get("type") != "panel.research":
         return "I don't have a card to save."
     try:
@@ -412,6 +414,46 @@ def save_vision_card(
         log.event("panel_save_failed", error=type(e).__name__)
         return "I couldn't save that card."
     log.event("panel_card_saved", images=1, kind="vision")
+    return f"Saved to {base.name}, in a folder called {folder.name}."
+
+
+def save_art_card(
+    card: dict, files: Any, cfg_value: str | None, now: Callable[[], float] = time.time
+) -> str:
+    """Pixel art reaches disk only here: the export PNG (at the zoom that was asked for), the 1x PNG, and a short note, in their own folder."""
+    export = files.bytes_of(card.get("export", "")) if files is not None else None
+    small = files.bytes_of(card.get("small", "")) if files is not None else None
+    if export is None or small is None:
+        return "That picture is no longer available, so I can't save it."
+    try:
+        base = saved_dir(cfg_value)
+        base.mkdir(parents=True, exist_ok=True)
+        stamp = time.strftime("%Y-%m-%d %H%M", time.localtime(now()))
+        name = f"{stamp} {_slug(card.get('title', 'pixel art'))}"
+        folder = base / name
+        k = 1
+        while folder.exists():  # never overwrite an earlier save
+            k += 1
+            folder = base / f"{name} ({k})"
+        folder.mkdir()
+        (folder / "pixel-art.png").write_bytes(export[0])
+        (folder / "pixel-art-1x.png").write_bytes(small[0])
+        lines = "\n".join(f"- {x}" for x in card.get("settings") or [])
+        pal = " ".join(f"#{c}" for c in card.get("palette") or [])
+        (folder / "card.md").write_text(
+            f"# {card.get('title', 'Pixel art')}\n\n"
+            f"*{time.strftime('%Y-%m-%d %H:%M', time.localtime(now()))}. {card.get('summary', '')}.*\n\n"
+            f"{lines}\n\n**Palette:** {pal}\n\n"
+            "`pixel-art.png` is the export (nearest-neighbour zoom, so every pixel is a crisp square); `pixel-art-1x.png` is the same art at one pixel per art pixel. "
+            "The original picture was only read and is not copied here.\n",
+            encoding="utf-8",
+        )
+    except SaveRefused as e:
+        return str(e)
+    except OSError as e:
+        log.event("panel_save_failed", error=type(e).__name__)
+        return "I couldn't save that card."
+    log.event("panel_card_saved", images=2, kind="art")
     return f"Saved to {base.name}, in a folder called {folder.name}."
 
 

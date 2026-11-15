@@ -122,11 +122,12 @@ def handle_vision(s: Session, text: str) -> str | None:
 
 
 def handle_music(s: Session, text: str) -> str | None:
-    """ "Rescan my samples" / "update my sample index" / "refresh my library": the index is rebuilt directly, no model call."""
+    """ "Rescan my samples", "convert kick.wav to mp3", "turn this photo into pixel art": answered directly by a fixed pattern, no model call."""
     try:
+        from julius.art import commands as art_commands
         from julius.music import commands
 
-        return commands.handle(text) or commands.convert_reply(s, text)
+        return commands.handle(text) or commands.convert_reply(s, text) or art_commands.handle(text)
     except Exception as exc:
         log.console(f"  [audio command failed: {type(exc).__name__}: {exc}]", flush=True)
         return "I couldn't do that audio request."

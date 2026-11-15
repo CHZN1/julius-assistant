@@ -1,0 +1,59 @@
+"""Spoken art commands that need no model: "turn this photo I just dropped into pixel art", "make sunset.jpg pixel art, 32 pixels, gameboy palette, outline, 8x". Deterministic, like the rescan and convert commands: the brain's tool list stays as it is, and a dropped image never has to be guessed at.
+
+Julius does not draw or generate pictures. "Make me a pixel art dragon" is answered with what it can do instead."""
+
+from __future__ import annotations
+
+import re
+
+_LEAD = r"^\s*(?:(?:please|hey julius|julius|okay|ok|now|then|and)[ ,]+)*(?:(?:can|could|would) you |i (?:want|need|would like) you to |i want to |i'd like to )?(?:please )?"
+_VERB = r"(?:make|turn|convert|change|create|render|process|run|give|do|redo|pixelate|pixelize|pixelise|pixel[- ]?art)\b"
+_ART = re.compile(
+    r"pixel[- ]?art|pixel(?:ate|ize|ise)d?\b|\b(?:8|16)[- ]?bit (?:sprite|style|art|look|graphics|version)",
+    re.I,
+)
+_QUESTION = re.compile(
+    r"^\s*(?:(?:hey julius|julius|okay|ok)[ ,]+)*(?:what|what's|whats|how|why|who|which|when|where|is|are|does|do you|explain|tell me|define)\b",
+    re.I,
+)
+_FILE = re.compile(r"([^\s\"'<>|]+\.(?:png|jpe?g|webp|gif|bmp|tiff?))(?![A-Za-z0-9])", re.I)
+_HERE = re.compile(
+    r"\b(?:this|that|the|my|these|those)\s+(?:(?:just )?dropped |new |latest |last |same )?(?:photo|picture|pic|image|selfie|screenshot|drawing|logo|file)s?\b|\bjust dropped\b|\bdropped (?:photo|picture|pic|image|file)\b|\bit\b",
+    re.I,
+)
+_GENERATE = re.compile(
+    r"\b(?:make|draw|create|generate|give|paint|design)\s+(?:me\s+)?(?:a|an|some|the)\s+(?:\w+\s+){0,3}?pixel",
+    re.I,
+)
+
+
+def parse(text: str) -> dict | None:
+    """{"source": file name or "dropped", "words": the whole request} for a pixel-art request, {"generate": True} when it asks Julius to draw one from nothing, else None."""
+    t = (text or "").strip()
+    if not t or _QUESTION.match(t) or not _ART.search(t):
+        return None
+    if not re.match(_LEAD + _VERB, t, re.I) and not re.match(
+        _LEAD + r"(?:pixelate|pixelize|pixelise)\b", t, re.I
+    ):
+        return None
+    f = _FILE.search(t)
+    if f:
+        return {"source": f.group(1), "words": t}
+    if _GENERATE.search(t) and not _HERE.search(t.split("pixel")[0] if "pixel" in t.lower() else t):
+        return {"generate": True, "words": t}
+    return {"source": "dropped", "words": t}
+
+
+def handle(text: str) -> str | None:
+    """The reply when `text` asks for pixel art, else None."""
+    req = parse(text)
+    if req is None:
+        return None
+    if req.get("generate"):
+        return (
+            "I don't draw or generate pictures, that stays yours. I can turn a photo or picture of yours into pixel art: "
+            "drop it on the orb, or name a file in one of your art folders, and say how big and how many colours."
+        )
+    from julius.art import tool
+
+    return tool.pixel_art(req["source"], **tool.parse_options(req["words"]))

@@ -866,6 +866,8 @@ def find_samples(query: str = "", bpm: int = 0, key: str = "", either: bool = Fa
 
 
 REGISTRY["find_samples"] = find_samples
+
+
 SCHEMAS.append(
     _utility_schema(
         "find_samples",

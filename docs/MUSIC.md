@@ -17,6 +17,15 @@ Say: "what's the BPM of kick_loop.wav", "what key is pad_take2.wav in", "analyze
 
 **Accuracy on your own music, measured against the BPM written in your file names** (`evals/music_filename_eval.py`, 200 files spread over 68 folders; labels and results stay in `~/datasets/julius_music_eval/local/`, never committed). File names are labels made by a person and can be wrong, so a miss is a disagreement, not proof. Tempo exact (within 2%): **50% before, 83.5% after** (dev half 51% to 80%, held-out half 49% to 87%); the old failure was reading 3:2 slow on fast trap-tempo beats (33% of files), now 9%. Left over: 3:2 9%, half/double 3%, 4:3 2%, other 2.5%. Key accuracy on real music is still unmeasured (file names rarely carry a key). On 16 synthetic clips: key 16/16, tempo within an octave 16/16, tempo exact 11/16. Synthetic clips are far easier than real recordings, so treat those numbers as a sanity check.
 
+| Tempo vs the BPM in the file name (200 files, 68 folders) | Before: tuning half / held-out half | After: tuning half / held-out half |
+|---|---|---|
+| Exact (within 2%) | 51% / 49% | **80% / 87%** (all 200: 50% to 83.5%) |
+| 3:2 relation (usually read two-thirds speed) | 31% / 35% | 10% / 8% |
+| Half or double | 9% / 7% | 4% / 2% |
+| 4:3 | 5% / 4% | 3% / 1% |
+| Other | 4% / 5% | 3% / 2% |
+
+
 Accuracy tool: `python evals/music_eval.py` (free, local) scores synthetic labelled clips, Creative Commons tracks listed in `~/datasets/julius_music_eval/manifest.json`, and your own labelled files in `~/datasets/julius_music_eval/local/manifest.json` (printed only, never saved in the repo). Manifest entries: `{"file": "x.mp3", "bpm": 120, "key": "A minor", "source": "...", "license": "..."}`.
 
 ## Theory help (`julius/music/theory.py`, tool `music_theory`, card `panel.theory`)

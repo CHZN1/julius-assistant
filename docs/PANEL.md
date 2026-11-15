@@ -1,6 +1,6 @@
 # Side panel (backend)
 
-The panel is a client-side feature: cards are data on the read-only event feed (`panel.research`, `panel.files`, `panel.chart`, `panel.table`, `panel.images`, `panel.vision`, `panel.theory`, `panel.update`, `panel.clear`; see EVENT_FEED.md), and a client such as the orb app draws them. This page is the security model and how the pieces connect.
+The panel is a client-side feature: cards are data on the read-only event feed (`panel.research`, `panel.files`, `panel.chart`, `panel.table`, `panel.images`, `panel.vision`, `panel.theory`, `panel.art`, `panel.update`, `panel.clear`; see EVENT_FEED.md), and a client such as the orb app draws them. This page is the security model and how the pieces connect.
 
 ## What produces a card
 When the research agent finishes (`research_task`), the result is handed to the panel (`julius/ui_bridge/panel_emit.py`) after it is built and before the spoken answer is returned, so the card never delays speech and a failure in the panel never changes what Julius says. The card carries the question, summary, numbered findings with citation chips, and the sources. Images from the pages that backed a finding are fetched afterwards in the background (the same SSRF-checked, GET-only fetcher as research), decoded and re-encoded with Pillow, stored, and arrive later as a `panel.update`.
