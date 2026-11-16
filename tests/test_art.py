@@ -578,6 +578,7 @@ class CommandTests(unittest.TestCase):
                 "chibi",
                 "big_eyes",
                 "nose",
+                "beard",
             },
         )
         self.assertEqual(schema["function"]["parameters"]["required"], ["source", "style"])

@@ -26,7 +26,14 @@ def ellipse_pts(cx, cy, rx, ry, a0, a1, n):
     return [[(cx + rx * np.cos(t)) / W, (cy + ry * np.sin(t)) / H] for t in ts]
 
 
-def synthetic(hair=True):
+BEARD_BOXES = {
+    "full": (140, 182, 260, 240),
+    "goatee": (182, 210, 218, 240),
+    "mustache": (178, 182, 222, 198),
+}
+
+
+def synthetic(hair=True, beard=None):
     """A front-facing head: skin face, dark hair on top and a dark person mask with shoulders. Returns (image, face landmarks, mask)."""
     im = Image.new("RGB", (W, H), BG)
     d = ImageDraw.Draw(im)
@@ -41,6 +48,8 @@ def synthetic(hair=True):
     md.ellipse((140, 80, 260, 235), fill=255)
     md.rectangle((175, 220, 225, 260), fill=255)
     d.rectangle((175, 220, 225, 260), fill=SKIN)
+    if beard in BEARD_BOXES:
+        d.rectangle(BEARD_BOXES[beard], fill=HAIR_RGB)
     # landmarks (fractions of the picture): jaw contour from the right ear round the chin to the left ear
     contour = ellipse_pts(200, 150, 60, 85, 20, 160, 17)
     contour = [[x, y] for x, y in contour]
@@ -173,6 +182,74 @@ class BuildTests(unittest.TestCase):
         four = Image.open(io.BytesIO(sp.png(4)))
         self.assertEqual(four.size, (128, 128))
         self.assertEqual(four.getpixel((5, 5)), sp.image.getpixel((1, 1)))
+
+
+class FacialHairTests(unittest.TestCase):
+    def test_it_measures_full_beard_goatee_mustache_and_none(self):
+        for kind in ("full", "goatee", "mustache", None):
+            img, face, mask = synthetic(beard=kind)
+            sp = sprite.build(img, face, mask, sprite.Options())
+            self.assertEqual(sp.facial_hair, kind or "none", kind)
+            self.assertTrue(sp.facial_hair_measured)
+
+    def test_a_beard_is_drawn_as_a_hair_coloured_mass_below_the_nose(self):
+        img, face, mask = synthetic(beard="full")
+        a = np.asarray(sprite.build(img, face, mask, sprite.Options()).image)
+        b = np.asarray(sprite.build(img, face, mask, sprite.Options(beard="none")).image)
+        hair = sprite.map_colors(SKIN, HAIR_RGB, "gameboy")["hair"]
+        low = slice(18, 25)  # the lower face rows of the 16 px head (canvas offset 8)
+        count = lambda arr: int((arr[low][..., :3] == hair).all(axis=2).sum())  # noqa: E731
+        self.assertGreater(count(a), count(b) + 4)
+
+    def test_the_user_can_choose_it(self):
+        img, face, mask = synthetic(beard="full")
+        for words, kind in (
+            ("goatee", "goatee"),
+            ("Moustache", "mustache"),
+            ("clean shaven", "none"),
+            ("stubble", "stubble"),
+            ("full beard", "full"),
+        ):
+            sp = sprite.build(img, face, mask, sprite.Options(beard=words))
+            self.assertEqual((sp.facial_hair, sp.facial_hair_measured), (kind, False), words)
+        self.assertEqual(sprite.beard_name("whatever"), "")
+        self.assertEqual(sprite.beard_name(""), "")
+
+    def test_stubble_uses_the_hair_colour_when_it_differs_from_the_skin(self):
+        img, face, mask = synthetic()
+        sp = sprite.build(img, face, mask, sprite.Options(beard="stubble", palette="pico8"))
+        if sp.colors["hair"] not in (sp.colors["line"], sp.colors["skin"]):
+            self.assertEqual(sp.colors.get("shade"), sp.colors["hair"])
+        else:  # black hair is the outline colour: stubble is then a darker skin tone, never the outline
+            self.assertNotIn(sp.colors.get("shade"), (sp.colors["line"], sp.colors["skin"]))
+
+    def test_a_dim_brown_skin_maps_to_a_brown_not_a_grey(self):
+        dark_brown = (124, 84, 67)  # measured on a real selfie: pico8 used to give grey 5F574F
+        pal = lambda n: [pixel._rgb(c) for c in pixel.PALETTES[n]]  # noqa: E731
+        self.assertEqual(sprite._hex(sprite._skin_shade(dark_brown, pal("pico8"))), "AB5236")
+        self.assertEqual(sprite._hex(sprite._skin_shade(dark_brown, pal("nes"))), "503000")
+        self.assertEqual(sprite._hex(sprite._skin_shade((240, 200, 170), pal("pico8"))), "FFCCAA")
+
+    def test_the_chibi_face_is_one_clean_window_with_the_eyes_clear_of_the_hair(self):
+        img, face, mask = synthetic(beard="full")
+        h = sprite._Head(img, face, mask, sprite.Options(chibi=True).clean())
+        h.cells()
+        h.features(sprite.map_colors(h.skin_rgb, h.hair_rgb, "gameboy"))
+        g = h.grid
+        eyes = list(zip(*np.nonzero(g == sprite.LINE)))
+        inner = [(y, x) for y, x in eyes if 3 <= y <= 11 and 3 <= x <= 12]  # not the outline
+        self.assertTrue(inner)
+        for (
+            y,
+            x,
+        ) in (
+            inner
+        ):  # every eye pixel has skin or another eye pixel on its left and right, never hair
+            for nx in (x - 1, x + 1):
+                self.assertIn(int(g[y, nx]), (sprite.SKIN, sprite.LINE), (y, x))
+        row = g[6]  # a row through the face window: one skin run, not a cross
+        runs = np.diff(np.concatenate([[0], (row == sprite.SKIN).astype(int), [0]]))
+        self.assertEqual(int((runs == 1).sum()), 1)
 
 
 class ToolTests(unittest.TestCase):

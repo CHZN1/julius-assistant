@@ -36,6 +36,7 @@ class Options:
     chibi: bool = False  # big round head, low small features
     big_eyes: bool = False
     nose: bool = False
+    beard: str = ""  # "" = measured from the photo; or full, goatee, mustache, stubble, none
 
     def clean(self) -> Options:
         try:
@@ -44,7 +45,31 @@ class Options:
             h = DEFAULT_HEAD
         self.head = min(HEADS, key=lambda x: abs(x - h))
         self.palette = pixel.palette_name(self.palette or DEFAULT_PALETTE)
+        self.beard = beard_name(self.beard)
         return self
+
+
+BEARDS = ("full", "goatee", "mustache", "stubble", "none")
+_BEARD_WORDS = (
+    ("none", r"\bnone\b|\bno\b|clean|shaved|shaven|without"),
+    ("goatee", r"goatee|chin"),
+    ("mustache", r"mo?ustach|\bmo\b|\btache\b"),
+    ("stubble", r"stubble|scruff|five o|shadow|light"),
+    ("full", r"full|beard|big|bushy|long"),
+)
+
+
+def beard_name(text: Any) -> str:
+    """'full beard', 'Goatee', 'moustache', 'clean shaven' ... as one of BEARDS, or "" (measure it) for anything else."""
+    import re
+
+    t = str(text or "").casefold().strip()
+    if not t or t in ("auto", "measured", "measure"):
+        return ""
+    for name, pat in _BEARD_WORDS:
+        if re.search(pat, t):
+            return name
+    return ""
 
 
 @dataclass
@@ -53,6 +78,8 @@ class Sprite:
     options: Options
     colors: dict[str, str] = field(default_factory=dict)  # role -> hex
     notes: list[str] = field(default_factory=list)
+    facial_hair: str = "none"  # one of BEARDS
+    facial_hair_measured: bool = True  # False when the user chose it
 
     @property
     def canvas(self) -> int:
@@ -105,6 +132,37 @@ def _dist(a: Any, b: Any) -> Any:
     return np.sqrt((d * d * w).sum(axis=-1)) * 1.8
 
 
+def _hue_deg(lab: Any) -> float:
+    return float(math.degrees(math.atan2(lab[2], lab[1])) % 360)
+
+
+def _skin_shade(
+    skin: tuple[int, int, int], pal: list[tuple[int, int, int]]
+) -> tuple[int, int, int]:
+    """The palette colour for a skin tone, by hue and lightness rather than plain nearest colour: a dim, low-saturation brown photo is still a warm skin tone
+    and must not land on a grey. Warm, coloured palette entries (Lab hue about -15 to 80 degrees, some chroma) are preferred; then lightness difference plus
+    half the hue difference picks one."""
+    lab = _lab(skin)
+    h = _hue_deg(lab)
+
+    def warm(c: tuple[int, int, int]) -> bool:
+        cl = _lab(c)
+        hh = _hue_deg(cl)
+        return math.hypot(cl[1], cl[2]) >= 12 and (hh >= 345 or hh <= 80)
+
+    cands = [c for c in pal if warm(c)] or pal
+
+    def score(c: tuple[int, int, int]) -> float:
+        cl = _lab(c)
+        dh = abs((_hue_deg(cl) - h + 180) % 360 - 180)
+        dc = abs(math.hypot(cl[1], cl[2]) - math.hypot(lab[1], lab[2]))
+        return (
+            abs(float(cl[0] - lab[0])) + 0.5 * dh + 0.7 * dc
+        )  # lightness, hue, and not much more vivid than the skin
+
+    return min(cands, key=score)
+
+
 def map_colors(
     skin: tuple[int, int, int], hair: tuple[int, int, int] | None, palette: str
 ) -> dict[str, tuple[int, int, int]]:
@@ -123,18 +181,15 @@ def map_colors(
         out["shade"] = pal[max(0, skin_i - 1)]
         out["light"] = pal[min(n - 1, skin_i + 1)] if skin_i < n - 1 else pal[skin_i]
         return out
-    near = sorted(range(n), key=lambda i: float(_near(pal[i], skin)))
-    out["skin"] = pal[near[0]]
+    out["skin"] = _skin_shade(skin, pal)
     if hair is not None:
         hnear = sorted(range(n), key=lambda i: float(_near(pal[i], hair)))
         pick = next((i for i in hnear if pal[i] != out["skin"]), hnear[0])
         out["hair"] = pal[pick]
     darker = [c for c in pal if _lum(c) < _lum(out["skin"]) - 0.12 and c != out["line"]]
     out["shade"] = (
-        min(darker, key=lambda c: float(_near(c, np.asarray(out["skin"]) * 0.7)))
-        if darker
-        else out["line"]
-    )
+        _skin_shade(tuple(int(v * 0.68) for v in out["skin"]), darker) if darker else out["line"]
+    )  # a darker skin (stubble, nose): chosen like the skin, by hue and lightness
     lighter = [c for c in pal if _lum(c) > _lum(out["skin"]) + 0.05]
     out["light"] = lighter[-1] if lighter else out["skin"]
     return out
@@ -363,21 +418,90 @@ class _Head:
                 outside & (ys >= self.brow_hi) & (d_hair >= d_skin)
             )  # beside the face a skin-coloured patch is an ear; above the brows it is all hair
             hair, skin = outside & ~ears, skin | ears
-            beard = (
-                face & (ys > self.nose_hi) & (d_hair + 8 < d_skin) & (d_hair < 55)
-            )  # dark facial hair inside the jaw line
-            hair, skin = hair | beard, skin & ~beard
         else:
             skin |= outside
-        if self.o.chibi:  # rounder cheeks: the face also fills an ellipse from forehead to chin; the bangs lift off it
-            fy = self.hi([0, self.forehead_top])[1]
-            ell = (np.abs((xs - self.cx_hi) / max(1.0, self.fw * self.scale / 2 * 1.02)) ** 3) + (
-                np.abs((ys - (fy + chin_hi) / 2) / max(1.0, (chin_hi - fy) / 2)) ** 3
-            ) <= 1.0  # a squarish ellipse: full cheeks
-            lift_to = self.nose_hi + (chin_hi - self.nose_hi) * 0.3
-            hair &= ~(ell & (ys > self.brow_hi - (eye_hi - self.brow_hi) * 1.5) & (ys < lift_to))
-            skin |= ell & ~hair
+        self.face_hi = face
+        self._facial_hair(arr, face, d_skin, d_hair)
+        hair |= self.beard_hi
         self.skin_hi, self.hair_hi = skin & ~hair, hair
+
+    def _zones(self, face: Any) -> dict[str, Any] | None:
+        """Where facial hair grows, in the hi-res frame: the mustache between nose and mouth, the chin below the mouth, the jaw sides of the lower face."""
+        mo = self.pts.get("mouth")
+        if mo is None or len(mo) < 3:
+            return None
+        m = self.hi(mo)
+        top, bot, mx = float(m[:, 1].min()), float(m[:, 1].max()), float(m[:, 0].mean())
+        mw = max(2.0, float(np.ptp(m[:, 0])) / 2)
+        ys, xs = self.ys, self.xs
+        dx = np.abs(xs - mx)
+        must = face & (ys >= self.nose_hi) & (ys <= top) & (dx <= mw * 1.25)
+        chin = face & (ys >= bot) & (dx <= mw * 1.15)
+        jaw = (
+            face
+            & (ys >= self.nose_hi + (top - self.nose_hi) * 0.5)
+            & ~chin
+            & ~must
+            & (dx > mw * 1.0)
+        )
+        return {"mustache": must, "chin": chin, "jaw": jaw, "mouth_top": top, "mouth_bot": bot}
+
+    def _facial_hair(self, arr: Any, face: Any, d_skin: Any, d_hair: Any) -> None:
+        """Measure, then classify: full beard / goatee / mustache / stubble / none (or the user's choice), and draw it as a simplified mass in the hair colour
+        (stubble in a shade darker than the skin). Hair pixels are those inside a zone that are darker than the skin and closer to the hair colour."""
+        N = self.N
+        self.beard_hi = np.zeros((N, N), dtype=bool)
+        self.stubble_hi = np.zeros((N, N), dtype=bool)
+        self.beard_kind, self.beard_measured = "none", True
+        z = self._zones(face)
+        lum = (arr * np.array([0.299, 0.587, 0.114], dtype=np.float32)).sum(axis=-1)
+        skin_l = _lum(self.skin_rgb) * 255
+        if self.hair_rgb is not None:
+            dark = (lum < skin_l - 18) & (d_hair < d_skin)
+        else:
+            dark = lum < skin_l - 30
+        cover = {}
+        if z is not None:
+            for k in ("mustache", "chin", "jaw"):
+                area = int(z[k].sum())
+                cover[k] = float((dark & z[k]).sum()) / area if area else 0.0
+        self.beard_cover = cover
+        kind = self.o.beard
+        if not kind:
+            m, c, j = cover.get("mustache", 0.0), cover.get("chin", 0.0), cover.get("jaw", 0.0)
+            if c >= 0.45 and j >= 0.45:
+                kind = "full"
+            elif c >= 0.45:
+                kind = "goatee"
+            elif m >= 0.45:
+                kind = "mustache"
+            elif max(m, c, j) >= 0.18 and (m + c + j) / 3 >= 0.15:
+                kind = "stubble"
+            else:
+                kind = "none"
+        else:
+            self.beard_measured = False
+        self.beard_kind = kind
+        if z is None or kind == "none":
+            return
+        if (
+            self.hair_rgb is None and kind != "stubble"
+        ):  # a bald head with a beard: the beard gives the hair colour
+            sel = dark & (z["chin"] | z["jaw"] | z["mustache"])
+            self.hair_rgb = _median(arr, sel) or (50, 40, 35)
+        mustache = z["mustache"] & (
+            self.ys >= z["mouth_top"] - (z["mouth_top"] - self.nose_hi) * 0.7
+        )
+        if kind == "full":
+            self.beard_hi = z["chin"] | z["jaw"] | mustache
+        elif kind == "goatee":
+            self.beard_hi = z["chin"] | (
+                mustache if cover.get("mustache", 0.0) >= 0.45 or not self.beard_measured else False
+            )
+        elif kind == "mustache":
+            self.beard_hi = mustache
+        else:
+            self.stubble_hi = z["chin"] | z["jaw"]
 
     # -- the cells
     def cells(self) -> Any:
@@ -386,11 +510,16 @@ class _Head:
         def cover(a: Any) -> Any:
             return a.astype(np.float32).reshape(G, SS, G, SS).mean(axis=(1, 3))
 
-        cs, ch = cover(self.skin_hi), cover(self.hair_hi)
-        occ = (cs + ch) >= 0.5
-        label = np.where(occ, np.where(ch > cs, HAIR, SKIN), 0).astype(np.int8)
-        occ = _fill_holes(_components(occ))
-        label = _despeckle(np.where(occ, np.where(label == 0, SKIN, label), 0).astype(np.int8))
+        if self.o.chibi:
+            label = self._chibi_label()
+        else:
+            cs, ch = cover(self.skin_hi), cover(self.hair_hi)
+            occ = (cs + ch) >= 0.5
+            label = np.where(occ, np.where(ch > cs, HAIR, SKIN), 0).astype(np.int8)
+            occ = _fill_holes(_components(occ))
+            label = _despeckle(np.where(occ, np.where(label == 0, SKIN, label), 0).astype(np.int8))
+            stub = cover(self.stubble_hi) >= 0.5
+            label[stub & (label == SKIN)] = SHADE
         if not label.any():
             raise SpriteProblem("I couldn't find a head shape to build a sprite from.")
         grid = np.zeros((head, head), dtype=np.int8)
@@ -403,12 +532,55 @@ class _Head:
         self.grid = grid
         return grid
 
-    def put(self, x: int, y: int, v: int, only: tuple[int, ...] = (SKIN, HAIR)) -> None:
+    def _chibi_label(self) -> Any:
+        """Chibi proportions as a template, not a squashed photo: a big rounded head filling the frame and a clean face window low in it (eyes at 60%,
+        mouth near 82%). The hair fills the head around the face window above its middle (lower too when the measured hair is big, like an afro); the
+        facial hair kind is drawn in fixed places inside the window. (Squashing the measured silhouette left cross shapes.)"""
+        G, N = self.G, self.N
+        c = (np.arange(G) + 0.5) / G
+        yy, xx = np.meshgrid(c, c, indexing="ij")
+        occ = (np.abs(xx * 2 - 1) ** 2.6 + np.abs((yy * 2 - 1) / 0.98) ** 2.6) <= 1.0
+        big = 0.0
+        if self.hair_rgb is not None:
+            hair = self.hair_hi & ~self.beard_hi
+            fy = int(self.hi([0, self.forehead_top])[1])
+            rows_above = np.where(hair[: max(1, fy)].any(axis=1))[0]
+            big = (
+                (fy - rows_above[0]) / N if len(rows_above) else 0.0
+            )  # how tall the hair stands above the forehead, as a share of the frame
+        cy, ry = 0.60, 0.38
+        rx = 0.36 if big > 0.15 else 0.40
+        dx, dy = (xx - 0.5) / rx, (yy - cy) / ry
+        face = occ & ((np.abs(dx) ** 2.4 + np.abs(dy) ** 2.4) <= 1.0)
+        label = np.where(occ, SKIN, 0).astype(np.int8)
+        if self.hair_rgb is not None:
+            reach = cy + (
+                0.22 if big > 0.15 else 0.0
+            )  # an afro frames the face down the sides; short hair is a cap
+            label[occ & ~face & (yy < reach)] = HAIR
+        k = self.beard_kind
+        beard = np.zeros_like(occ)
+        if k in ("full", "stubble"):
+            beard = face & ((dy >= 0.45) | ((dy >= 0.3) & (np.abs(dx) >= 0.7)))
+        elif k == "goatee":
+            beard = face & (dy >= 0.62) & (np.abs(dx) <= 0.36)
+        elif k == "mustache":
+            beard = face & (np.abs(dy - 0.36) <= 0.07) & (np.abs(dx) <= 0.42)
+        label[beard] = SHADE if k == "stubble" else HAIR
+        return label
+
+    def put(self, x: int, y: int, v: int, only: tuple[int, ...] = (SKIN, HAIR, SHADE)) -> None:
         if 0 <= x < self.o.head and 0 <= y < self.o.head and self.grid[y, x] in only:
             self.grid[y, x] = v
 
     def mark(
-        self, cx: float, y: int, w: int, h: int, v: int, only: tuple[int, ...] = (SKIN, HAIR)
+        self,
+        cx: float,
+        y: int,
+        w: int,
+        h: int,
+        v: int,
+        only: tuple[int, ...] = (SKIN, HAIR, SHADE),
     ) -> None:
         x0 = int(round(cx - (w - 1) / 2))
         for dy in range(h):
@@ -447,8 +619,11 @@ class _Head:
                 + self.at(self.pts["right_brow"].mean(axis=0))[1]
             ) / 2
             by = min(int(round(mid)), eyes_y - 2 * u)
-        for cx in (xl, xr):
-            self.mark(cx, by, max(2, int(round(1.2 * ew + 1))), u, BROW, (SKIN,))
+        if not (
+            o.chibi and o.head < 24
+        ):  # a 16 px chibi face has no room for brows: they merged with the eyes and the hair
+            for cx in (xl, xr):
+                self.mark(cx, by, max(2, int(round(1.2 * ew + 1))), u, BROW, (SKIN,))
         self._mouth(cols, eyes_y + eh, u)
         nose = self.pts.get("nose")
         if o.nose and nose is not None and len(nose):
@@ -468,7 +643,7 @@ class _Head:
         my = max(int(round(my0)), below_eyes + u)
         # a mouth inside a beard of the line colour would vanish: show it in the skin tone
         lip = SKIN if cols.get("hair") == cols["line"] else LINE
-        self.mark(mx, my, wid, u, lip, (SKIN, HAIR))
+        self.mark(mx, my, wid, u, lip)
         x0 = int(round(mx - (wid - 1) / 2))
         corners = sorted(mo, key=lambda p: p[0])
         lift = (
@@ -476,11 +651,11 @@ class _Head:
         )  # > 0: corners above the middle
         if wid >= 4 * u and abs(lift) >= 0.45 and not o.chibi:
             for xx in (x0, x0 + wid - 1):
-                self.put(xx, my - u if lift > 0 else my + u, LINE, (SKIN, HAIR))
+                self.put(xx, my - u if lift > 0 else my + u, LINE)
         inner = self.pts.get("inner_mouth")
         if inner is not None and len(inner) and np.ptp(inner[:, 1]) * self.scale / SS >= 0.9:
             for dx in range(1, max(1, wid - 1)):
-                self.put(x0 + dx, my + u, LINE, (SKIN, HAIR))
+                self.put(x0 + dx, my + u, LINE)
 
 
 def build(img: Any, face: dict, mask: Any, options: Options | None = None) -> Sprite:
@@ -490,6 +665,10 @@ def build(img: Any, face: dict, mask: Any, options: Options | None = None) -> Sp
     grid = h.cells()
     cols = map_colors(h.skin_rgb, h.hair_rgb, o.palette)
     h.features(cols)
+    if h.beard_kind == "stubble" and cols.get("hair") not in (None, cols["skin"], cols["line"]):
+        cols["shade"] = cols[
+            "hair"
+        ]  # stubble reads as the hair colour on the skin, not as a random darker colour
     lut = {
         SKIN: cols["skin"],
         HAIR: cols.get("hair", cols["line"]),
@@ -518,5 +697,22 @@ def build(img: Any, face: dict, mask: Any, options: Options | None = None) -> Sp
         *(["big eyes"] if o.big_eyes else []),
         *(["nose"] if o.nose else []),
         "no hair found" if h.hair_rgb is None else "hair from the person mask",
+        f"facial hair: {BEARD_LABELS[h.beard_kind]} ({'measured' if h.beard_measured else 'set'})",
     ]
-    return Sprite(Image.fromarray(rgba, "RGBA"), o, {k: _hex(v) for k, v in roles.items()}, notes)
+    return Sprite(
+        Image.fromarray(rgba, "RGBA"),
+        o,
+        {k: _hex(v) for k, v in roles.items()},
+        notes,
+        h.beard_kind,
+        h.beard_measured,
+    )
+
+
+BEARD_LABELS = {
+    "full": "full beard",
+    "goatee": "goatee",
+    "mustache": "mustache",
+    "stubble": "stubble",
+    "none": "none",
+}

@@ -485,6 +485,7 @@ def _sprite_card(
             f"Proportions: {'chibi' if o.chibi else 'normal'}",
             f"Big eyes: {'on' if o.big_eyes else 'off'}",
             f"Nose: {'on' if o.nose else 'off'}",
+            f"Facial hair: {sprite.BEARD_LABELS[sp.facial_hair]} ({'measured' if sp.facial_hair_measured else 'as asked'})",
             "Outline: 1 px, darkest shade; background transparent",
             "Export: 1x, 4x and 8x nearest neighbour",
             note,
@@ -501,6 +502,7 @@ def sprite_style(
     chibi: bool = False,
     big_eyes: bool = False,
     nose: bool = False,
+    beard: str = "",
 ) -> str:
     """A game sprite of the face in the user's picture: measured with Apple Vision on this Mac, built cell by cell (no generative model), shown next to the
     photo and next to the plain pixel-art filter, and held in the side panel until "save this card"."""
@@ -509,7 +511,9 @@ def sprite_style(
         face, mask = faces.landmarks(img)
         if face is None:
             return "I couldn't find a face to build a sprite from. A clear, front-facing photo works best."
-        opts = sprite.Options(head or sprite.DEFAULT_HEAD, palette, chibi, big_eyes, nose).clean()
+        opts = sprite.Options(
+            head or sprite.DEFAULT_HEAD, palette, chibi, big_eyes, nose, beard
+        ).clean()
         sp = sprite.build(img, face, mask, opts)
         crop, _found, focus = faces.portrait_crop(img)
         res = pixel.render(
@@ -536,6 +540,7 @@ def sprite_style(
     return (
         f"Sprite of {fname}: a {o.head} by {o.head} pixel head on a {sp.canvas} by {sp.canvas} canvas, {o.palette} palette, "
         f"{'chibi' if o.chibi else 'normal'} proportions{', big eyes' if o.big_eyes else ''}{', with a nose' if o.nose else ''}, "
+        f"facial hair: {sprite.BEARD_LABELS[sp.facial_hair]}{'' if sp.facial_hair_measured else ' (as you asked)'}, "
         "built from the measurements of the face, not generated. "
         + (
             "The photo, the sprite and the plain pixel-art version are side by side in the panel; say save this card to keep the 1x, 4x and 8x PNGs."
@@ -564,6 +569,7 @@ def image_style(
     chibi: bool = False,
     big_eyes: bool = False,
     nose: bool = False,
+    beard: str = "",
 ) -> str:
     """Restyle the user's own picture. Never creates art from scratch: with no picture named it asks for one."""
     chosen = style_name(style)
@@ -575,7 +581,7 @@ def image_style(
         return filter_compare((source_name or "").strip() or "dropped")
     if chosen == "sprite":
         return sprite_style(
-            (source_name or "").strip() or "dropped", head, palette, chibi, big_eyes, nose
+            (source_name or "").strip() or "dropped", head, palette, chibi, big_eyes, nose, beard
         )
     if chosen != "pixel_art":
         return filter_style((source_name or "").strip() or "dropped", chosen, colors, line, smooth)
