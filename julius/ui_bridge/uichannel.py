@@ -5,6 +5,8 @@ A tiny HTTP server on 127.0.0.1 (default port 8775), JSON in, JSON out, no third
   POST /v1/drop    {"paths": ["/abs/path", ...]}    files dropped on the orb; staged only (see julius_dropstage.py), nothing runs
   POST /v1/photo   raw JPEG bytes (Content-Type image/jpeg)  a photo the orb's camera window took; held in memory only (see julius/art/camera.py)
   POST /v1/camera  {"event": "opened"|"closed"|"denied"}     what happened to the orb's camera window
+  GET  /v1/sprite                                   the sprite being edited, as layers for the editor window (palette, cells, edits)
+  POST /v1/sprite  {"id": "...", "edits": {layer: {"x,y": palette index or -1}}}   pixel edits from the editor window, palette-locked
   GET  /v1/ping                                     authenticated liveness check
 
 Safety, in the order the checks run:
@@ -34,6 +36,7 @@ from julius import log
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8775
 MAX_BODY = 16 * 1024
+MAX_SPRITE_BODY = 1_000_000  # pixel edits of a 64x64 sprite, all layers, with room
 MAX_PHOTO = 4 * 1024 * 1024  # one camera frame as JPEG (1280x720 is about 150 KB)
 CAMERA_EVENTS = ("opened", "closed", "denied")
 MAX_TEXT = 2000
@@ -160,6 +163,21 @@ class Channel:
         if method == "GET" and path == "/v1/ping":
             return 200, {"ok": True}
         route = path.split("?")[0]
+        if route == "/v1/sprite" and method == "GET":
+            res = self._handler("sprite_get", "sprites are not available")()
+            if res is None:
+                raise Refused(404, "no sprite is open")
+            self.audit("sprite_get", 200)
+            return 200, {"ok": True, "sprite": res}
+        if route == "/v1/sprite" and method == "POST":
+            body = self._read_json(headers, body_reader, MAX_SPRITE_BODY)
+            ok, why = self._handler("sprite_post", "sprites are not available")(
+                body.get("edits"), str(body.get("id") or "")
+            )
+            if not ok:
+                raise Refused(400, why)
+            self.audit("sprite_post", 200)
+            return 200, {"ok": True}
         if method == "POST" and route == "/v1/photo":
             data = self._read_photo(headers, body_reader)
             res = self._handler("photo", "photos are not available")(data, "auto=1" in path)
@@ -218,14 +236,14 @@ class Channel:
         return data
 
     @staticmethod
-    def _read_json(headers: Any, body_reader: Any) -> dict:
+    def _read_json(headers: Any, body_reader: Any, limit: int = 0) -> dict:
         if (headers.get("Content-Type") or "").split(";")[0].strip().lower() != "application/json":
             raise Refused(415, "Content-Type must be application/json")
         try:
             length = int(headers.get("Content-Length") or "")
         except ValueError:
             raise Refused(411, "Content-Length required") from None
-        if length < 0 or length > MAX_BODY:
+        if length < 0 or length > (limit or MAX_BODY):
             raise Refused(413, "body too large")
         try:
             body = json.loads(body_reader(length).decode("utf-8"))

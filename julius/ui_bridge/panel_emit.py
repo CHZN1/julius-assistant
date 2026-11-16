@@ -540,6 +540,19 @@ def save_art_card(
             (folder / "pixel-art-options.png").write_bytes(export[0])
         elif card.get("kind") == "sprite":
             _write_sprite(folder, small[0])
+            from julius.art import sprite_doc
+
+            doc = (
+                sprite_doc.STUDIO.get(str(card.get("sprite_id") or ""))
+                if card.get("sprite_id")
+                else None
+            )
+            if (
+                doc is not None
+            ):  # the layers, parameters and pixel edits, to reopen and keep editing
+                (folder / "sprite.julius-sprite").write_text(
+                    sprite_doc.dumps(doc), encoding="utf-8"
+                )
         else:
             (folder / "pixel-art.png").write_bytes(export[0])
             (folder / "pixel-art-1x.png").write_bytes(small[0])
@@ -550,7 +563,8 @@ def save_art_card(
             f"*{time.strftime('%Y-%m-%d %H:%M', time.localtime(now()))}. {card.get('summary', '')}.*\n\n"
             f"{lines}\n\n**Palette:** {pal}\n\n"
             + (
-                "`sprite-1x.png` is one pixel per sprite pixel, transparent background; `sprite-4x.png` and `sprite-8x.png` are nearest-neighbour zooms of it. "
+                "`sprite-1x.png` is one pixel per sprite pixel, transparent background; `sprite-4x.png` and `sprite-8x.png` are nearest-neighbour zooms of it; "
+                "`sprite.julius-sprite` holds the layers, parameters and pixel edits (say open my sprite and its name, or drop it on the orb, to keep editing). "
                 if card.get("kind") == "sprite"
                 else "`pixel-art.png` is the export (nearest-neighbour zoom, so every pixel is a crisp square); `pixel-art-1x.png` is the same art at one pixel per art pixel. "
             )

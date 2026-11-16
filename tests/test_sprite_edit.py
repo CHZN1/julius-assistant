@@ -1,0 +1,320 @@
+"""Stage 5c-art item 3: editable sprites. The layered document, parameters, words, undo/redo, the .julius-sprite file, card updates in place, the card
+buttons, and the editor window's channel (GET/POST /v1/sprite). Synthetic face and mask, so no Vision helper is needed."""
+
+import copy
+import http.client
+import json
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest import mock
+
+import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from test_sprite import synthetic  # noqa: E402
+
+import julius.ui_bridge.charts as charts  # noqa: E402
+import julius.ui_bridge.events as ev  # noqa: E402
+import julius.ui_bridge.panel as pn  # noqa: E402
+import julius.ui_bridge.panel_emit as pe  # noqa: E402
+import julius.ui_bridge.panelfiles as pf  # noqa: E402
+import julius.ui_bridge.uichannel as uc  # noqa: E402
+from julius.art import commands, source, sprite  # noqa: E402
+from julius.art import sprite_doc as sd  # noqa: E402
+from julius.art import tool as art_tool  # noqa: E402
+
+
+def built(**kw):
+    img, face, mask = synthetic(beard=kw.pop("beard_drawn", "full"))
+    return sprite.build(img, face, mask, sprite.Options(**kw))
+
+
+class DocumentTests(unittest.TestCase):
+    def test_the_document_renders_exactly_the_built_sprite(self):
+        for kw in (
+            {},
+            {"head": 16},
+            {"chibi": True},
+            {"palette": "pico8", "big_eyes": True, "nose": True},
+            {"head": 32, "palette": "nes"},
+        ):
+            sp = built(**kw)
+            self.assertTrue(np.array_equal(np.asarray(sp.image), np.asarray(sd.render(sp.doc))), kw)
+
+    def test_layers_are_named_in_drawing_order_and_palette_locked(self):
+        doc = built(palette="pico8").doc
+        lay = sd.layers(doc)
+        self.assertEqual(tuple(lay), sd.LAYERS)
+        n = len(doc["colors"])
+        self.assertTrue(all(0 <= i < n for cells in lay.values() for i in cells.values()))
+        self.assertTrue(lay["skin"] and lay["hair"] and lay["eyes"] and lay["outline"])
+
+    def test_every_word_edit_changes_the_picture(self):
+        base = built(palette="pico8").doc
+        for words in (
+            "bigger beard",
+            "taller afro",
+            "add glasses",
+            "close-set eyes",
+            "sunglasses",
+            "a cap",
+            "beanie",
+            "goatee",
+            "mustache",
+            "no beard",
+            "bald",
+            "short hair",
+            "long hair",
+            "smile",
+            "earrings",
+            "big eyes",
+            "no brows",
+            "lighter hair",
+            "darker skin",
+            "wider mouth",
+            "add a nose",
+        ):
+            doc = copy.deepcopy(base)
+            done = sd.apply_words(doc, words)
+            self.assertTrue(done, words)
+            self.assertNotEqual(sd.png(doc), sd.png(base), words)
+
+    def test_several_edits_in_one_sentence_and_no_double_reading(self):
+        doc = built().doc
+        done = sd.apply_words(doc, "bigger beard and add glasses, no hat")
+        self.assertEqual(sorted(done), ["a bigger beard", "no hat", "square glasses"])
+        self.assertEqual((doc["params"]["glasses"], doc["params"]["hat"]), ("square", "none"))
+        doc2 = built().doc
+        sd.apply_words(doc2, "remove the glasses")
+        self.assertEqual(
+            doc2["params"]["glasses"], "none"
+        )  # "remove the glasses" is not also "add glasses"
+
+    def test_parameters_are_clamped(self):
+        doc = built().doc
+        for _ in range(20):
+            sd.apply_words(doc, "taller hair")
+        self.assertEqual(doc["params"]["hair_height"], sd.LIMITS["hair_height"][1])
+
+    def test_colour_shifts_skip_the_skin_and_the_outline(self):
+        doc = built(palette="pico8").doc
+        sd.apply_words(doc, "lighter hair")
+        self.assertNotIn(doc["params"]["hair_color"], (doc["roles"]["skin"], doc["roles"]["line"]))
+
+    def test_pixel_edits_live_on_their_layer_and_erase_reveals_below(self):
+        doc = built(head=16).doc
+        (x, y), _ = next(iter(sd.layers(doc)["hair"].items()))
+        doc["edits"] = {"hair": {f"{x},{y}": -1}}
+        lay = sd.layers(doc)
+        self.assertNotIn((x, y), lay["hair"])
+        doc["edits"] = {"glasses": {"1,1": 0}}
+        self.assertEqual(sd.layers(doc)["glasses"][(1, 1)], 0)
+
+    def test_the_outline_follows_the_body_after_edits(self):
+        doc = built(head=16).doc
+        before = set(sd.layers(doc)["outline"])
+        sd.apply_words(doc, "taller hair")
+        self.assertNotEqual(set(sd.layers(doc)["outline"]), before)
+
+    def test_the_file_round_trips_and_bad_files_are_refused(self):
+        doc = built(palette="nes").doc
+        sd.apply_words(doc, "add glasses and a cap")
+        doc["edits"] = {"hat": {"3,3": 1}}
+        again = sd.loads(sd.dumps(doc))
+        self.assertEqual(sd.png(again), sd.png(doc))
+        for bad in (
+            "not json",
+            json.dumps({"format": "x"}),
+            json.dumps({**doc, "palette": "nope"}),
+        ):
+            with self.assertRaises(sd.DocProblem):
+                sd.loads(bad)
+        with self.assertRaises(sd.DocProblem):
+            sd.loads(json.dumps({**doc, "edits": {"hat": {"999,1": 1}}}))
+        with self.assertRaises(sd.DocProblem):
+            sd.loads(json.dumps({**doc, "edits": {"hat": {"1,1": 99}}}))
+        with self.assertRaises(sd.DocProblem):
+            sd.loads(json.dumps({**doc, "edits": {"<script>": {"1,1": 1}}}))
+
+    def test_the_editor_view_has_the_palette_layers_and_edits(self):
+        doc = built().doc
+        doc["edits"] = {"hair": {"2,2": 1}}
+        v = sd.editor_view(doc)
+        self.assertEqual(v["palette"], doc["colors"])
+        self.assertEqual([lay["name"] for lay in v["layers"]], list(sd.LAYERS))
+        self.assertEqual(v["edits"], {"hair": {"2,2": 1}})
+        self.assertNotIn(
+            [2, 2, 1], next(lay for lay in v["layers"] if lay["name"] == "hair")["cells"]
+        )  # layers come before edits
+
+
+class StudioTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name).resolve()
+        self.mine = self.root / "Pictures"
+        self.mine.mkdir()
+        self.img, self.face, self.mask = synthetic(beard="full")
+        self.img.save(self.mine / "me.png")
+        hub = ev.EventHub()
+        self.sent = []
+        hub._send = lambda m: self.sent.append(m)
+        self.files = pf.PanelFiles(self.root / "p")
+        self.panel = pn.PanelHub(hub, base="http://127.0.0.1:1/tok")
+        charts.set_panel(self.panel, self.files, lambda: 3)
+        self.addCleanup(charts.set_panel, None, None)
+        sd.STUDIO.__init__()
+        for name, value in (
+            ("landmarks", (self.face, self.mask)),
+            ("detect", [(0.35, 0.27, 0.3, 0.52)]),
+        ):
+            p = mock.patch.object(art_tool.faces, name, return_value=value)
+            p.start()
+            self.addCleanup(p.stop)
+        cfg = mock.patch.object(
+            source.config, "load_config", return_value={"art": {"folders": [str(self.mine)]}}
+        )
+        cfg.start()
+        self.addCleanup(cfg.stop)
+        art_tool.image_style("me", style="sprite", palette="pico8")
+        self.card = dict(self.sent[-1])  # a copy: the hub folds later updates into its own card
+
+    def test_a_new_sprite_card_carries_its_id_and_is_editable(self):
+        self.assertEqual(pn.validate(self.card), [])
+        self.assertTrue(self.card["sprite_id"])
+        self.assertFalse(self.card["editing"])
+        self.assertEqual(sd.STUDIO.current, self.card["sprite_id"])
+
+    def test_an_edit_updates_the_same_card_in_place_large_sprite(self):
+        said = art_tool.sprite_edit("bigger beard and add glasses")
+        self.assertIn("Done: a bigger beard, square glasses", said)
+        up = self.sent[-1]
+        self.assertEqual(pn.validate(up), [])
+        self.assertEqual(
+            (up["type"], up["target"], up["editing"]), ("panel.update", self.card["panel_id"], True)
+        )
+        self.assertNotEqual(up["after"], self.card["after"])
+        self.assertIn("Glasses: square; earrings off; hat: none", up["settings"])
+        self.assertEqual(
+            self.panel.lookup(self.card["panel_id"])["editing"], True
+        )  # remembered for reconnects
+
+    def test_undo_and_redo(self):
+        first = sd.png(sd.STUDIO.get())
+        art_tool.sprite_edit("taller hair")
+        changed = sd.png(sd.STUDIO.get())
+        self.assertEqual(art_tool.sprite_edit("undo"), "Undone.")
+        self.assertEqual(sd.png(sd.STUDIO.get()), first)
+        self.assertEqual(art_tool.sprite_edit("redo"), "Redone.")
+        self.assertEqual(sd.png(sd.STUDIO.get()), changed)
+        self.assertEqual(art_tool.sprite_edit("redo"), "Nothing to redo.")
+
+    def test_words_it_does_not_know_list_what_it_can_do_and_leave_no_undo_step(self):
+        said = art_tool.sprite_edit("make it purple and dancing")
+        self.assertIn("I can change:", said)
+        self.assertEqual(art_tool.sprite_edit("undo"), "Nothing to undo.")
+
+    def test_the_card_buttons_are_a_local_shortcut(self):
+        sid = self.card["sprite_id"]
+        said = commands.handle(f"sprite #{sid}: close-set eyes")
+        self.assertIn("closer-set eyes", said)
+        self.assertIn("older sprite card", commands.handle("sprite #00000000: bigger beard"))
+        self.assertIsNone(
+            commands.handle("sprite: bigger beard please and more")
+        )  # only the button form, with an id
+
+    def test_pixel_edits_from_the_editor_are_one_undo_step(self):
+        sid = self.card["sprite_id"]
+        ok, _ = art_tool.sprite_pixels({"hat": {"2,2": 1}}, sid)
+        self.assertTrue(ok)
+        self.assertEqual(sd.STUDIO.get()["edits"], {"hat": {"2,2": 1}})
+        art_tool.sprite_edit("undo")
+        self.assertEqual(sd.STUDIO.get()["edits"], {})
+        ok, why = art_tool.sprite_pixels({"hat": {"2,2": 999}}, sid)
+        self.assertFalse(ok)
+        self.assertIn("palette", why)
+
+    def test_save_writes_the_julius_sprite_file_and_it_reopens(self):
+        art_tool.sprite_edit("add a cap")
+        saved = self.root / "Julius Saved"
+        self.assertIn("Saved to", pe.save_card(self.panel, self.files, str(saved)))
+        (folder,) = list(saved.iterdir())
+        f = folder / "sprite.julius-sprite"
+        self.assertTrue(f.exists())
+        self.assertEqual(json.loads(f.read_text())["params"]["hat"], "cap")
+        sd.STUDIO.__init__()
+        with mock.patch.object(pe, "saved_dir", return_value=saved):
+            said = art_tool.sprite_edit("open my sprite")
+        self.assertIn("Reopened the sprite", said)
+        self.assertEqual(sd.STUDIO.get()["params"]["hat"], "cap")
+        self.assertEqual(self.sent[-1]["type"], "panel.art")  # a new card for the reopened sprite
+
+    def test_no_sprite_yet_is_a_sentence(self):
+        sd.STUDIO.__init__()
+        self.assertIn("no sprite to edit", art_tool.sprite_edit("bigger beard"))
+
+    def test_the_brain_tool_is_registered_with_one_parameter(self):
+        import julius.brain.tools as tools
+
+        schema = next(x for x in tools.SCHEMAS if x["function"]["name"] == "sprite_edit")
+        self.assertEqual(set(schema["function"]["parameters"]["properties"]), {"change"})
+        self.assertIn("Never for making a new sprite", schema["function"]["description"])
+
+
+class ChannelTests(unittest.TestCase):
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp())
+        self.token = uc.ensure_token(self.dir / "ui_token")
+        self.posted = []
+        self.view = None
+        self.ch = uc.Channel(
+            self.token,
+            {
+                "sprite_get": lambda: self.view,
+                "sprite_post": lambda edits, sid: (
+                    (self.posted.append((edits, sid)) or (True, "saved"))
+                    if sid == "ab12"
+                    else (False, "That sprite is no longer open.")
+                ),
+            },
+            audit_path=self.dir / "audit.log",
+            port=0,
+        ).start()
+        self.addCleanup(self.ch.stop)
+
+    def req(self, method, body=None, auth=True):
+        c = http.client.HTTPConnection("127.0.0.1", self.ch.port, timeout=5)
+        data = json.dumps(body).encode() if body is not None else None
+        c.putrequest(method, "/v1/sprite", skip_host=True)
+        c.putheader("Host", f"127.0.0.1:{self.ch.port}")
+        if auth:
+            c.putheader("Authorization", "Bearer " + self.token)
+        if data is not None:
+            c.putheader("Content-Type", "application/json")
+            c.putheader("Content-Length", str(len(data)))
+        c.endheaders(data)
+        r = c.getresponse()
+        out = json.loads(r.read().decode() or "{}")
+        c.close()
+        return r.status, out
+
+    def test_get_needs_the_token_and_an_open_sprite(self):
+        self.assertEqual(self.req("GET", auth=False)[0], 401)
+        self.assertEqual(self.req("GET")[0], 404)
+        self.view = {"id": "ab12", "canvas": 32}
+        st, out = self.req("GET")
+        self.assertEqual((st, out["sprite"]["id"]), (200, "ab12"))
+
+    def test_post_saves_edits_or_says_why_not(self):
+        st, _ = self.req("POST", {"id": "ab12", "edits": {"hat": {"1,1": 2}}})
+        self.assertEqual(st, 200)
+        self.assertEqual(self.posted, [({"hat": {"1,1": 2}}, "ab12")])
+        st, out = self.req("POST", {"id": "zz", "edits": {}})
+        self.assertEqual((st, out["error"]), (400, "That sprite is no longer open."))
+
+
+if __name__ == "__main__":
+    unittest.main()

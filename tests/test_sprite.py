@@ -356,7 +356,7 @@ class ToolTests(unittest.TestCase):
         (folder,) = list(saved.iterdir())
         self.assertEqual(
             sorted(p.name for p in folder.iterdir()),
-            ["card.md", "sprite-1x.png", "sprite-4x.png", "sprite-8x.png"],
+            ["card.md", "sprite-1x.png", "sprite-4x.png", "sprite-8x.png", "sprite.julius-sprite"],
         )
         one, four, eight = (Image.open(folder / f"sprite-{n}.png") for n in ("1x", "4x", "8x"))
         self.assertEqual(

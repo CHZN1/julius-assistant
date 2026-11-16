@@ -46,6 +46,7 @@ OWNERS = {
     "analyze_audio": "audio",
     "find_samples": "audio",
     "image_style": "art",
+    "sprite_edit": "art",
     "music_theory": "theory",
 }
 

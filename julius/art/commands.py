@@ -12,6 +12,7 @@ _ART = re.compile(
     r"pixel[- ]?art|pixel(?:ate|ize|ise)d?\b|\b(?:8|16)[- ]?bit (?:style|art|look|graphics|version)",
     re.I,
 )
+_A_SPRITE = re.compile(r"\b(?:a|my|the|me)\s+(?:game\s+|retro\s+)?sprite\b", re.I)
 _QUESTION = re.compile(
     r"^\s*(?:(?:hey julius|julius|okay|ok)[ ,]+)*(?:what|what's|whats|how|why|who|which|when|where|is|are|does|do you|explain|tell me|define)\b",
     re.I,
@@ -32,6 +33,10 @@ def parse(text: str) -> dict | None:
     t = (text or "").strip()
     if not t or _QUESTION.match(t) or not _ART.search(t):
         return None
+    if _A_SPRITE.search(
+        t
+    ):  # "make me a sprite and compare it with pixel art" is a sprite (the brain), not plain pixel art
+        return None
     if not re.match(_LEAD + _VERB, t, re.I) and not re.match(
         _LEAD + r"(?:pixelate|pixelize|pixelise)\b", t, re.I
     ):
@@ -44,8 +49,16 @@ def parse(text: str) -> dict | None:
     return {"source": "dropped", "words": t}
 
 
+SPRITE_BUTTON = re.compile(r"^\s*sprite\s*#([0-9a-f]{4,16})\s*:\s*(.{1,120})$", re.I)
+
+
 def handle(text: str) -> str | None:
-    """The reply when `text` asks for pixel art, else None."""
+    """The reply when `text` asks for pixel art, or is a sprite card button ("sprite #ab12cd34: bigger beard"), else None."""
+    m = SPRITE_BUTTON.match(text or "")
+    if m:  # the card's edit buttons: deterministic, no model call
+        from julius.art import tool
+
+        return tool.sprite_edit(m.group(2), m.group(1).lower())
     req = parse(text)
     if req is None:
         return None

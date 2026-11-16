@@ -66,6 +66,15 @@ Apple Vision, inside the one-shot helper (`visiond landmarks`, on this Mac only)
 
 Same picture and options always give the same sprite. The card (**panel.art**, kind `sprite`) shows the photo and the sprite; the plain pixel-art filter appears beside them only when asked ("compare with pixel art", `compare=true`); "save this card" writes `sprite-1x.png` (transparent), `sprite-4x.png` and `sprite-8x.png` (nearest-neighbour zooms) and `card.md`. Without a face in the picture it says so instead of guessing. The body comes later, in the Sprite studio stage.
 
+## Editing a sprite
+
+Every sprite is also a **document** (`julius/art/sprite_doc.py`): named layers built from what was measured, parameters, and pixel edits. Layers, bottom to top: outline, skin, stubble, beard, hair, hat, eyes, brows, mouth, nose, glasses, earrings. The sprite is always re-rendered from the document, and at its default parameters the result is exactly the sprite that was built. The palette is locked: every pixel is an index into the sprite's own palette.
+
+- **By voice** (`sprite_edit` tool, his words): bigger or smaller beard, goatee / mustache / stubble / no beard; taller or shorter hair, afro, short or long hair, bald; close-set or wider eyes, big eyes; glasses (square, round), sunglasses, earrings, a cap or beanie (and "no …"); smile, frown, wider mouth; a nose; no brows, raised brows; lighter or darker hair or skin (the next palette shade that is not the outline or the other part's colour); undo, redo, reset. Several at once work ("bigger beard and add glasses"). Parameters are clamped. Words it does not know change nothing and list what it can do.
+- **On the card**: Beard −/+, Hair −/+, Eyes closer / apart, Glasses, Undo, Redo, and Edit pixels…. The buttons send "sprite #<id>: …" which is handled locally (no model call) and only for that sprite. While editing, the card shows the sprite large with the photo as a small reference, and updates in place (one card, not one per edit). The pixel-art comparison is not shown while editing.
+- **The editor window** (Edit pixels…, in the orb): the layers top-first with show/hide and a selected layer, the sprite's palette only, Pencil / Eraser (removes that layer's pixel) / Picker, Undo and Redo (⌘Z, ⇧⌘Z), Save (⌘S). The outline is recomputed around the head, hair, beard and hat as you paint. Save sends the edits to Julius (`POST /v1/sprite`), which checks every edit (known layer, inside the canvas, palette index) and stores them as one undo step. Onion skin comes with animation (Sprite studio).
+- **Saving and reopening**: "save this card" also writes `sprite.julius-sprite` (JSON: base layers, parameters, pixel edits, palette). "Open my sprite" (with words from its folder name), or dropping the file on the orb, reopens it for editing; a body added later keeps the same head.
+
 ## Saving pictures
 
 Two ways, both explicit:

@@ -945,6 +945,25 @@ SCHEMAS.append(
 )
 
 
+def sprite_edit(change: str = "") -> str:
+    from julius.art import tool as art_tool
+
+    return art_tool.sprite_edit(change)
+
+
+REGISTRY["sprite_edit"] = sprite_edit
+SCHEMAS.append(
+    _utility_schema(
+        "sprite_edit",
+        "Change the game sprite he already has (the newest one, or one he reopens): pass his words as change, e.g. 'bigger beard', 'taller afro', "
+        "'add glasses', 'close-set eyes', 'a cap', 'smile', 'lighter hair', 'undo', 'redo', 'reset', or 'open my sprite <name>' to reopen a saved "
+        ".julius-sprite file. Never for making a new sprite from a photo (that is image_style with style sprite).",
+        {"change": "string"},
+        ["change"],
+    )
+)
+
+
 SCHEMAS.append(
     _utility_schema(
         "find_samples",

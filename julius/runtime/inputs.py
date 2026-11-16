@@ -74,6 +74,21 @@ def ui_photo(s: Session, jpeg: bytes, auto: bool = False) -> dict:
     return {"held": True, "then": bool(then)}
 
 
+def ui_sprite_get() -> dict | None:
+    """The sprite being edited, as layers for the orb's editor window (or None)."""
+    from julius.art import sprite_doc
+
+    doc = sprite_doc.STUDIO.get()
+    return sprite_doc.editor_view(doc) if doc else None
+
+
+def ui_sprite_post(edits: Any, sprite_id: str) -> tuple[bool, str]:
+    """Pixel edits from the editor window: checked (layers, canvas, palette) and saved as one undo step; the card updates."""
+    from julius.art import tool
+
+    return tool.sprite_pixels(edits, sprite_id)
+
+
 def ui_camera(s: Session, event: str) -> dict:
     """What happened to the orb's camera window: closed (a pending follow-up is dropped) or denied (the camera buttons say why)."""
     from julius.art import camera
@@ -103,6 +118,8 @@ def start_ui_channel(s: Session) -> None:
             "drop": lambda p: ui_drop(s, p),
             "photo": lambda data, auto=False: ui_photo(s, data, auto),
             "camera": lambda event: ui_camera(s, event),
+            "sprite_get": ui_sprite_get,
+            "sprite_post": ui_sprite_post,
         }
         s.ui_channel = uichannel.start_from_config(config.load_config().get("ui"), handlers)
     except Exception as exc:

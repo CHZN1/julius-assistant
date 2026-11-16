@@ -51,6 +51,7 @@ PLANNING_PROMPT = (
     "- 'Forget X' or 'forget what you know about X' is forget_fact(topic=X) right away; list_memories is only for 'what do you remember', never a step before forgetting.\n"
     "- 'This' (as the thing to change or measure), 'this picture', 'this photo', 'my selfie' or 'this track' with no file name means the one he dropped on the orb: call the tool with source 'dropped' (it asks if nothing was dropped) and do not ask for a file name first.\n"
     "- Making his own picture look like a comic book, pencil sketch, watercolor, cartoon, pop art or pixel art, or showing every style side by side, is image_style on that picture (style 'all' for every style); it never draws anything from nothing. 'Make me a sprite', 'a game sprite of me', 'turn me into a Game Boy character', 'make this photo look like a retro game character' or any sprite or game character of him means his own photo: call image_style right away with style 'sprite' and source 'dropped' (the tool asks for a picture if none was dropped; never ask him first). 'Pixel art', 'pixelate' and a Game Boy or retro LOOK or palette on a photo stay style 'pixel_art'; only the words sprite, character or avatar make style 'sprite'."
+    "\n- Changing the sprite he already has ('bigger beard', 'taller afro', 'add glasses', 'close-set eyes', 'give him a cap', 'undo that', 'reopen my sprite') is sprite_edit with his words; making a sprite from a photo is image_style."
 )
 
 CAPABILITIES_PROMPT = (

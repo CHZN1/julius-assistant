@@ -84,6 +84,7 @@ class Sprite:
     notes: list[str] = field(default_factory=list)
     facial_hair: str = "none"  # one of BEARDS
     facial_hair_measured: bool = True  # False when the user chose it
+    doc: dict | None = None  # the layered, editable version (sprite_doc)
 
     @property
     def canvas(self) -> int:
@@ -480,6 +481,7 @@ class _Head:
                 area = int(z[k].sum())
                 cover[k] = float((dark & z[k]).sum()) / area if area else 0.0
         self.beard_cover = cover
+        self.zones = z
         kind = self.o.beard
         if not kind:
             m, c, j = cover.get("mustache", 0.0), cover.get("chin", 0.0), cover.get("jaw", 0.0)
@@ -534,8 +536,17 @@ class _Head:
             label = _despeckle(np.where(occ, np.where(label == 0, SKIN, label), 0).astype(np.int8))
             stub = cover(self.stubble_hi) >= 0.5
             label[stub & (label == SKIN)] = SHADE
+            beard = (cover(self.beard_hi) >= 0.5) & (label == HAIR)
+            self.parts = {
+                "skull": (cover(self.face_hi) >= 0.5) & (label > 0),
+                "beard": beard,
+                "stubble": label == SHADE,
+                "hair": (label == HAIR) & ~beard,
+            }
+            self.beard_shapes = self._beard_shapes(cover, label > 0)
         if not label.any():
             raise SpriteProblem("I couldn't find a head shape to build a sprite from.")
+        self.parts["silhouette"] = label > 0
         grid = np.zeros((head, head), dtype=np.int8)
         grid[1:-1, 1:-1] = label
         solid = grid > 0
@@ -545,6 +556,20 @@ class _Head:
         grid[edge & ~solid] = LINE  # one pixel in the darkest shade around the head
         self.grid = grid
         return grid
+
+    def _beard_shapes(self, cover: Any, occ: Any) -> dict[str, Any]:
+        """Every facial hair kind as cells, from the measured zones, so an edit can switch kind without the photo."""
+        z = self.zones
+        if z is None:
+            return {}
+        must = z["mustache"] & (self.ys >= z["mouth_top"] - (z["mouth_top"] - self.nose_hi) * 0.7)
+        full = cover(z["chin"] | z["jaw"] | must) >= 0.5
+        return {
+            "full": full & occ,
+            "goatee": (cover(z["chin"]) >= 0.5) & occ,
+            "mustache": (cover(must) >= 0.5) & occ,
+            "stubble": (cover(z["chin"] | z["jaw"]) >= 0.5) & occ,
+        }
 
     def _chibi_label(self) -> Any:
         """Chibi proportions as a template, not a squashed photo: a big rounded head filling the frame and a clean face window low in it (eyes at 60%,
@@ -581,11 +606,27 @@ class _Head:
         elif k == "mustache":
             beard = face & (np.abs(dy - 0.36) <= 0.07) & (np.abs(dx) <= 0.42)
         label[beard] = SHADE if k == "stubble" else HAIR
+        self.parts = {
+            "skull": occ.copy(),
+            "beard": beard & (k != "stubble"),
+            "stubble": beard & (k == "stubble"),
+            "hair": (label == HAIR) & ~beard,
+        }
+        shapes = {
+            "full": face & ((dy >= 0.45) | ((dy >= 0.3) & (np.abs(dx) >= 0.7))),
+            "goatee": face & (dy >= 0.62) & (np.abs(dx) <= 0.36),
+            "mustache": face & (np.abs(dy - 0.36) <= 0.07) & (np.abs(dx) <= 0.42),
+        }
+        shapes["stubble"] = shapes["full"]
+        self.beard_shapes = shapes
         return label
 
     def put(self, x: int, y: int, v: int, only: tuple[int, ...] = (SKIN, HAIR, SHADE)) -> None:
         if 0 <= x < self.o.head and 0 <= y < self.o.head and self.grid[y, x] in only:
             self.grid[y, x] = v
+            tag = getattr(self, "tag", "")
+            if tag:  # the layered document: which part drew this cell
+                self.rec.setdefault(tag, {})[(x, y)] = v
 
     def mark(
         self,
@@ -602,6 +643,8 @@ class _Head:
                 self.put(x0 + dx, y + dy, v, only)
 
     def features(self, cols: dict) -> None:
+        self.rec: dict[str, dict] = {}
+        self.tag = ""
         o, u = self.o, max(1, self.o.head // 16)
         (xl, yl), (xr, yr) = sorted((self.at(self.eye_l), self.at(self.eye_r)))
         ey, gap = (yl + yr) / 2, xr - xl
@@ -617,7 +660,9 @@ class _Head:
         if o.big_eyes or o.chibi:
             ew, eh = 2 * u, 2 * u
         eyes_y = int(round(ey - (eh - 1) / 2))
-        for cx in (xl, xr):
+        self.eye_geom = {"y": eyes_y, "w": ew, "h": eh, "u": u, "xl": xl, "xr": xr}
+        for cx, tag in ((xl, "eye_l"), (xr, "eye_r")):
+            self.tag = tag
             self.mark(cx, eyes_y, ew, eh, LINE)
             if o.big_eyes and eh >= 2:
                 self.put(
@@ -633,20 +678,28 @@ class _Head:
                 + self.at(self.pts["right_brow"].mean(axis=0))[1]
             ) / 2
             by = min(int(round(mid)), eyes_y - 2 * u)
+        self.tag = "brows"
         if not (
             o.chibi and o.head < 24
         ):  # a 16 px chibi face has no room for brows: they merged with the eyes and the hair
             for cx in (xl, xr):
                 self.mark(cx, by, max(2, int(round(1.2 * ew + 1))), u, BROW, (SKIN,))
+        self.tag = "mouth"
         self._mouth(cols, eyes_y + eh, u)
         nose = self.pts.get("nose")
-        if o.nose and nose is not None and len(nose):
+        self.nose_at = None
+        if nose is not None and len(nose):
             nx, ny = self.at(nose[np.argmax(nose[:, 1])])
-            self.put(int(round(nx)), int(round(ny)), SHADE, (SKIN,))
+            self.nose_at = (int(round(nx)), int(round(ny)))
+        self.tag = "nose"
+        if o.nose and self.nose_at:
+            self.put(self.nose_at[0], self.nose_at[1], SHADE, (SKIN,))
+        self.tag = ""
 
     def _mouth(self, cols: dict, below_eyes: int, u: int) -> None:
         """A short line; the corners step up for a smile or down for a frown; a second row when the mouth is open."""
         mo = self.pts.get("mouth")
+        self.mouth_geom = None
         if mo is None or not len(mo):
             return
         o = self.o
@@ -659,6 +712,7 @@ class _Head:
         lip = SKIN if cols.get("hair") == cols["line"] else LINE
         self.mark(mx, my, wid, u, lip)
         x0 = int(round(mx - (wid - 1) / 2))
+        self.mouth_geom = {"x0": x0, "y": my, "w": wid, "u": u, "lip": lip}
         corners = sorted(mo, key=lambda p: p[0])
         lift = (
             self.at(mo.mean(axis=0))[1] - (self.at(corners[0])[1] + self.at(corners[-1])[1]) / 2
@@ -713,7 +767,7 @@ def build(img: Any, face: dict, mask: Any, options: Options | None = None) -> Sp
         "no hair found" if h.hair_rgb is None else "hair from the person mask",
         f"facial hair: {BEARD_LABELS[h.beard_kind]} ({'measured' if h.beard_measured else 'set'})",
     ]
-    return Sprite(
+    sp = Sprite(
         Image.fromarray(rgba, "RGBA"),
         o,
         {k: _hex(v) for k, v in roles.items()},
@@ -721,6 +775,10 @@ def build(img: Any, face: dict, mask: Any, options: Options | None = None) -> Sp
         h.beard_kind,
         h.beard_measured,
     )
+    from julius.art import sprite_doc
+
+    sp.doc = sprite_doc.from_head(h, cols, o, notes)
+    return sp
 
 
 BEARD_LABELS = {

@@ -112,6 +112,8 @@ SCHEMAS: dict[str, dict[str, str]] = {
         "summary": "str",
         "settings": "list",
         "palette": "list",
+        "editing": "bool?",
+        "sprite_id": "str?",
     },
     "panel.camera": {"title": "str", "image": "str", "note": "str"},
     "panel.camera_open": {"autostart": "bool", "auto_use_s": "int"},
@@ -132,6 +134,12 @@ SCHEMAS: dict[str, dict[str, str]] = {
         "shown": "int?",
         "more": "bool?",
         "summary": "str?",
+        "after": "str?",
+        "export": "str?",
+        "small": "str?",
+        "settings": "list?",
+        "palette": "list?",
+        "editing": "bool?",
     },
     "panel.clear": {"scope": "str", "target": "str?", "reason": "str"},
 }
@@ -274,6 +282,13 @@ def _v_camera(msg: dict, errors: list[str]) -> None:
 
 
 def _v_update(msg: dict, errors: list[str]) -> None:
+    for k in ("after", "export", "small"):
+        if k in msg and not IMAGE_REF.match(str(msg[k])):
+            errors.append(f"panel.update.{k}: not a panel file reference")
+    if "palette" in msg and not all(isinstance(c, str) and HEX6.match(c) for c in msg["palette"]):
+        errors.append("panel.update.palette: colours as 6 hex digits")
+    if "settings" in msg and not all(isinstance(x, str) for x in msg["settings"]):
+        errors.append("panel.update.settings: not text")
     for i, it in enumerate(msg.get("items") or []):
         _check(ITEM_FIELDS, it, f"items[{i}]", errors)
     if msg.get("status") is not None and msg["status"] not in FILE_STATUSES:
@@ -712,14 +727,54 @@ class PanelHub:
             "small": str(card.get("small") or ""),
             "alt": clean(card.get("alt"), CAPS["alt"]),
             "summary": clean(card.get("summary"), CAPS["summary"]),
-            "settings": [clean(x, 80) for x in (card.get("settings") or [])[:8]],
+            "settings": [clean(x, 80) for x in (card.get("settings") or [])[:9]],
             "palette": [
                 str(c).upper()
                 for c in (card.get("palette") or [])[:MAX_ART_PALETTE]
                 if HEX6.match(str(c).upper())
             ],
+            "editing": bool(card.get("editing")),
+            "sprite_id": re.sub(r"[^0-9a-f]", "", str(card.get("sprite_id") or ""))[:16],
         }
         return self._publish("panel.art", body, turn)
+
+    def update_art(self, target: str, fields: dict) -> bool:
+        """A sprite card after an edit: new pictures, settings and palette in place (one card, not one per edit); folded into the remembered card."""
+        with self._lock:
+            card = self.cards.get(target)
+        if card is None or card.get("type") != "panel.art":
+            return False
+        patch: dict[str, Any] = {}
+        for k in ("after", "export", "small"):
+            if k in fields and IMAGE_REF.match(str(fields[k])):
+                patch[k] = str(fields[k])
+        if "settings" in fields:
+            patch["settings"] = [clean(x, 80) for x in (fields.get("settings") or [])[:9]]
+        if "palette" in fields:
+            patch["palette"] = [
+                str(c).upper()
+                for c in fields["palette"][:MAX_ART_PALETTE]
+                if HEX6.match(str(c).upper())
+            ]
+        if "summary" in fields:
+            patch["summary"] = clean(fields["summary"], CAPS["summary"])
+        if "editing" in fields:
+            patch["editing"] = bool(fields["editing"])
+        seq, pid = self._next()
+        msg = {
+            "type": "panel.update",
+            "t": round(self.clock(), 3),
+            "panel_id": pid,
+            "turn": card.get("turn"),
+            "seq": seq,
+            "target": target,
+            **patch,
+        }
+        if not self._emit(msg):
+            return False
+        with self._lock:
+            card.update(patch)
+        return True
 
     def camera(self, card: dict, turn: int | None = None) -> str | None:
         """The still from the orb's camera window ("Use Photo"): `image` is a panel file reference to the in-memory photo."""

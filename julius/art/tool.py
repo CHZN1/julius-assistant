@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import io
 import re
+from pathlib import Path
 from typing import Any
 
 from julius import log
-from julius.art import faces, filters, pixel, source, sprite
+from julius.art import faces, filters, pixel, source, sprite, sprite_doc
 
 BEFORE_SIDE = 640  # the "before" picture on the card is a downsized copy, kept in memory only
 PREVIEW_SIDE = 1024  # the card shows the art at this size at most; the saved file uses the zoom the user asked for
@@ -491,8 +492,17 @@ def _sprite_card(
             note,
         ],
         "palette": sp.palette,
+        "editing": False,
+        "sprite_id": sp.doc["id"] if sp.doc else "",
     }
-    return panel.art(card, turn=turn_fn()) is not None
+    pid = panel.art(card, turn=turn_fn())
+    if pid and sp.doc:
+        sprite_doc.STUDIO.add(sp.doc, pid)
+        _BEFORE[sp.doc["id"]] = card["before"]
+    return pid is not None
+
+
+_BEFORE: dict[str, str] = {}  # sprite id -> the photo thumbnail reference of its card
 
 
 def sprite_style(
@@ -514,6 +524,8 @@ def sprite_style(
             return "I couldn't find a face to build a sprite from. A clear, front-facing photo works best."
         opts = sprite.Options(head or 0, palette, chibi, big_eyes, nose, beard).clean()
         sp = sprite.build(img, face, mask, opts)
+        if sp.doc:
+            sp.doc["label"] = label
         crop, _found, focus = faces.portrait_crop(img)
         res, compared = None, b""
         if compare:  # the plain pixel-art filter beside the sprite, only when asked ("compare with pixel art")
@@ -543,6 +555,8 @@ def sprite_style(
         )
     except Exception as exc:
         log.event("sprite_card_failed", error=type(exc).__name__)
+    if not shown and sp.doc:  # no panel: still editable by voice
+        sprite_doc.STUDIO.add(sp.doc)
     o = sp.options
     log.event("sprite", head=o.head, palette=o.palette, chibi=o.chibi, big_eyes=o.big_eyes)
     return (
@@ -619,3 +633,170 @@ def image_style(
         compare,
         retro,
     )
+
+
+# ---- editing a sprite ---------------------------------------------------------------------------------
+def _edit_settings(doc: dict) -> list[str]:
+    p = doc["params"]
+
+    def signed(v: int) -> str:
+        return f" {v:+d}" if v else ""
+
+    n_px = sum(len(v) for v in doc["edits"].values())
+    return [
+        f"Head: {doc['head']} px on a {doc['canvas']} px canvas, palette {doc['palette']} (locked)",
+        f"Hair: {p['hair_style']}{signed(p['hair_height'])}",
+        f"Facial hair: {sprite.BEARD_LABELS.get(p['beard'], p['beard'])}{signed(p['beard_size'])}",
+        f"Eyes: {p['eye_size']}{', spacing' + signed(p['eye_spacing']) if p['eye_spacing'] else ''}; brows {'on' if p['brows'] else 'off'}",
+        f"Mouth: {p['mouth']}{signed(p['mouth_width'])}; nose {'on' if p['nose'] else 'off'}",
+        f"Glasses: {p['glasses']}; earrings {'on' if p['earrings'] else 'off'}; hat: {p['hat']}",
+        f"Pixel edits: {n_px}",
+        "Save this card writes the PNGs and a .julius-sprite file you can reopen",
+    ]
+
+
+def _refresh_card(doc: dict) -> bool:
+    """The sprite's card after an edit: updated in place (sprite large, photo as a small reference). A new card when the old one is gone."""
+    from julius.ui_bridge import charts
+
+    if charts._panel is None:
+        return False
+    panel, files, turn_fn = charts._panel
+    if files is None:
+        return False
+    k = max(1, min(SPRITE_SHOW, 256 // doc["canvas"]))
+    fields = {
+        "after": files.put_memory(sprite_doc.png(doc, k), "png"),
+        "export": files.put_memory(sprite_doc.png(doc, 8), "png"),
+        "small": files.put_memory(sprite_doc.png(doc, 1), "png"),
+        "settings": _edit_settings(doc),
+        "palette": sprite_doc.used_colors(doc),
+        "summary": f"{doc['head']}×{doc['head']} head, being edited (palette locked)",
+        "editing": True,
+    }
+    pid = sprite_doc.STUDIO.cards.get(doc["id"])
+    if pid and panel.update_art(pid, fields):
+        return True
+    card = {
+        "title": f"Sprite: {doc.get('label') or 'reopened'}",
+        "kind": "sprite",
+        "before": _BEFORE.get(doc["id"]) or fields["small"],
+        "compare": "",
+        "alt": f"{doc['head']} pixel head sprite",
+        "sprite_id": doc["id"],
+        **fields,
+    }
+    pid = panel.art(card, turn=turn_fn())
+    if pid:
+        sprite_doc.STUDIO.cards[doc["id"]] = pid
+    return pid is not None
+
+
+def _open_sprite_file(name: str) -> dict:
+    """A .julius-sprite file: the one dropped on the orb, else the newest one in the saved-cards folder whose name has the words."""
+    from julius import config
+    from julius.ui_bridge import panel_emit
+
+    pending = source._drop_source() if source._drop_source else None
+    for item in (pending or {}).get("items", []):
+        if item.get("kind") == "file" and str(item.get("path", "")).endswith(".julius-sprite"):
+            return sprite_doc.loads(Path(item["path"]).read_text(encoding="utf-8"))
+    try:
+        base = panel_emit.saved_dir((config.load_config().get("ui") or {}).get("saved_dir"))
+    except Exception:
+        base = Path.home() / "Julius Saved"
+    words = [
+        w
+        for w in re.findall(r"[a-z0-9]+", (name or "").lower())
+        if w not in ("my", "the", "sprite", "file", "open", "reopen", "a", "dropped", "this")
+    ]
+    hits = (
+        sorted(base.glob("**/*.julius-sprite"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if base.exists()
+        else []
+    )
+    for p in hits:
+        hay = str(p.relative_to(base)).lower()
+        if all(w in hay for w in words):
+            return sprite_doc.loads(p.read_text(encoding="utf-8"))
+    raise sprite_doc.DocProblem(
+        "I couldn't find that sprite file. Drop the .julius-sprite file on the orb, or say its name."
+    )
+
+
+_OPEN = re.compile(r"^\s*(?:re)?open\b|\bload\b", re.I)
+
+
+def sprite_edit(change: str = "", sprite_id: str = "") -> str:
+    """Change the sprite being edited ("bigger beard", "taller afro", "add glasses", "close-set eyes"), undo / redo, or reopen a .julius-sprite file.
+    Parameters re-render the sprite; the palette stays locked. The card updates in place."""
+    text = (change or "").strip()
+    st = sprite_doc.STUDIO
+    try:
+        if _OPEN.search(text):
+            doc = _open_sprite_file(_OPEN.sub("", text))
+            st.add(doc)
+            shown = _refresh_card(doc)
+            return (
+                f"Reopened the sprite{(' of ' + doc['label']) if doc.get('label') else ''}: {doc['head']} pixel head, {doc['palette']} palette. "
+                + ("It's in the panel; say what to change." if shown else "Say what to change.")
+            )
+        doc = st.get(sprite_id)
+        if doc is None:
+            if sprite_id and st.get():
+                return "That is an older sprite card; I'm editing the newest one. Make or reopen the sprite you want first."
+            return "There's no sprite to edit yet. Say make me a sprite, or reopen a saved one."
+        low = text.lower()
+        if re.search(r"\bredo\b", low) or re.search(r"\bundo\b", low):
+            back = bool(re.search(r"\bundo\b", low))
+            if not st.step(doc, back):
+                return "Nothing to " + ("undo." if back else "redo.")
+            _refresh_card(doc)
+            return "Undone." if back else "Redone."
+        if re.search(r"\breset\b|\bstart over\b|\bas (?:it was )?built\b", low):
+            st.checkpoint(doc)
+            doc["params"] = sprite_doc.default_params(doc["base"], type("O", (), doc["options"])())
+            doc["edits"] = {}
+            _refresh_card(doc)
+            return "Back to the sprite as it was built. Say undo to go back."
+        before = sprite_doc.dumps({"p": doc["params"]})
+        st.checkpoint(doc)
+        done = sprite_doc.apply_words(doc, text)
+        if not done or sprite_doc.dumps({"p": doc["params"]}) == before:
+            st.step(doc, True)  # nothing changed: drop the checkpoint
+            st.redo[doc["id"]] = []
+            return "I can change: " + sprite_doc.EDIT_HELP + "."
+        shown = _refresh_card(doc)
+    except (sprite_doc.DocProblem, OSError) as exc:
+        return (
+            str(exc)
+            if isinstance(exc, sprite_doc.DocProblem)
+            else "I couldn't read that sprite file."
+        )
+    except Exception as exc:
+        log.event("sprite_edit_failed", error=type(exc).__name__)
+        return "I couldn't change the sprite."
+    log.event("sprite_edit", changes=len(done))
+    return (
+        "Done: "
+        + ", ".join(done)
+        + ". "
+        + ("The card is updated; say undo to go back." if shown else "Say undo to go back.")
+    )
+
+
+def sprite_pixels(edits: Any, sprite_id: str = "") -> tuple[bool, str]:
+    """Pixel edits from the editor window (per layer, palette indices only), as one undo step."""
+    st = sprite_doc.STUDIO
+    doc = st.get(sprite_id)
+    if doc is None:
+        return False, "That sprite is no longer open."
+    try:
+        clean = sprite_doc.clean_edits(edits, doc["canvas"], len(doc["colors"]))
+    except sprite_doc.DocProblem as exc:
+        return False, str(exc)
+    st.checkpoint(doc)
+    doc["edits"] = clean
+    _refresh_card(doc)
+    log.event("sprite_pixels", layers=len(clean), cells=sum(len(v) for v in clean.values()))
+    return True, "saved"

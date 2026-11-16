@@ -236,3 +236,10 @@
 {"id": "r237", "cat": "art", "text": "Make me a sprite with a goatee.", "expect": {"path": "tool", "tool": "image_style", "args_contain": ["sprite", "goatee"]}, "fragile": true}
 {"id": "r238", "cat": "art", "text": "Make a game sprite of me, clean shaven, no beard.", "expect": {"path": "tool", "tool": "image_style", "args_contain": ["sprite", "none"]}, "fragile": true}
 {"id": "r239", "cat": "art", "text": "Make me a sprite and compare it with pixel art.", "expect": {"path": "tool", "tool": "image_style", "args_contain": ["sprite", "compare"]}, "fragile": true}
+{"id": "r240", "cat": "art", "text": "Give my sprite a bigger beard.", "expect": {"path": "tool", "tool": "sprite_edit", "args_contain": ["beard"]}, "fragile": true}
+{"id": "r241", "cat": "art", "text": "Make the afro on my sprite taller.", "expect": {"path": "tool", "tool": "sprite_edit", "args_contain": ["afro"]}, "fragile": true}
+{"id": "r242", "cat": "art", "text": "Add glasses to the sprite.", "expect": {"path": "tool", "tool": "sprite_edit", "args_contain": ["glasses"]}, "fragile": true}
+{"id": "r243", "cat": "art", "text": "Undo that last change to my sprite.", "expect": {"path": "tool", "tool": "sprite_edit", "args_contain": ["undo"]}, "fragile": true}
+{"id": "r244", "cat": "art", "text": "Reopen my saved sprite.", "expect": {"path": "tool", "tool": "sprite_edit", "args_contain": ["open"]}, "fragile": true}
+{"id": "r245", "cat": "art", "text": "Make the sprite's eyes close-set and give him a cap.", "expect": {"path": "tool", "tool": "sprite_edit"}, "fragile": true}
+{"id": "r246", "cat": "art", "text": "sprite #ab12cd34: bigger beard", "expect": {"path": "shortcut", "tool": "sprite_edit"}}

@@ -115,6 +115,16 @@ def shortcut(text, sb, ctx, turn, case_history=None):
             "ok": True,
             "detail": "camera",
         }
+    if art_commands.SPRITE_BUTTON.match(
+        text
+    ):  # a sprite card's edit button: handled before the brain
+        return {
+            "path": "shortcut",
+            "tool": "sprite_edit",
+            "args": "",
+            "ok": True,
+            "detail": "sprite button",
+        }
     if art_commands.parse(text) is not None:  # pixel art: a fixed pattern, before the brain
         return {
             "path": "shortcut",
