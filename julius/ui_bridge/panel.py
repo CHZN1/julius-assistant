@@ -15,7 +15,7 @@ from collections.abc import Callable
 from typing import Any
 from urllib.parse import urlsplit
 
-HISTORY = 10
+HISTORY = 20
 MAX_BYTES = 48_000
 MAX_SOURCES = 12
 MAX_FINDINGS = 12

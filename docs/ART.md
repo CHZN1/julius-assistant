@@ -64,6 +64,15 @@ Apple Vision, inside the one-shot helper (`visiond landmarks`, on this Mac only)
 
 Same picture and options always give the same sprite. The card (**panel.art**, kind `sprite`) shows the photo, the sprite and the pixel-art filter output in a row; "save this card" writes `sprite-1x.png` (transparent), `sprite-4x.png` and `sprite-8x.png` (nearest-neighbour zooms) and `card.md`. Without a face in the picture it says so instead of guessing. The body comes later, in the Sprite studio stage.
 
+## Saving pictures
+
+Two ways, both explicit:
+
+- **Hover download button (orb).** Every picture on every card shows a small download button on its top-right corner when the pointer is over it. Clicking it opens the native macOS Save dialog (starting in `~/Julius Saved`) with a descriptive, editable name such as `selfie-sprite-16px-gameboy-2026-11-15.png` or `pixelart-64px-gameboy-tower-2026-11-15.png`. Pixel art and sprites offer PNG as shown, 1x, 4x or 8x (the 1x picture scaled with nearest neighbour, so every pixel stays a crisp square); other pictures save as shown. After a save the panel offers **Show in Finder**. Only pictures from the panel file server can be saved this way, and the app writes the file, not the page.
+- **By words.** "Save this card" saves the newest card as before. "Save that sprite from earlier", "save the pixel art", "save the pencil sketch", "save the selfie" or "save the chart" saves the newest card of that kind among the last 20 of the session, into its own folder in `~/Julius Saved`.
+
+The last **20 cards** and their pictures are kept in memory for the session (12 hours at most, 300 MB at most; never on disk) and are gone when Julius quits, so an older card in the panel's History still opens, zooms and saves.
+
 ## Photo style filters (step C)
 
 `image_style` with `style` = `cel_shade`, `comic`, `pencil`, `pop_art` or `watercolor` (any wording: "comic book", "pencil sketch", "make it a cartoon"). Pillow and numpy only (no OpenCV or scikit-image, so no new licence question); the same input and settings always give the same picture. The picture is worked at up to 900 px on the long side and shown as a **panel.art** card of kind `filter` (before and after, settings as text). "Save this card" writes `restyled.png` and `card.md`. Transparent areas become white paper. Three knobs, each used where it makes sense:

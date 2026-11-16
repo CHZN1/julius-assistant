@@ -242,6 +242,45 @@ class ToolTests(unittest.TestCase):
         )
         self.assertEqual(one.mode, "RGBA")
 
+    def test_save_that_sprite_from_earlier_finds_it_behind_newer_cards(self):
+        self.run_tool()
+        sprite_card = self.sent[-1]["panel_id"]
+        with mock.patch.object(
+            source.config, "load_config", return_value={"art": {"folders": [str(self.mine)]}}
+        ):
+            art_tool.pixel_art("me", size=16)
+            art_tool.filter_style("me", "pencil")
+        self.assertNotEqual(self.sent[-1]["panel_id"], sprite_card)
+        saved = self.root / "Julius Saved"
+        out = pe.handle(self.panel, self.files, "save that sprite from earlier", str(saved))
+        self.assertIn("Saved to", out)
+        (folder,) = list(saved.iterdir())
+        self.assertIn("sprite-8x.png", [p.name for p in folder.iterdir()])
+        self.assertIn(
+            "Saved to", pe.handle(self.panel, self.files, "Save the pixel art.", str(saved))
+        )
+        self.assertIn(
+            "Saved to", pe.handle(self.panel, self.files, "save the pencil sketch", str(saved))
+        )
+        names = {p.name for f in saved.iterdir() for p in f.iterdir()}
+        self.assertTrue({"sprite-1x.png", "pixel-art.png", "restyled.png"} <= names, names)
+
+    def test_saving_something_that_is_not_there_says_so(self):
+        self.assertIn(
+            "don't have a sprite",
+            pe.handle(self.panel, self.files, "save that sprite", str(self.root / "x")),
+        )
+
+    def test_the_last_twenty_cards_keep_their_pictures_and_stay_in_the_hub(self):
+        from julius.ui_bridge.panel import HISTORY
+
+        self.assertEqual(HISTORY, 20)
+        refs = [self.files.put_memory(b"x" * 100, "png") for _ in range(120)]
+        self.assertTrue(
+            all(self.files.bytes_of(r) for r in refs)
+        )  # 20 cards x 5 pictures, plus room
+        self.assertGreaterEqual(pf.MEMORY_TTL_S, 12 * 3600)
+
     def test_no_face_is_a_plain_sentence(self):
         with mock.patch.object(art_tool.faces, "landmarks", return_value=(None, None)):
             said = self.run_tool()

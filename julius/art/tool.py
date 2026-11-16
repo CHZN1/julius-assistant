@@ -45,10 +45,10 @@ def _card(res: pixel.Result, before: Any, label: str, scale: int, crop: str = ""
     card = {
         "title": f"Pixel art: {label}",
         "kind": "pixel",
-        "before": files.put_memory(_before_png(before), "png", keep=16),
-        "after": files.put_memory(shown, "png", keep=16),
-        "export": files.put_memory(export, "png", keep=16),
-        "small": files.put_memory(res.png(1)[0], "png", keep=16),
+        "before": files.put_memory(_before_png(before), "png"),
+        "after": files.put_memory(shown, "png"),
+        "export": files.put_memory(export, "png"),
+        "small": files.put_memory(res.png(1)[0], "png"),
         "alt": f"{res.width} by {res.height} pixel art of {label}",
         "summary": f"{res.width}×{res.height} px, {len(res.palette)} colours, saved at {used}×",
         "settings": [
@@ -118,11 +118,11 @@ def _compare_card(
     panel, files, turn_fn = charts._panel
     if files is None:
         return False
-    ref = files.put_memory(grid, "png", keep=16)
+    ref = files.put_memory(grid, "png")
     card = {
         "title": f"Pixel art options: {label}",
         "kind": "compare",
-        "before": files.put_memory(_before_png(before), "png", keep=16),
+        "before": files.put_memory(_before_png(before), "png"),
         "after": ref,
         "export": ref,
         "small": ref,
@@ -315,7 +315,7 @@ def _filter_card(res: Any, before: Any, label: str, s: filters.FilterSettings) -
     if files is None:
         return False
     shown = filters.png(res)
-    ref = files.put_memory(shown, "png", keep=16)
+    ref = files.put_memory(shown, "png")
     lines = [
         f"Style: {filters.LABELS[s.style]}",
         f"Line weight: {s.line}",
@@ -326,7 +326,7 @@ def _filter_card(res: Any, before: Any, label: str, s: filters.FilterSettings) -
     card = {
         "title": f"{filters.LABELS[s.style]}: {label}",
         "kind": "filter",
-        "before": files.put_memory(_before_png(before), "png", keep=16),
+        "before": files.put_memory(_before_png(before), "png"),
         "after": ref,
         "export": ref,
         "small": ref,
@@ -390,11 +390,11 @@ def filter_compare(source_name: str = "dropped") -> str:
     try:
         if charts._panel is not None and charts._panel[1] is not None:
             panel, files, turn_fn = charts._panel
-            ref = files.put_memory(data, "png", keep=16)
+            ref = files.put_memory(data, "png")
             card = {
                 "title": f"All five styles: {label}",
                 "kind": "compare",
-                "before": files.put_memory(_before_png(img), "png", keep=16),
+                "before": files.put_memory(_before_png(img), "png"),
                 "after": ref,
                 "export": ref,
                 "small": ref,
@@ -468,15 +468,15 @@ def _sprite_card(
         return False
     k = max(1, min(SPRITE_SHOW, 256 // sp.canvas))
     o = sp.options
-    shown = files.put_memory(sp.png(k), "png", keep=16)
+    shown = files.put_memory(sp.png(k), "png")
     card = {
         "title": f"Sprite: {label}",
         "kind": "sprite",
-        "before": files.put_memory(_before_png(crop), "png", keep=16),
+        "before": files.put_memory(_before_png(crop), "png"),
         "after": shown,
-        "compare": files.put_memory(compared, "png", keep=16) if compared else "",
-        "export": files.put_memory(sp.png(8), "png", keep=16),
-        "small": files.put_memory(sp.png(1), "png", keep=16),
+        "compare": files.put_memory(compared, "png") if compared else "",
+        "export": files.put_memory(sp.png(8), "png"),
+        "small": files.put_memory(sp.png(1), "png"),
         "alt": f"{o.head} pixel head sprite of {label}",
         "summary": f"{o.head}×{o.head} head on a {sp.canvas}×{sp.canvas} canvas, {len(sp.palette)} colours, built from your face's measurements",
         "settings": [

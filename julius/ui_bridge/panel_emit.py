@@ -220,6 +220,12 @@ MORE_RE = re.compile(
     r"(?:\s+(?:files?|items?|results?|rows?))?[\s.!?]*$",
     re.I,
 )
+SAVE_WHAT_RE = re.compile(
+    r"^\W*(?:please\s+|can you\s+|could you\s+)?save\s+(?:that|the|my|this|those|a)?\s*(?:last\s+|latest\s+|earlier\s+|previous\s+)?"
+    r"(sprite|pixel\s*art|pencil(?:\s+sketch)?|comic|water\s*colou?r|pop\s*art|cartoon|cel[- ]?shad\w*|selfie|photo|picture|chart|graph|research|look)s?"
+    r"(?:\s+(?:from|of|that\s+(?:we|you|i)\s+(?:made|did|took))\s*(?:earlier|before|a\s+(?:while|minute|bit)\s+ago|just\s+now|(?:the\s+)?(?:start|beginning)|(?:this|the)\s+session)?)?[\s.!?]*$",
+    re.I,
+)
 IMAGES_RE = re.compile(
     r"^\W*(?:please\s+|can you\s+|could you\s+)?(?:show|open|pull up|bring up)(?:\s+me)?\s+(?:the\s+)?(?:(?:research|card|search)\s+)?(?:images|pictures|photos)"
     r"(?:\s+(?:from|of|in)\s+(?:the\s+)?(?:research|search|card|results?)(?:\s+(?:on|about|for|into)\s+(.+?))?)?[\s.!?]*$",
@@ -334,11 +340,55 @@ def card_markdown(card: dict, image_files: list[tuple[dict, str]]) -> str:
     return "\n".join(out).rstrip() + "\n"
 
 
+def card_by_words(panel: Any, what: str) -> dict | None:
+    """The newest card, among the last 20 of this session, that is what the words say: "sprite", "pixel art", "pencil sketch", "selfie", "chart", "research"..."""
+    w = re.sub(r"[^a-z]+", " ", what.lower()).strip()
+    style = {
+        "pencil": "pencil",
+        "comic": "comic",
+        "water": "watercolor",
+        "pop": "pop art",
+        "cartoon": "cel",
+        "cel": "cel",
+    }
+    if panel is None:
+        return None
+    with panel._lock:
+        cards = list(panel.cards.values())
+    for c in reversed(cards):
+        t, kind = c.get("type"), c.get("kind")
+        if w.startswith("sprite"):
+            ok = t == "panel.art" and kind == "sprite"
+        elif w.startswith("pixel"):
+            ok = t == "panel.art" and kind in ("pixel", "compare")
+        elif w.split(" ")[0] in style:
+            ok = (
+                t == "panel.art"
+                and kind == "filter"
+                and style[w.split(" ")[0]] in str(c.get("title", "")).lower().replace("-", "")
+            )
+        elif w in ("selfie", "photo", "picture"):
+            ok = t == "panel.camera"
+        elif w in ("chart", "graph"):
+            ok = t == "panel.chart"
+        elif w == "look":
+            ok = t == "panel.vision"
+        else:
+            ok = t == "panel.research"
+        if ok:
+            return c
+    return None
+
+
 def save_card(
-    panel: Any, files: Any, cfg_value: str | None = None, now: Callable[[], float] = time.time
+    panel: Any,
+    files: Any,
+    cfg_value: str | None = None,
+    now: Callable[[], float] = time.time,
+    card: dict | None = None,
 ) -> str:
     """Writes the newest card (markdown plus its images) into its own folder under the saved-cards folder. Returns what Julius says."""
-    card = find_card(panel)
+    card = card or find_card(panel)
     if card is not None and card.get("type") == "panel.vision":
         return save_vision_card(card, files, cfg_value, now)
     if card is not None and card.get("type") == "panel.art":
@@ -608,6 +658,12 @@ def handle(
         return open_source(panel, n, m.group(2), opener)
     if SAVE_RE.match(t):
         return save_card(panel, files, saved_cfg)
+    m = SAVE_WHAT_RE.match(t)
+    if m:
+        card = card_by_words(panel, m.group(1))
+        if card is None:
+            return f"I don't have a {m.group(1).lower()} from this session to save."
+        return save_card(panel, files, saved_cfg, card=card)
     if CLOSE_RE.match(t):
         return close_panel(panel)
     if MORE_RE.match(t):

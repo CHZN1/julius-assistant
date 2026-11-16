@@ -275,7 +275,7 @@ class Looking(unittest.TestCase):
         refs = [files.put_memory(b"x" * 10, "jpg", keep=3) for _ in range(5)]
         self.assertIsNone(files.bytes_of(refs[0]))
         self.assertIsNotNone(files.bytes_of(refs[-1]))
-        clock[0] += 4000
+        clock[0] += 13 * 3600  # past the 12-hour session life
         files.put_memory(b"y", "jpg")
         self.assertIsNone(files.bytes_of(refs[-1]))
 

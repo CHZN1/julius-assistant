@@ -43,7 +43,7 @@ Data for a side panel (research results, file previews, charts, tables and image
 
 Citation numbers are 1-based and the same in `findings[].cite`, `sources[].n` and the typed command "open source 3". `image` is `/p/<id>.<png|jpg|webp|gif>`, to be fetched from `hello.panel.base` + that path (a localhost-only, token-protected file server; clients must not load any other image URL). Source links are shown as text; opening one is done by typing "open source N" to the write channel, so Julius opens it, not the UI.
 
-`hello` gains `panel`: `{"cards": [last 10 panel cards (any `panel.*` card type), oldest first, with updates already folded in], "base": "<file server origin and token path>"}`, so a UI that reconnects restores its panel. Example `panel.research`:
+`hello` gains `panel`: `{"cards": [last 20 panel cards (any `panel.*` card type), oldest first, with updates already folded in], "base": "<file server origin and token path>"}`, so a UI that reconnects restores its panel. Example `panel.research`:
 
 ```json
 {"type":"panel.research","t":1.0,"panel_id":"c1-1","turn":4,"seq":1,"question":"How tall is it?","summary":"It is 830 m tall.","findings":[{"n":1,"claim":"The tower is 830 m tall.","cite":[1]}],"sources":[{"n":1,"title":"The Tower","site":"example.org","date":null,"url":"https://example.org/tower"}],"images":[],"dropped":0,"stopped":null}

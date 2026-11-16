@@ -143,12 +143,12 @@ class Cards(unittest.TestCase):
         self.assertEqual(hello["panel"]["base"], "http://127.0.0.1:8785/tok")
         self.assertEqual(len(hello["panel"]["cards"][0]["images"]), 1)
 
-    def test_history_is_last_ten_and_clear(self):
-        ids = [self.panel.research(RESULT) for _ in range(12)]
+    def test_history_is_last_twenty_and_clear(self):
+        ids = [self.panel.research(RESULT) for _ in range(22)]
         cards = self.hub.hello()["panel"]["cards"]
         self.assertEqual([c["panel_id"] for c in cards], ids[2:])
         self.panel.clear(ids[-1], "dismissed")
-        self.assertEqual(len(self.hub.hello()["panel"]["cards"]), 9)
+        self.assertEqual(len(self.hub.hello()["panel"]["cards"]), 19)
         self.panel.clear(reason="new_topic")
         self.assertEqual(self.hub.hello()["panel"]["cards"], [])
         self.assertEqual(pn.validate(self.msgs()[-1]), [])

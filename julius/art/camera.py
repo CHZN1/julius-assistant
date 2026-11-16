@@ -84,7 +84,7 @@ def received(
     source.hold(jpeg)
     if panel is not None and files is not None:
         try:
-            ref = files.put_memory(jpeg, "jpg", keep=16)
+            ref = files.put_memory(jpeg, "jpg")
             panel.camera(
                 {
                     "title": "Photo",

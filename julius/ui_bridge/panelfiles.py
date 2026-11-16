@@ -40,6 +40,11 @@ NAME = re.compile(r"^[A-Za-z0-9_-]{8,64}\.(png|jpg|webp|gif)$")
 CTYPE = {"png": "image/png", "jpg": "image/jpeg", "webp": "image/webp", "gif": "image/gif"}
 
 
+MEMORY_TTL_S = 12 * 3600  # in-memory pictures live for the session
+MEMORY_KEEP = 200  # 20 cards x up to ~8 pictures, with room
+MEMORY_MAX_BYTES = 300_000_000
+
+
 class ImageRefused(ValueError):
     pass
 
@@ -137,9 +142,12 @@ class PanelFiles:
         self._live_n = 0
         self.prune()
 
-    def put_memory(self, data: bytes, ext: str, ttl_s: int = 3600, keep: int = 6) -> str:
+    def put_memory(
+        self, data: bytes, ext: str, ttl_s: int = MEMORY_TTL_S, keep: int = MEMORY_KEEP
+    ) -> str:
         """Hold bytes in memory only and return the same kind of `/p/<id>.<ext>` reference. Gone when the process ends, after
-        `ttl_s`, or when more than `keep` newer ones exist. The only way such an image reaches disk is the user saying save this card."""
+        `ttl_s` (the session, 12 hours), when more than `keep` newer ones exist, or when the oldest have to go to stay under MEMORY_MAX_BYTES.
+        Enough for the last 20 cards (a sprite card holds five pictures). The only way such an image reaches disk is the user saying save this card."""
         if ext not in CTYPE:
             raise ImageRefused("bad extension")
         name = f"{secrets.token_urlsafe(12)}.{ext}"
@@ -148,7 +156,9 @@ class PanelFiles:
             for k in [k for k, (_, t) in self._mem.items() if now - t > ttl_s]:
                 del self._mem[k]
             self._mem[name] = (data, now)
-            while len(self._mem) > keep:
+            while len(self._mem) > keep or (
+                len(self._mem) > 1 and sum(len(v[0]) for v in self._mem.values()) > MEMORY_MAX_BYTES
+            ):
                 del self._mem[next(iter(self._mem))]
         return f"/p/{name}"
 
