@@ -128,6 +128,23 @@ META_LEAK = re.compile(
     r"he explicitly (?:asked|wants|requested)|the user (?:wants|is asking|explicitly|asked for)|spoken-friendly|so I'll (?:give|keep|go|tell) (?:him|a fuller|a proper)|without tools)\b",
     re.I,
 )  # the model narrating its instructions or reasoning is never spoken
+TOOL_NARRATION = re.compile(
+    r"\b(?:I|I'll|I will|I'm|I am|let me|let's)\b[^.!?]{0,40}?\b(?:call|run|us(?:e|ing)|invok|trigger)\w*\s+(?:the\s+|a\s+|my\s+)?(?:[\w-]+\s+){0,2}(?:tool|function)s?\b"
+    r"|\b(?:tool|function) call\b|\bI need to actually (?:run|call|do|use|make|perform)\b|\b(?:let me|I'll|I will|I'm going to) (?:call|invoke)\b"
+    r"|\b[a-z]+_[a-z_]+\s*\(|\b(?:sprite_edit|image_style|escalate_to_planner|research_task|file_request|code_request|render_chart)\b",
+    re.I,
+)  # "I'll call the sprite tool now": what the model does is never narrated aloud
+
+
+def is_narration(sentence: str) -> bool:
+    """True for a sentence that describes internals (instructions, tool calls) instead of answering."""
+    return bool(META_LEAK.search(sentence) or TOOL_NARRATION.search(sentence))
+
+
+def strip_narration(text: str) -> str:
+    """The text without sentences that narrate tool calls or instructions."""
+    parts = re.split(r"(?<=[.!?])\s+", text or "")
+    return " ".join(p for p in parts if p and not is_narration(p)).strip()
 
 
 def split_long_sentence(p: str, limit: int = 110) -> list[str]:

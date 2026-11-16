@@ -42,6 +42,24 @@ def build_undo_coordinator(s: Session) -> undo.UndoCoordinator:
 
     memory = s.memory
 
+    def sprite_mark() -> Any:
+        from julius.art import sprite_doc
+
+        st = sprite_doc.STUDIO
+        return (st.current, len(st.undo.get(st.current, [])), len(st.redo.get(st.current, [])))
+
+    def sprite_can() -> bool:
+        from julius.art import sprite_doc
+
+        st = sprite_doc.STUDIO
+        return bool(st.undo.get(st.current))
+
+    def sprite_undo() -> Any:
+        from julius.art import tool
+
+        out = tool.sprite_edit("undo")
+        return "The sprite is back to how it was before that edit." if out == "Undone." else None
+
     return undo.UndoCoordinator(
         {
             "files": undo.UndoAgent(
@@ -50,6 +68,7 @@ def build_undo_coordinator(s: Session) -> undo.UndoCoordinator:
             "code": undo.UndoAgent(
                 "the coding merge", code_mark, lambda: code_task() is not None, code_undo
             ),
+            "sprite": undo.UndoAgent("the last sprite edit", sprite_mark, sprite_can, sprite_undo),
             "memory": undo.UndoAgent(
                 "your last memory change",
                 lambda: (id(memory.undo_rows), id(memory.undo_correction)),

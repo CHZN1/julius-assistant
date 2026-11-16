@@ -16,11 +16,23 @@ BARE = re.compile(
     r"^(?:please\s+)?undo(?:\s+(?:that|it|the last (?:one|thing|change|action)|my last (?:one|change|action)))?[.!]?$",
     re.I,
 )
+NAMED = {  # "undo the file change" and friends: that agent, even when something else happened later or the change predates this run
+    "files": re.compile(
+        r"^(?:please\s+)?undo\s+(?:the|my|that)\s+(?:last\s+)?file\s+(?:change|move|operation)s?[.!]?$",
+        re.I,
+    ),
+    "sprite": re.compile(
+        r"^(?:please\s+)?undo\s+(?:the|my|that)\s+(?:last\s+)?sprite(?:\s+(?:edit|change))?[.!]?$",
+        re.I,
+    ),
+}
 ORDER = (
+    "sprite",
     "files",
     "code",
     "memory",
-)  # tie-break for actions that predate this run (their relative age is unknown)
+)  # tie-break inside one turn
+NOTHING = "There's nothing from this session to undo. To undo an older file change, say undo the file change."
 
 
 @dataclass
@@ -69,9 +81,24 @@ class UndoCoordinator:
         return out
 
     def handle(self, text: str) -> str:
-        if not BARE.match((text or "").strip()):
+        """A bare "undo" undoes the most recent action of THIS session (a sprite edit, a file change, a merge, a memory change) and never reaches back
+        to something done before Julius started (that once undid a month-old file move): those need the agent named ("undo the file change")."""
+        t = (text or "").strip()
+        for n, pat in NAMED.items():
+            if n in self.agents and pat.match(t):
+                return (
+                    self._run([n])
+                    or f"There's no {self.agents[n].label.removeprefix('the last ')} to undo."
+                )
+        if not BARE.match(t):
             return None
-        for n in self.order():
+        recent = [n for n in self.order() if self.last_turn.get(n, 0) > 0]
+        return self._run(recent) or NOTHING
+
+    def _run(self, names: list[str]) -> str | None:
+        for n in names:
+            if not self.agents[n].can_undo():
+                continue
             a = self.agents[n]
             try:
                 msg = a.run()

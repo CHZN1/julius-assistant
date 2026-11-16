@@ -7,6 +7,8 @@ A tiny HTTP server on 127.0.0.1 (default port 8775), JSON in, JSON out, no third
   POST /v1/camera  {"event": "opened"|"closed"|"denied"}     what happened to the orb's camera window
   GET  /v1/sprite                                   the sprite being edited, as layers for the editor window (palette, cells, edits)
   POST /v1/sprite  {"id": "...", "edits": {layer: {"x,y": palette index or -1}}}   pixel edits from the editor window, palette-locked
+  POST /v1/sprite/edit  {"id": "...", "ops": ["bigger beard", ...]}   the sprite card's buttons: applied and rendered at once, the new picture back;
+                   no turn, no transcript, no speech, no model (its own rate limit, so fast clicking is fine)
   GET  /v1/ping                                     authenticated liveness check
 
 Safety, in the order the checks run:
@@ -36,6 +38,7 @@ from julius import log
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8775
 MAX_BODY = 16 * 1024
+CARD_RATE_N = 120  # card button edits per RATE_S seconds
 MAX_SPRITE_BODY = 1_000_000  # pixel edits of a 64x64 sprite, all layers, with room
 MAX_PHOTO = 4 * 1024 * 1024  # one camera frame as JPEG (1280x720 is about 150 KB)
 CAMERA_EVENTS = ("opened", "closed", "denied")
@@ -141,6 +144,9 @@ class Channel:
         self.token, self.handlers, self.port = token, handlers, port
         self.audit_path = Path(audit_path) if audit_path else HOME / "ui_audit.log"
         self.limiter = limiter or _Limiter()
+        self.card_limiter = _Limiter(
+            CARD_RATE_N, RATE_S
+        )  # card button edits are tiny and local: a bigger budget
         self.httpd = None
         self._audit_lock = threading.Lock()
 
@@ -159,7 +165,16 @@ class Channel:
 
     def handle(self, method: Any, path: Any, headers: Any, body_reader: Any) -> Any:
         """Returns (status, dict). Raises nothing; every refusal is a Refused turned into a response by the caller."""
-        self._authenticate(headers)
+        card = method == "POST" and str(path).split("?")[0] == "/v1/sprite/edit"
+        self._authenticate(headers, self.card_limiter if card else self.limiter)
+        if card:
+            body = self._read_json(headers, body_reader)
+            res = self._handler("sprite_ops", "sprites are not available")(
+                str(body.get("id") or ""), body.get("ops")
+            )
+            if not res.get("ok"):
+                raise Refused(400, str(res.get("error") or "refused"))
+            return 200, res
         if method == "GET" and path == "/v1/ping":
             return 200, {"ok": True}
         route = path.split("?")[0]
@@ -204,14 +219,14 @@ class Channel:
             self.audit("drop", 200, paths=len(paths))
         return 200, {"ok": True, **(res or {})}
 
-    def _authenticate(self, headers: Any) -> None:
+    def _authenticate(self, headers: Any, limiter: Any = None) -> None:
         """Local host, no browser Origin, under the rate limit, and the right bearer token."""
         host = (headers.get("Host") or "").lower()
         if host not in (f"127.0.0.1:{self.port}", f"localhost:{self.port}"):
             raise Refused(403, "bad Host")
         if headers.get("Origin") is not None:
             raise Refused(403, "Origin not allowed")
-        if not self.limiter.allow():
+        if not (limiter or self.limiter).allow():
             raise Refused(429, "slow down")
         auth = headers.get("Authorization") or ""
         if not (

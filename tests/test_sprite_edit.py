@@ -242,13 +242,13 @@ class StudioTests(unittest.TestCase):
         saved = self.root / "Julius Saved"
         self.assertIn("Saved to", pe.save_card(self.panel, self.files, str(saved)))
         (folder,) = list(saved.iterdir())
-        f = folder / "sprite.julius-sprite"
+        f = folder / f"{folder.name}.julius-sprite"
         self.assertTrue(f.exists())
         self.assertEqual(json.loads(f.read_text())["params"]["hat"], "cap")
         sd.STUDIO.__init__()
         with mock.patch.object(pe, "saved_dir", return_value=saved):
             said = art_tool.sprite_edit("open my sprite")
-        self.assertIn("Reopened the sprite", said)
+        self.assertIn("Opened Sprite ", said)
         self.assertEqual(sd.STUDIO.get()["params"]["hat"], "cap")
         self.assertEqual(self.sent[-1]["type"], "panel.art")  # a new card for the reopened sprite
 
@@ -264,11 +264,124 @@ class StudioTests(unittest.TestCase):
         self.assertIn("Never for making a new sprite", schema["function"]["description"])
 
 
+class NamingTests(StudioTests):
+    def save_as(self, words):
+        saved = self.root / "Julius Saved"
+        return pe.handle(self.panel, self.files, words, str(saved)), saved
+
+    def test_save_it_as_a_name_and_open_it_by_that_name(self):
+        out, saved = self.save_as("Save it as Sunday Roy")
+        self.assertIn("Saved to", out)
+        self.assertTrue((saved / "Sunday Roy" / "Sunday Roy.julius-sprite").exists())
+        sd.STUDIO.__init__()
+        with mock.patch.object(pe, "saved_dir", return_value=saved):
+            said = commands.handle("Open Sunday Roy")  # the name alone: a saved sprite's exact name
+            self.assertIn("Opened Sunday Roy", said)
+            self.assertIsNone(commands.handle("Open Safari"))  # not a sprite name: not ours
+
+    def test_names_are_cleaned_and_never_overwrite(self):
+        self.save_as("save this sprite as ../../etc/x: <b>")
+        self.save_as("save it as Same")
+        _, saved = self.save_as("save it as Same")
+        names = sorted(p.name for p in saved.iterdir())
+        self.assertIn("Same (2)", names)
+        self.assertTrue(all("/" not in n and "<" not in n and ".." not in n for n in names), names)
+
+    def test_open_my_sprite_opens_the_newest_and_lists_the_other_recent_ones(self):
+        import os
+        import time
+
+        saved = self.root / "Julius Saved"
+        for i, n in enumerate(("Alpha", "Beta", "Gamma", "Delta")):
+            self.save_as(f"save it as {n}")
+            f = saved / n / f"{n}.julius-sprite"
+            os.utime(f, (time.time() - 100 + i, time.time() - 100 + i))
+        with mock.patch.object(pe, "saved_dir", return_value=saved):
+            said = art_tool.sprite_edit("open my sprite")
+        self.assertIn("Opened Delta", said)
+        self.assertIn("Other recent ones: Gamma (", said)
+        self.assertIn("Beta (", said)
+        self.assertIn("Alpha (", said)
+
+    def test_save_as_with_no_sprite_says_so(self):
+        sd.STUDIO.__init__()
+        self.panel.cards.clear()
+        out, _ = self.save_as("save it as Nothing")
+        self.assertIn("don't have a sprite", out)
+
+
+class CardOpsTests(StudioTests):
+    def test_button_ops_render_at_once_and_update_the_card_in_place(self):
+        sid = self.card["sprite_id"]
+        before = len(self.sent)
+        r = art_tool.sprite_ops(sid, ["bigger beard", "taller hair", "taller hair"])
+        self.assertTrue(r["ok"] and r["changed"])
+        self.assertEqual((r["undo"], r["redo"]), (3, 0))
+        self.assertTrue(r["after"].startswith("/p/"))
+        self.assertLess(r["ms"], 100)
+        ups = self.sent[before:]
+        self.assertEqual(
+            [m["type"] for m in ups], ["panel.update"]
+        )  # one card update for the batch, no transcript
+        self.assertEqual(ups[0]["target"], self.card["panel_id"])
+
+    def test_glasses_toggle_undo_redo_and_limits(self):
+        sid = self.card["sprite_id"]
+        art_tool.sprite_ops(sid, ["glasses"])
+        self.assertEqual(sd.STUDIO.get()["params"]["glasses"], "square")
+        art_tool.sprite_ops(sid, ["glasses"])
+        self.assertEqual(sd.STUDIO.get()["params"]["glasses"], "none")
+        r = art_tool.sprite_ops(sid, ["undo"])
+        self.assertEqual(sd.STUDIO.get()["params"]["glasses"], "square")
+        self.assertEqual(r["redo"], 1)
+        for _ in range(12):
+            art_tool.sprite_ops(sid, ["taller hair"])
+        r = art_tool.sprite_ops(sid, ["taller hair"])
+        self.assertFalse(r["changed"])  # at the limit: no change, no undo step
+
+    def test_unknown_ops_and_old_cards_are_refused(self):
+        sid = self.card["sprite_id"]
+        self.assertFalse(art_tool.sprite_ops(sid, ["delete my files"])["ok"])
+        self.assertFalse(art_tool.sprite_ops(sid, [])["ok"])
+        self.assertFalse(art_tool.sprite_ops("00000000", ["undo"])["ok"])
+
+    def test_the_undo_coordinator_undoes_the_sprite_after_card_clicks(self):
+        from julius.brain.undo import UndoAgent, UndoCoordinator
+
+        st = sd.STUDIO
+
+        def mark():
+            return (st.current, len(st.undo.get(st.current, [])))
+
+        files_ran = []
+        c = UndoCoordinator(
+            {
+                "files": UndoAgent(
+                    "the last file change",
+                    lambda: 1,
+                    lambda: True,
+                    lambda: files_ran.append(1) or "moved",
+                ),
+                "sprite": UndoAgent(
+                    "the last sprite edit",
+                    mark,
+                    lambda: bool(st.undo.get(st.current)),
+                    lambda: "back" if art_tool.sprite_edit("undo") == "Undone." else None,
+                ),
+            }
+        )
+        art_tool.sprite_ops(self.card["sprite_id"], ["bigger beard"])
+        c.observe(4)
+        self.assertEqual(c.handle("Undo."), "Undid the last sprite edit. back")
+        self.assertEqual(files_ran, [])
+
+
 class ChannelTests(unittest.TestCase):
     def setUp(self):
         self.dir = Path(tempfile.mkdtemp())
         self.token = uc.ensure_token(self.dir / "ui_token")
         self.posted = []
+        self.typed = []
         self.view = None
         self.ch = uc.Channel(
             self.token,
@@ -279,16 +392,22 @@ class ChannelTests(unittest.TestCase):
                     if sid == "ab12"
                     else (False, "That sprite is no longer open.")
                 ),
+                "sprite_ops": lambda sid, ops: (
+                    {"ok": True, "after": "/p/abcdefgh.png", "ops": ops}
+                    if sid == "ab12"
+                    else {"ok": False, "error": "That sprite is no longer open."}
+                ),
+                "typed": lambda t: self.typed.append(t),
             },
             audit_path=self.dir / "audit.log",
             port=0,
         ).start()
         self.addCleanup(self.ch.stop)
 
-    def req(self, method, body=None, auth=True):
+    def req(self, method, body=None, auth=True, path="/v1/sprite"):
         c = http.client.HTTPConnection("127.0.0.1", self.ch.port, timeout=5)
         data = json.dumps(body).encode() if body is not None else None
-        c.putrequest(method, "/v1/sprite", skip_host=True)
+        c.putrequest(method, path, skip_host=True)
         c.putheader("Host", f"127.0.0.1:{self.ch.port}")
         if auth:
             c.putheader("Authorization", "Bearer " + self.token)
@@ -318,3 +437,25 @@ class ChannelTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CardEndpointTests(ChannelTests):
+    def test_card_edits_answer_with_the_picture_and_never_make_a_turn(self):
+        st, out = self.req("POST", {"id": "ab12", "ops": ["bigger beard"]}, path="/v1/sprite/edit")
+        self.assertEqual((st, out["after"]), (200, "/p/abcdefgh.png"))
+        self.assertEqual(self.typed, [])
+        st, out = self.req("POST", {"id": "zz", "ops": ["undo"]}, path="/v1/sprite/edit")
+        self.assertEqual(st, 400)
+        self.assertEqual(
+            self.req("POST", {"id": "ab12", "ops": ["undo"]}, auth=False, path="/v1/sprite/edit")[
+                0
+            ],
+            401,
+        )
+
+    def test_fast_clicking_is_not_rate_limited_like_chat(self):
+        codes = [
+            self.req("POST", {"id": "ab12", "ops": ["taller hair"]}, path="/v1/sprite/edit")[0]
+            for _ in range(40)
+        ]
+        self.assertEqual(set(codes), {200})  # 40 clicks in a few seconds; chat allows 20 per 10 s

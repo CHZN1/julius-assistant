@@ -445,12 +445,16 @@ def render(doc: dict, hidden: tuple[str, ...] = ()) -> Any:
     return Image.fromarray(a, "RGBA")
 
 
-def png(doc: dict, k: int = 1) -> bytes:
+def png(doc: dict, k: int = 1, fast: bool = False) -> bytes:
+    """The sprite as PNG at k x (nearest neighbour). fast: no optimisation pass, for the card's instant edits."""
     im = render(doc)
     if k > 1:
         im = im.resize((im.width * k, im.height * k), Image.NEAREST)
     out = io.BytesIO()
-    im.save(out, "PNG", optimize=True)
+    if fast:
+        im.save(out, "PNG", compress_level=1)
+    else:
+        im.save(out, "PNG", optimize=True)
     return out.getvalue()
 
 

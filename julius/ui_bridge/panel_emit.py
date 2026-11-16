@@ -220,6 +220,10 @@ MORE_RE = re.compile(
     r"(?:\s+(?:files?|items?|results?|rows?))?[\s.!?]*$",
     re.I,
 )
+SAVE_AS_RE = re.compile(
+    r"^\W*(?:please\s+|can you\s+|could you\s+)?save\s+(?:it|this|that|the\s+sprite|this\s+sprite|my\s+sprite|this\s+card|the\s+card)\s+(?:as|under(?:\s+the\s+name)?|called|named)\s+[\"']?(.{1,60}?)[\"']?[\s.!?]*$",
+    re.I,
+)
 SAVE_WHAT_RE = re.compile(
     r"^\W*(?:please\s+|can you\s+|could you\s+)?save\s+(?:that|the|my|this|those|a)?\s*(?:last\s+|latest\s+|earlier\s+|previous\s+)?"
     r"(sprite|pixel\s*art|pencil(?:\s+sketch)?|comic|water\s*colou?r|pop\s*art|cartoon|cel[- ]?shad\w*|selfie|photo|picture|chart|graph|research|look)s?"
@@ -515,8 +519,24 @@ def _write_sprite(folder: Path, one: bytes) -> None:
             (folder / f"sprite-{k}x.png").write_bytes(out.getvalue())
 
 
+SPRITE_NAME_BAD = re.compile(r"[^A-Za-z0-9 _().'-]+")
+
+
+def sprite_folder_name(name: str | None, now: float) -> str:
+    """ "Sprite 2026-11-16 13-58" by default; a name he gave ("save it as Sunday Roy") cleaned to letters, digits, spaces and a few marks."""
+    if name:
+        clean = re.sub(r"\s+", " ", SPRITE_NAME_BAD.sub(" ", name)).strip(" .")[:60]
+        if clean:
+            return clean
+    return "Sprite " + time.strftime("%Y-%m-%d %H-%M", time.localtime(now))
+
+
 def save_art_card(
-    card: dict, files: Any, cfg_value: str | None, now: Callable[[], float] = time.time
+    card: dict,
+    files: Any,
+    cfg_value: str | None,
+    now: Callable[[], float] = time.time,
+    name: str | None = None,
 ) -> str:
     """Pixel art reaches disk only here: the export PNG (at the zoom that was asked for), the 1x PNG, and a short note, in their own folder."""
     export = files.bytes_of(card.get("export", "")) if files is not None else None
@@ -527,12 +547,15 @@ def save_art_card(
         base = saved_dir(cfg_value)
         base.mkdir(parents=True, exist_ok=True)
         stamp = time.strftime("%Y-%m-%d %H%M", time.localtime(now()))
-        name = f"{stamp} {_slug(card.get('title', 'pixel art'))}"
-        folder = base / name
+        if card.get("kind") == "sprite":
+            fname = sprite_folder_name(name, now())
+        else:
+            fname = f"{stamp} {_slug(card.get('title', 'pixel art'))}"
+        folder = base / fname
         k = 1
         while folder.exists():  # never overwrite an earlier save
             k += 1
-            folder = base / f"{name} ({k})"
+            folder = base / f"{fname} ({k})"
         folder.mkdir()
         if card.get("kind") == "filter":
             (folder / "restyled.png").write_bytes(export[0])
@@ -550,7 +573,9 @@ def save_art_card(
             if (
                 doc is not None
             ):  # the layers, parameters and pixel edits, to reopen and keep editing
-                (folder / "sprite.julius-sprite").write_text(
+                if name:
+                    doc["name"] = folder.name
+                (folder / f"{folder.name}.julius-sprite").write_text(
                     sprite_doc.dumps(doc), encoding="utf-8"
                 )
         else:
@@ -564,7 +589,7 @@ def save_art_card(
             f"{lines}\n\n**Palette:** {pal}\n\n"
             + (
                 "`sprite-1x.png` is one pixel per sprite pixel, transparent background; `sprite-4x.png` and `sprite-8x.png` are nearest-neighbour zooms of it; "
-                "`sprite.julius-sprite` holds the layers, parameters and pixel edits (say open my sprite and its name, or drop it on the orb, to keep editing). "
+                "the `.julius-sprite` file holds the layers, parameters and pixel edits (say open my sprite and its name, or drop it on the orb, to keep editing). "
                 if card.get("kind") == "sprite"
                 else "`pixel-art.png` is the export (nearest-neighbour zoom, so every pixel is a crisp square); `pixel-art-1x.png` is the same art at one pixel per art pixel. "
             )
@@ -672,6 +697,14 @@ def handle(
         return open_source(panel, n, m.group(2), opener)
     if SAVE_RE.match(t):
         return save_card(panel, files, saved_cfg)
+    m = SAVE_AS_RE.match(t)
+    if m:  # "save it as Sunday Roy": the newest sprite card, in a folder with that name
+        card = card_by_words(panel, "sprite")
+        if card is None:
+            return (
+                "Naming a save works for sprites. I don't have a sprite from this session to save."
+            )
+        return save_art_card(card, files, saved_cfg, name=m.group(1))
     m = SAVE_WHAT_RE.match(t)
     if m:
         card = card_by_words(panel, m.group(1))

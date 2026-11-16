@@ -49,6 +49,10 @@ def parse(text: str) -> dict | None:
     return {"source": "dropped", "words": t}
 
 
+OPEN_SPRITE = re.compile(
+    r"^\W*(?:please\s+|can you\s+|could you\s+)?(?:re)?open\s+(?:up\s+)?(?:my\s+|the\s+)?(?:(?:saved|last|latest|newest)\s+)?(?:sprite\b\s*(?:called\s+|named\s+)?)?(.{0,60}?)[\s.!?]*$",
+    re.I,
+)
 SPRITE_BUTTON = re.compile(r"^\s*sprite\s*#([0-9a-f]{4,16})\s*:\s*(.{1,120})$", re.I)
 
 
@@ -59,6 +63,15 @@ def handle(text: str) -> str | None:
         from julius.art import tool
 
         return tool.sprite_edit(m.group(2), m.group(1).lower())
+    m = OPEN_SPRITE.match(text or "")
+    if m and (
+        re.search(r"\bsprite\b", text, re.I) or (m.group(1).strip() and _sprite_named(m.group(1)))
+    ):
+        from julius.art import (
+            tool,
+        )  # "open my sprite", "open Sunday Roy" (a saved sprite's name): deterministic, no model call
+
+        return tool.sprite_edit("open " + m.group(1))
     req = parse(text)
     if req is None:
         return None
@@ -70,3 +83,11 @@ def handle(text: str) -> str | None:
     from julius.art import tool
 
     return tool.pixel_art(req["source"], **tool.parse_options(req["words"]))
+
+
+def _sprite_named(name: str) -> bool:
+    """True when a saved sprite has exactly this name ("open Sunday Roy"); anything else is not a sprite request."""
+    from julius.art import tool
+
+    words = tool._words(name)
+    return bool(words) and any(r[0].lower() == " ".join(words) for r in tool.saved_sprites())

@@ -678,7 +678,7 @@ def _refresh_card(doc: dict) -> bool:
     if pid and panel.update_art(pid, fields):
         return True
     card = {
-        "title": f"Sprite: {doc.get('label') or 'reopened'}",
+        "title": f"Sprite: {doc.get('name') or doc.get('label') or 'reopened'}",
         "kind": "sprite",
         "before": _BEFORE.get(doc["id"]) or fields["small"],
         "compare": "",
@@ -692,36 +692,93 @@ def _refresh_card(doc: dict) -> bool:
     return pid is not None
 
 
-def _open_sprite_file(name: str) -> dict:
-    """A .julius-sprite file: the one dropped on the orb, else the newest one in the saved-cards folder whose name has the words."""
+def saved_sprites() -> list[tuple[str, float, Path]]:
+    """Every saved .julius-sprite in the saved-cards folder as (name, saved time, path), newest first. The name is its folder's name."""
     from julius import config
     from julius.ui_bridge import panel_emit
 
-    pending = source._drop_source() if source._drop_source else None
-    for item in (pending or {}).get("items", []):
-        if item.get("kind") == "file" and str(item.get("path", "")).endswith(".julius-sprite"):
-            return sprite_doc.loads(Path(item["path"]).read_text(encoding="utf-8"))
     try:
         base = panel_emit.saved_dir((config.load_config().get("ui") or {}).get("saved_dir"))
     except Exception:
         base = Path.home() / "Julius Saved"
-    words = [
-        w
-        for w in re.findall(r"[a-z0-9]+", (name or "").lower())
-        if w not in ("my", "the", "sprite", "file", "open", "reopen", "a", "dropped", "this")
+    if not base.exists():
+        return []
+    out = []
+    for p in base.glob("**/*.julius-sprite"):
+        try:
+            out.append((p.parent.name, p.stat().st_mtime, p))
+        except OSError:
+            continue
+    return sorted(out, key=lambda r: r[1], reverse=True)
+
+
+_NAME_SKIP = {
+    "my",
+    "the",
+    "sprite",
+    "sprites",
+    "file",
+    "open",
+    "reopen",
+    "a",
+    "dropped",
+    "this",
+    "saved",
+    "called",
+    "named",
+    "last",
+    "latest",
+    "newest",
+    "most",
+    "recent",
+}
+
+
+def _words(text: str) -> list[str]:
+    return [w for w in re.findall(r"[a-z0-9]+", (text or "").lower()) if w not in _NAME_SKIP]
+
+
+def matching_sprites(name: str) -> list[tuple[str, float, Path]]:
+    """Saved sprites whose name has all the words (an exact name first)."""
+    words = _words(name)
+    rows = saved_sprites()
+    if not words:
+        return rows
+    exact = [r for r in rows if r[0].lower() == " ".join(words)]
+    return exact or [r for r in rows if all(w in r[0].lower() for w in words)]
+
+
+def _when(t: float) -> str:
+    import time as _time
+
+    return _time.strftime("%b %d, %H:%M", _time.localtime(t)).replace(" 0", " ")
+
+
+def _open_sprite_file(name: str) -> tuple[dict, str]:
+    """(the document, a line about other recent ones): the .julius-sprite dropped on the orb, else the newest saved one whose name has the words."""
+    pending = source._drop_source() if source._drop_source else None
+    for item in (pending or {}).get("items", []):
+        if item.get("kind") == "file" and str(item.get("path", "")).endswith(".julius-sprite"):
+            return sprite_doc.loads(Path(item["path"]).read_text(encoding="utf-8")), ""
+    hits = matching_sprites(name)
+    if not hits:
+        raise sprite_doc.DocProblem(
+            "I couldn't find a saved sprite by that name. Drop the .julius-sprite file on the orb, or say open my sprite for the newest one."
+        )
+    chosen = hits[0]
+    doc = sprite_doc.loads(chosen[2].read_text(encoding="utf-8"))
+    doc["name"] = chosen[0]
+    others = [r for r in (saved_sprites() if not _words(name) else hits)[1:4] if r[2] != chosen[2]][
+        :3
     ]
-    hits = (
-        sorted(base.glob("**/*.julius-sprite"), key=lambda p: p.stat().st_mtime, reverse=True)
-        if base.exists()
-        else []
-    )
-    for p in hits:
-        hay = str(p.relative_to(base)).lower()
-        if all(w in hay for w in words):
-            return sprite_doc.loads(p.read_text(encoding="utf-8"))
-    raise sprite_doc.DocProblem(
-        "I couldn't find that sprite file. Drop the .julius-sprite file on the orb, or say its name."
-    )
+    extra = ""
+    if others:
+        extra = (
+            " Other recent ones: "
+            + "; ".join(f"{n} ({_when(t)})" for n, t, _ in others)
+            + ". Say open and the name for one of those."
+        )
+    return doc, extra
 
 
 _OPEN = re.compile(r"^\s*(?:re)?open\b|\bload\b", re.I)
@@ -734,12 +791,16 @@ def sprite_edit(change: str = "", sprite_id: str = "") -> str:
     st = sprite_doc.STUDIO
     try:
         if _OPEN.search(text):
-            doc = _open_sprite_file(_OPEN.sub("", text))
+            doc, extra = _open_sprite_file(_OPEN.sub("", text))
             st.add(doc)
             shown = _refresh_card(doc)
+            title = doc.get("name") or (
+                ("the sprite of " + doc["label"]) if doc.get("label") else "the sprite"
+            )
             return (
-                f"Reopened the sprite{(' of ' + doc['label']) if doc.get('label') else ''}: {doc['head']} pixel head, {doc['palette']} palette. "
+                f"Opened {title}: {doc['head']} pixel head, {doc['palette']} palette. "
                 + ("It's in the panel; say what to change." if shown else "Say what to change.")
+                + extra
             )
         doc = st.get(sprite_id)
         if doc is None:
@@ -800,3 +861,81 @@ def sprite_pixels(edits: Any, sprite_id: str = "") -> tuple[bool, str]:
     _refresh_card(doc)
     log.event("sprite_pixels", layers=len(clean), cells=sum(len(v) for v in clean.values()))
     return True, "saved"
+
+
+# ---- instant card edits (the card's buttons): no turn, no transcript, no speech, no model -------------------
+CARD_OPS = {
+    "smaller beard",
+    "bigger beard",
+    "shorter hair",
+    "taller hair",
+    "close-set eyes",
+    "wider eyes",
+    "glasses",
+    "undo",
+    "redo",
+}
+MAX_OPS = 20
+
+
+def sprite_ops(sprite_id: str, ops: list) -> dict:
+    """Apply the card's button presses (several when clicks came faster than the render: the latest state wins), render once, update the card in
+    place, and hand the new picture straight back to the card. Returns {"ok", "after", "settings", "palette", "undo", "redo", "ms"} or {"ok": False, "error"}."""
+    import time as _time
+
+    t0 = _time.perf_counter()
+    st = sprite_doc.STUDIO
+    doc = st.get(sprite_id)
+    if doc is None or (sprite_id and sprite_id != doc["id"]):
+        return {"ok": False, "error": "That sprite is no longer open."}
+    if (
+        not isinstance(ops, list)
+        or not ops
+        or len(ops) > MAX_OPS
+        or not all(o in CARD_OPS for o in ops)
+    ):
+        return {"ok": False, "error": "unknown edit"}
+    changed = False
+    for op in ops:
+        if op in ("undo", "redo"):
+            changed |= st.step(doc, op == "undo")
+            continue
+        before = sprite_doc.dumps(doc["params"])
+        st.checkpoint(doc)
+        if op == "glasses":  # a toggle on the card
+            doc["params"]["glasses"] = "none" if doc["params"]["glasses"] != "none" else "square"
+        else:
+            sprite_doc.apply_words(doc, op)
+        if sprite_doc.dumps(doc["params"]) == before:  # at a limit: no undo step for nothing
+            st.step(doc, True)
+            st.redo[doc["id"]] = []
+        else:
+            changed = True
+    from julius.ui_bridge import charts
+
+    out: dict = {
+        "ok": True,
+        "changed": changed,
+        "undo": len(st.undo.get(doc["id"], [])),
+        "redo": len(st.redo.get(doc["id"], [])),
+    }
+    if charts._panel is not None and charts._panel[1] is not None:
+        panel, files, _turn = charts._panel
+        k = max(1, min(SPRITE_SHOW, 256 // doc["canvas"]))
+        shown = files.put_memory(sprite_doc.png(doc, k, fast=True), "png")
+        fields = {
+            "after": shown,
+            "export": shown,  # the save writes 1x, 4x and 8x from "small"
+            "small": files.put_memory(sprite_doc.png(doc, 1, fast=True), "png"),
+            "settings": _edit_settings(doc),
+            "palette": sprite_doc.used_colors(doc),
+            "summary": f"{doc['head']}×{doc['head']} head, being edited (palette locked)",
+            "editing": True,
+        }
+        pid = st.cards.get(doc["id"])
+        if pid:
+            panel.update_art(pid, fields)
+        out.update({k: fields[k] for k in ("after", "settings", "palette")})
+    out["ms"] = round((_time.perf_counter() - t0) * 1000, 1)
+    log.event("sprite_card_ops", ops=len(ops), ms=out["ms"])
+    return out

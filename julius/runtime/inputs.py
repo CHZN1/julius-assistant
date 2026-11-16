@@ -89,6 +89,13 @@ def ui_sprite_post(edits: Any, sprite_id: str) -> tuple[bool, str]:
     return tool.sprite_pixels(edits, sprite_id)
 
 
+def ui_sprite_ops(sprite_id: str, ops: Any) -> dict:
+    """The sprite card's buttons: applied and rendered straight away, never a turn (no transcript, no speech, no model)."""
+    from julius.art import tool
+
+    return tool.sprite_ops(sprite_id, ops)
+
+
 def ui_camera(s: Session, event: str) -> dict:
     """What happened to the orb's camera window: closed (a pending follow-up is dropped) or denied (the camera buttons say why)."""
     from julius.art import camera
@@ -120,6 +127,7 @@ def start_ui_channel(s: Session) -> None:
             "camera": lambda event: ui_camera(s, event),
             "sprite_get": ui_sprite_get,
             "sprite_post": ui_sprite_post,
+            "sprite_ops": ui_sprite_ops,
         }
         s.ui_channel = uichannel.start_from_config(config.load_config().get("ui"), handlers)
     except Exception as exc:

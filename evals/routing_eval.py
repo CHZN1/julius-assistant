@@ -115,6 +115,14 @@ def shortcut(text, sb, ctx, turn, case_history=None):
             "ok": True,
             "detail": "camera",
         }
+    if art_commands.OPEN_SPRITE.match(text) and re.search(r"\bsprite\b", text, re.I):
+        return {  # "open my sprite": handled before the brain
+            "path": "shortcut",
+            "tool": "sprite_edit",
+            "args": "",
+            "ok": True,
+            "detail": "open sprite",
+        }
     if art_commands.SPRITE_BUTTON.match(
         text
     ):  # a sprite card's edit button: handled before the brain
@@ -350,6 +358,16 @@ def judge(case, got):
         success_ok = success_ok and e["detail_contains"].lower() in detail
     if e.get("no_denial") and got["path"] == "direct" and DENIAL.search(detail):
         success_ok = False  # a capability Julius has must never be declined
+    from julius.runtime.text import is_narration
+
+    said = str(got.get("final") or "")
+    if not said and got["path"] in ("direct", "tool"):
+        said = str(got.get("detail") or "")
+    said = said.split(" | ")[
+        -1
+    ]  # "get_quote -> render_chart | <answer>": only the answer is ever spoken
+    if any(is_narration(x) for x in re.split(r"(?<=[.!?])\s+", said) if x):
+        success_ok = False  # every case: a spoken reply never narrates a tool call ("I'll call the sprite tool now")
     return path_ok, tool_ok, args_ok, success_ok
 
 

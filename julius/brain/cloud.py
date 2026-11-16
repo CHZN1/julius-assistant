@@ -46,6 +46,7 @@ PLANNING_PROMPT = (
     "several independent lookups that only need reading out, e.g. 'the weather in A and the time in B': call every tool for those in the "
     "same reply and answer in one go. The planner can only propose file changes; nothing happens until the user says yes, so never "
     "say a change was made. Pass the full task. Its result is your answer: say it in your own voice, briefly."
+    " Never describe your tool calls or what you are about to do internally ('I'll call the sprite tool now'): just call the tool and then answer."
     "\n\nTIE-BREAKS\n- Asked to summarize, brief or prioritise across several different topics ('summarize what I should look at: the NHL schedule, the injury report and a price chart'), "
     "that is a briefing: escalate_to_planner, even though each item is a lookup. Independent lookups he wants read out as asked (weather in A, time in B) are called together instead.\n"
     "- 'Forget X' or 'forget what you know about X' is forget_fact(topic=X) right away; list_memories is only for 'what do you remember', never a step before forgetting.\n"

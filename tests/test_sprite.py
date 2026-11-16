@@ -354,9 +354,18 @@ class ToolTests(unittest.TestCase):
         saved = self.root / "Julius Saved"
         self.assertIn("Saved to", pe.save_card(self.panel, self.files, str(saved)))
         (folder,) = list(saved.iterdir())
+        self.assertRegex(folder.name, r"^Sprite \d{4}-\d\d-\d\d \d\d-\d\d$")  # short and readable
         self.assertEqual(
             sorted(p.name for p in folder.iterdir()),
-            ["card.md", "sprite-1x.png", "sprite-4x.png", "sprite-8x.png", "sprite.julius-sprite"],
+            sorted(
+                [
+                    "card.md",
+                    "sprite-1x.png",
+                    "sprite-4x.png",
+                    "sprite-8x.png",
+                    f"{folder.name}.julius-sprite",
+                ]
+            ),
         )
         one, four, eight = (Image.open(folder / f"sprite-{n}.png") for n in ("1x", "4x", "8x"))
         self.assertEqual(

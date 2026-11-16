@@ -2,7 +2,7 @@
 
 import unittest
 
-from julius.brain.undo import UndoAgent, UndoCoordinator
+from julius.brain.undo import NOTHING, UndoAgent, UndoCoordinator
 
 
 def make():
@@ -39,7 +39,7 @@ class UndoTests(unittest.TestCase):
             "Undid your last forget. I've put it back.",
             "repeats down the stack",
         )
-        self.assertIsNone(c.handle("undo"), "nothing left")
+        self.assertEqual(c.handle("undo"), NOTHING, "nothing left from this session")
 
     def test_memory_after_files(self):
         s, c = make()
@@ -57,16 +57,51 @@ class UndoTests(unittest.TestCase):
         c.observe(2)
         self.assertTrue(c.handle("undo").startswith("Undid the coding merge"))
 
-    def test_old_state_falls_back_to_fixed_order(self):
+    def test_a_bare_undo_never_reaches_back_before_this_session(self):
+        """The live bug: after sprite edits, "Undo." undid a month-old file move. Old actions need the agent named."""
         s = {"files": 1, "memory": 1, "code": 0}
+        ran = []
 
         def mk(n, line):
-            return UndoAgent(line, lambda: s[n], lambda: s[n] > 0, lambda: "ok")
+            return UndoAgent(line, lambda: s[n], lambda: s[n] > 0, lambda: ran.append(n) or "ok")
 
         c = UndoCoordinator(
-            {"memory": mk("memory", "m"), "files": mk("files", "f"), "code": mk("code", "c")}
+            {
+                "memory": mk("memory", "m"),
+                "files": mk("files", "the last file change"),
+                "code": mk("code", "c"),
+            }
         )
-        self.assertTrue(c.handle("undo").startswith("Undid f"))
+        self.assertEqual(c.handle("undo"), NOTHING)
+        self.assertEqual(ran, [])
+        self.assertEqual(c.handle("undo the file change"), "Undid the last file change. ok")
+        self.assertEqual(ran, ["files"])
+
+    def test_after_sprite_edits_undo_is_the_sprite_and_files_stay_put(self):
+        s = {"files": 1, "sprite": 0}  # a file batch from before this run, then sprite edits now
+        ran = []
+
+        def mk(n, line):
+            return UndoAgent(
+                line,
+                lambda: s[n],
+                lambda: s[n] > 0,
+                lambda: (ran.append(n), s.__setitem__(n, s[n] - 1), "ok")[2],
+            )
+
+        c = UndoCoordinator(
+            {
+                "files": mk("files", "the last file change"),
+                "sprite": mk("sprite", "the last sprite edit"),
+            }
+        )
+        s["sprite"] = 2
+        c.observe(5)
+        self.assertEqual(c.handle("Undo."), "Undid the last sprite edit. ok")
+        self.assertEqual(c.handle("undo"), "Undid the last sprite edit. ok")
+        self.assertEqual(c.handle("undo"), NOTHING)
+        self.assertEqual(ran, ["sprite", "sprite"])  # never the file move
+        self.assertEqual(c.handle("undo the sprite edit"), "There's no sprite edit to undo.")
 
     def test_other_phrases_are_not_bare_undo(self):
         s, c = make()
@@ -81,12 +116,15 @@ class UndoTests(unittest.TestCase):
             self.assertIsNone(c.handle(t), t)
 
     def test_declining_agent_is_skipped(self):
+        mark = {"v": 0}
         c = UndoCoordinator(
             {
-                "files": UndoAgent("f", lambda: 1, lambda: True, lambda: None),
-                "memory": UndoAgent("m", lambda: 1, lambda: True, lambda: "done"),
+                "files": UndoAgent("f", lambda: mark["v"], lambda: True, lambda: None),
+                "memory": UndoAgent("m", lambda: mark["v"], lambda: True, lambda: "done"),
             }
         )
+        mark["v"] = 1
+        c.observe(1)
         self.assertEqual(c.handle("undo"), "Undid m. done")
 
     def test_candidate_wires_coordinator(self):

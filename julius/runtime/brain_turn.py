@@ -24,12 +24,13 @@ from julius.runtime.speech import print_tool
 from julius.runtime.text import (
     BAD_ID,
     CURRENT_TIME_QUERY,
-    META_LEAK,
     SCHEDULE_QUERY,
     STALL,
     TOOL_HINT,
+    is_narration,
     repair_history,
     schedule_league,
+    strip_narration,
 )
 
 LONG_RESULT_NOTE = (
@@ -204,8 +205,8 @@ class BrainTurn:
             if not match:
                 return
             sent, st.pending = st.pending[: match.end()].strip(), st.pending[match.end() :]
-            if META_LEAK.search(sent):
-                sent = ""  # the model narrating its own instructions is never spoken
+            if is_narration(sent):
+                sent = ""  # the model narrating its instructions or its tool calls is never spoken
             if sent and livedata.blocked(sent, self.live_query, self.grounded(messages)):
                 sent = ""
                 self.dropped_ungrounded.append(1)  # a changing figure with no tool result behind it
@@ -223,6 +224,9 @@ class BrainTurn:
     ) -> str:
         """Speak what is left, and say so once if figures were withheld and no tool was called."""
         rest = st.pending.strip()
+        if rest and is_narration(rest):
+            rest = ""
+        st.full = strip_narration(st.full) if st.full else st.full  # the shown answer too
         if rest and livedata.blocked(rest, self.live_query, self.grounded(messages)):
             st.pending = rest = ""
             self.dropped_ungrounded.append(1)
