@@ -21,6 +21,7 @@ from julius.art import pixel
 
 HEADS = (16, 24, 32)
 DEFAULT_HEAD = 16
+GAMEBOY_HEAD = 24  # four shades at 16 px could not hold brows, eyes, mouth and a beard apart: the Game Boy default is 24
 DEFAULT_PALETTE = "gameboy"
 SS = 8  # the head is built at 8x the sprite resolution, then reduced
 
@@ -31,7 +32,9 @@ class SpriteProblem(Exception):
 
 @dataclass
 class Options:
-    head: int = DEFAULT_HEAD  # head size in pixels (the canvas is twice as big)
+    head: int = (
+        0  # head size in pixels (the canvas is twice as big); 0 = the default for the palette
+    )
     palette: str = DEFAULT_PALETTE
     chibi: bool = False  # big round head, low small features
     big_eyes: bool = False
@@ -39,12 +42,13 @@ class Options:
     beard: str = ""  # "" = measured from the photo; or full, goatee, mustache, stubble, none
 
     def clean(self) -> Options:
-        try:
-            h = int(round(float(self.head or DEFAULT_HEAD)))
-        except (TypeError, ValueError):
-            h = DEFAULT_HEAD
-        self.head = min(HEADS, key=lambda x: abs(x - h))
         self.palette = pixel.palette_name(self.palette or DEFAULT_PALETTE)
+        default = GAMEBOY_HEAD if self.palette == "gameboy" else DEFAULT_HEAD
+        try:
+            h = int(round(float(self.head or default)))
+        except (TypeError, ValueError):
+            h = default
+        self.head = min(HEADS, key=lambda x: abs(x - h))
         self.beard = beard_name(self.beard)
         return self
 
@@ -174,12 +178,22 @@ def map_colors(
     n = len(pal)
     out: dict[str, tuple[int, int, int]] = {"line": pal[0]}
     if n <= 4:
-        skin_i = max(min(n - 1, int(_lum(skin) * n)), n - 2 if n > 2 else 1)
-        out["skin"] = pal[skin_i]
-        if hair is not None:
-            out["hair"] = pal[max(0, min(int(_lum(hair) * n), skin_i - 1))]
-        out["shade"] = pal[max(0, skin_i - 1)]
-        out["light"] = pal[min(n - 1, skin_i + 1)] if skin_i < n - 1 else pal[skin_i]
+        # By role, not by nearest lightness: mapping by lightness put dark hair, the beard, the brows, the eyes and the outline all on the darkest shade, so
+        # the hair lost its outline and the eyes merged into it (only 2 of the Game Boy's 4 shades were used). Four shades: outline and eyes the darkest,
+        # hair and beard the next, a free shade for stubble and the nose, skin the lightest: one shade of gap between hair and skin.
+        if n == 4:
+            out.update(hair=pal[1], shade=pal[2], skin=pal[3], light=pal[3])
+            if (
+                hair is not None and _lum(hair) >= _lum(skin) - 0.05
+            ):  # hair as light as the skin (blond, white): the free shade
+                out["hair"] = pal[2]
+                out["shade"] = pal[1]
+        elif n == 3:
+            out.update(hair=pal[1], shade=pal[1], skin=pal[2], light=pal[2])
+        else:  # two colours
+            out.update(hair=pal[0], shade=pal[0], skin=pal[-1], light=pal[-1])
+        if hair is None:
+            out.pop("hair")
         return out
     out["skin"] = _skin_shade(skin, pal)
     if hair is not None:

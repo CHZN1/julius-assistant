@@ -80,6 +80,7 @@ class BuildTests(unittest.TestCase):
         self.img, self.face, self.mask = synthetic()
 
     def build(self, **kw):
+        kw.setdefault("head", 16)
         return sprite.build(self.img, self.face, self.mask, sprite.Options(**kw))
 
     def test_a_16_pixel_head_sits_on_a_32_canvas_with_a_transparent_background_and_a_one_pixel_outline(
@@ -134,7 +135,7 @@ class BuildTests(unittest.TestCase):
             self.assertLessEqual(max(ys.max() - ys.min(), xs.max() - xs.min()) + 1, head)
         self.assertEqual(sprite.Options(head=20).clean().head, 16)
         self.assertEqual(sprite.Options(head=999).clean().head, 32)
-        self.assertEqual(sprite.Options(head="x").clean().head, 16)
+        self.assertEqual(sprite.Options(head="x").clean().head, 24)  # gameboy default
 
     def test_big_eyes_are_bigger_than_the_one_or_two_pixel_marks(self):
         img, face, mask = synthetic(
@@ -168,7 +169,7 @@ class BuildTests(unittest.TestCase):
         self.assertNotIn("hair", sp.colors)
 
     def test_no_mask_still_builds_from_the_landmarks(self):
-        sp = sprite.build(self.img, self.face, None, sprite.Options())
+        sp = sprite.build(self.img, self.face, None, sprite.Options(head=16))
         self.assertEqual(sp.image.size, (32, 32))
 
     def test_too_few_landmarks_is_a_sentence_not_a_crash(self):
@@ -184,6 +185,38 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(four.getpixel((5, 5)), sp.image.getpixel((1, 1)))
 
 
+class GameboyShadeTests(unittest.TestCase):
+    def test_four_shades_are_assigned_by_role_with_a_gap_between_hair_and_skin(self):
+        gb = [pixel._rgb(c) for c in pixel.PALETTES["gameboy"]]  # darkest first
+        cols = sprite.map_colors(
+            (124, 84, 67), (54, 51, 45), "gameboy"
+        )  # the real selfie: dark brown skin, black hair
+        self.assertEqual((cols["line"], cols["hair"], cols["skin"]), (gb[0], gb[1], gb[3]))
+        self.assertNotEqual(cols["hair"], cols["line"])  # the hair keeps its outline
+        self.assertEqual(cols["shade"], gb[2])  # the free shade: stubble and the nose
+
+    def test_all_four_game_boy_shades_appear_on_a_bearded_head(self):
+        img, face, mask = synthetic(beard="full")
+        sp = sprite.build(img, face, mask, sprite.Options(nose=True))
+        used = {
+            sprite._hex(tuple(int(v) for v in p[:3]))
+            for p in np.asarray(sp.image).reshape(-1, 4)
+            if p[3]
+        }
+        self.assertGreaterEqual(len(used), 3, used)
+        self.assertIn("306230", used)  # hair and beard on their own shade
+
+    def test_light_hair_takes_the_free_shade(self):
+        gb = [pixel._rgb(c) for c in pixel.PALETTES["gameboy"]]
+        cols = sprite.map_colors((200, 160, 130), (230, 210, 150), "gameboy")
+        self.assertEqual(cols["hair"], gb[2])
+
+    def test_other_palettes_keep_their_default_16(self):
+        self.assertEqual(sprite.Options(palette="pico8").clean().head, 16)
+        self.assertEqual(sprite.Options().clean().head, 24)
+        self.assertEqual(sprite.Options(head=16).clean().head, 16)
+
+
 class FacialHairTests(unittest.TestCase):
     def test_it_measures_full_beard_goatee_mustache_and_none(self):
         for kind in ("full", "goatee", "mustache", None):
@@ -194,8 +227,8 @@ class FacialHairTests(unittest.TestCase):
 
     def test_a_beard_is_drawn_as_a_hair_coloured_mass_below_the_nose(self):
         img, face, mask = synthetic(beard="full")
-        a = np.asarray(sprite.build(img, face, mask, sprite.Options()).image)
-        b = np.asarray(sprite.build(img, face, mask, sprite.Options(beard="none")).image)
+        a = np.asarray(sprite.build(img, face, mask, sprite.Options(head=16)).image)
+        b = np.asarray(sprite.build(img, face, mask, sprite.Options(head=16, beard="none")).image)
         hair = sprite.map_colors(SKIN, HAIR_RGB, "gameboy")["hair"]
         low = slice(18, 25)  # the lower face rows of the 16 px head (canvas offset 8)
         count = lambda arr: int((arr[low][..., :3] == hair).all(axis=2).sum())  # noqa: E731
@@ -232,7 +265,7 @@ class FacialHairTests(unittest.TestCase):
 
     def test_the_chibi_face_is_one_clean_window_with_the_eyes_clear_of_the_hair(self):
         img, face, mask = synthetic(beard="full")
-        h = sprite._Head(img, face, mask, sprite.Options(chibi=True).clean())
+        h = sprite._Head(img, face, mask, sprite.Options(head=16, chibi=True).clean())
         h.cells()
         h.features(sprite.map_colors(h.skin_rgb, h.hair_rgb, "gameboy"))
         g = h.grid
@@ -283,14 +316,27 @@ class ToolTests(unittest.TestCase):
         with cfg:
             return art_tool.image_style("me", style="sprite", **kw)
 
-    def test_the_card_has_photo_sprite_and_pixel_art_filter_side_by_side(self):
-        said = self.run_tool()
+    def test_the_card_shows_the_photo_and_the_sprite_only(self):
+        said = self.run_tool(palette="pico8")
         card = self.sent[-1]
         self.assertEqual(pn.validate(card), [])
         self.assertEqual((card["type"], card["kind"]), ("panel.art", "sprite"))
-        for k in ("before", "after", "compare", "export", "small"):
+        for k in ("before", "after", "export", "small"):
             self.assertTrue(card[k].endswith(".png"), k)
+        self.assertEqual(card["compare"], "")  # no pixel-art filter unless asked
         self.assertIn("16 by 16 pixel head", said)
+        self.assertIn("The photo and the sprite", said)
+
+    def test_compare_with_pixel_art_adds_the_filter_beside_it(self):
+        said = self.run_tool(compare=True)
+        card = self.sent[-1]
+        self.assertTrue(card["compare"].endswith(".png"))
+        self.assertIn("plain pixel-art version", said)
+
+    def test_the_gameboy_default_is_a_24_pixel_head(self):
+        said = self.run_tool()
+        self.assertIn("24 by 24 pixel head", said)
+        self.assertIn("Head: 24 px on a 48 px canvas", self.sent[-1]["settings"])
         self.assertIn("not generated", said)
         self.assertEqual(
             [p for p in (self.root / "p").iterdir() if p.is_file()], []

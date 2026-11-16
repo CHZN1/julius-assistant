@@ -235,3 +235,4 @@
 {"id": "r236", "cat": "art", "text": "Make this a pixel art portrait.", "expect": {"path": "shortcut", "tool": "pixel_art"}}
 {"id": "r237", "cat": "art", "text": "Make me a sprite with a goatee.", "expect": {"path": "tool", "tool": "image_style", "args_contain": ["sprite", "goatee"]}, "fragile": true}
 {"id": "r238", "cat": "art", "text": "Make a game sprite of me, clean shaven, no beard.", "expect": {"path": "tool", "tool": "image_style", "args_contain": ["sprite", "none"]}, "fragile": true}
+{"id": "r239", "cat": "art", "text": "Make me a sprite and compare it with pixel art.", "expect": {"path": "tool", "tool": "image_style", "args_contain": ["sprite", "compare"]}, "fragile": true}

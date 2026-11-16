@@ -503,6 +503,7 @@ def sprite_style(
     big_eyes: bool = False,
     nose: bool = False,
     beard: str = "",
+    compare: bool = False,
 ) -> str:
     """A game sprite of the face in the user's picture: measured with Apple Vision on this Mac, built cell by cell (no generative model), shown next to the
     photo and next to the plain pixel-art filter, and held in the side panel until "save this card"."""
@@ -511,18 +512,18 @@ def sprite_style(
         face, mask = faces.landmarks(img)
         if face is None:
             return "I couldn't find a face to build a sprite from. A clear, front-facing photo works best."
-        opts = sprite.Options(
-            head or sprite.DEFAULT_HEAD, palette, chibi, big_eyes, nose, beard
-        ).clean()
+        opts = sprite.Options(head or 0, palette, chibi, big_eyes, nose, beard).clean()
         sp = sprite.build(img, face, mask, opts)
         crop, _found, focus = faces.portrait_crop(img)
-        res = pixel.render(
-            crop,
-            pixel.Settings(PORTRAIT_SIZE, 16, opts.palette, False, False, 4, False, True),
-            focus,
-        )
-        k = max(1, 256 // max(res.width, res.height))
-        compared = res.png(k)[0]
+        res, compared = None, b""
+        if compare:  # the plain pixel-art filter beside the sprite, only when asked ("compare with pixel art")
+            res = pixel.render(
+                crop,
+                pixel.Settings(PORTRAIT_SIZE, 16, opts.palette, False, False, 4, False, True),
+                focus,
+            )
+            k = max(1, 256 // max(res.width, res.height))
+            compared = res.png(k)[0]
     except (source.ArtProblem, pixel.PixelProblem, sprite.SpriteProblem) as exc:
         return str(exc)
     except Exception as exc:
@@ -531,7 +532,14 @@ def sprite_style(
     shown = False
     try:
         shown = _sprite_card(
-            sp, crop, compared, label, res, "Pixel art filter shown for comparison"
+            sp,
+            crop,
+            compared,
+            label,
+            res,
+            "Pixel art filter shown beside it for comparison"
+            if compare
+            else "Say compare with pixel art to see the photo filter beside it",
         )
     except Exception as exc:
         log.event("sprite_card_failed", error=type(exc).__name__)
@@ -543,7 +551,12 @@ def sprite_style(
         f"facial hair: {sprite.BEARD_LABELS[sp.facial_hair]}{'' if sp.facial_hair_measured else ' (as you asked)'}, "
         "built from the measurements of the face, not generated. "
         + (
-            "The photo, the sprite and the plain pixel-art version are side by side in the panel; say save this card to keep the 1x, 4x and 8x PNGs."
+            (
+                "The photo, the sprite and the plain pixel-art version are side by side in the panel; "
+                if compare
+                else "The photo and the sprite are side by side in the panel; "
+            )
+            + "say save this card to keep the 1x, 4x and 8x PNGs."
             if shown
             else "No side panel is open, so there is nothing to save yet."
         )
@@ -581,7 +594,14 @@ def image_style(
         return filter_compare((source_name or "").strip() or "dropped")
     if chosen == "sprite":
         return sprite_style(
-            (source_name or "").strip() or "dropped", head, palette, chibi, big_eyes, nose, beard
+            (source_name or "").strip() or "dropped",
+            head,
+            palette,
+            chibi,
+            big_eyes,
+            nose,
+            beard,
+            compare,
         )
     if chosen != "pixel_art":
         return filter_style((source_name or "").strip() or "dropped", chosen, colors, line, smooth)
