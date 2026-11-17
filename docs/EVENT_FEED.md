@@ -16,7 +16,7 @@ Every message has `type` and `t` (Unix seconds, float).
 | `hello` | `state`, `level`, `transcript` (the last 20 `transcript` messages) | once, on connect |
 | `state` | `state`, `prev` | every change |
 | `level` | `level` 0 to 1 | about 30 times a second while Julius speaks (his voice as it leaves the speakers: RMS x 4, clipped), then one `0`; nothing while silent |
-| `transcript` | `who` (`you` or `julius`), `text`, `turn` | a line the user said, or each sentence Julius says as he says it |
+| `transcript` | `who` (`you` or `julius`), `text`, `turn`, and for a typed message `id`, `pending`, `cancelled?` | a line the user said, or each sentence Julius says as he says it. A typed message appears at once with `pending: true`; later lines with the same `id` replace it (edited, picked up) or remove it (`cancelled: true`); `hello.transcript` holds the current state of each |
 
 States: `idle` (awake, ready), `listening` (the user is speaking), `thinking`, `speaking`, `asleep` (ordinary sleep: wakes on "Julius"), `quiet` (microphone off until the wake hotkey).
 

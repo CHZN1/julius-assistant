@@ -158,6 +158,27 @@ class BrainTurn:
         s.unknown_tool_retried = False
         content = self.user_text + (f"\n\n{notes}" if notes else "")
         self.messages = list(s.history) + [{"role": "user", "content": content}]
+        from julius.brain import session_state
+
+        last = next(
+            (
+                m.get("content")
+                for m in reversed(s.history)
+                if m.get("role") == "assistant" and isinstance(m.get("content"), str)
+            ),
+            "",
+        )
+        state = session_state.block(last or "")
+        note = session_state.reminder(last or "")
+        if note:  # the short version rides with his words: Haiku acts on it there (it ignored the block alone)
+            self.messages[-1] = {
+                **self.messages[-1],
+                "content": self.messages[-1]["content"] + "\n\n" + note,
+            }
+        if state and self.messages and self.messages[0].get("role") == "system":
+            # Julius's own record of this session (current image and sprite, what was made): with the system prompt, so it is trusted, after the
+            # cached part, so the cache still holds. Never kept in the history.
+            self.messages.insert(1, {"role": "system", "content": state})
         s.turn_messages = (self.messages, len(self.messages))  # kept in the history afterwards
         # The cloud brain gets the full tool list every turn; local models keep the keyword hints.
         self.hinted = bool(self.tool_carry or TOOL_HINT.search(self.user_text) or s.cloud)

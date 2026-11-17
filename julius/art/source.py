@@ -124,15 +124,38 @@ def check_path(path: Path) -> Path:
     return real
 
 
-# A photo taken with the camera is held here, in memory only, and works like a dropped image. It is replaced by the next photo, forgotten after an hour,
-# and passed over when a different file has been dropped since (the newer of the two is "this").
-HELD_TTL_S = 3600
+# A photo taken with the camera is held here, in memory only, and works like a dropped image. It is replaced by the next photo, kept for the session
+# (12 hours at most), and passed over when a different file has been dropped since (the newer of the two is "this").
+HELD_TTL_S = 12 * 3600
 _held: dict[str, Any] | None = None
 
 
+# The current image of the art session: the picture the last art request used (the camera photo, or a file). "This" falls back to it after a drop
+# has expired, so "make me an NES sprite" after a few edits still uses the same photo. Replaced by the next picture; cleared by forget_current().
+_current: dict[str, Any] | None = None
+
+
 def hold(jpeg: bytes, clock: Callable[[], float] = time.time) -> None:
-    global _held
+    global _held, _current
     _held = {"jpeg": jpeg, "t": clock(), "drop": _dropped()}
+    _current = {"kind": "camera", "label": CAMERA_NAME, "at": clock()}
+
+
+def current() -> dict[str, Any] | None:
+    """What the current image is (for the brain's context line and the sprite file): kind, label, time, and the path for a file. Never the pixels."""
+    return dict(_current) if _current else None
+
+
+def set_current_path(path: Path, clock: Callable[[], float] = time.time) -> None:
+    """A reopened sprite's source file becomes the current image when there is none."""
+    global _current
+    if _current is None and Path(path).is_file():
+        _current = {"kind": "file", "label": Path(path).stem, "path": str(path), "at": clock()}
+
+
+def forget_current() -> None:
+    global _current
+    _current = None
 
 
 def held(clock: Callable[[], float] = time.time) -> bytes | None:
@@ -238,13 +261,26 @@ CAMERA_NAME = "camera photo"
 
 def load(source: str) -> tuple[Any, str, str]:
     """(RGBA picture, label, file name to say): the camera photo held in memory when the user means "this", else the file `resolve` finds."""
+    global _current
     raw = (source or "").strip().strip("\"'")
     if raw.casefold() in _THIS or not raw:
         jpeg = held()
         if jpeg is not None:
             return decode(jpeg, CAMERA_NAME), CAMERA_NAME, CAMERA_NAME
+        if (
+            _dropped() is None
+            and _current
+            and _current.get("kind") == "file"
+            and Path(_current["path"]).is_file()
+        ):
+            p = Path(
+                _current["path"]
+            )  # the session's current picture: the drop has expired, the image has not changed
+            return open_image(p), p.stem, p.name
     path, _dropped_flag = resolve(source)
-    return open_image(path), path.stem, path.name
+    img = open_image(path)
+    _current = {"kind": "file", "label": path.stem, "path": str(path), "at": time.time()}
+    return img, path.stem, path.name
 
 
 def decode(raw: bytes, name: str = "image") -> Any:

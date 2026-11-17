@@ -41,9 +41,10 @@ class RecognitionOptionsTests(unittest.TestCase):
         # The configured vocabulary hint reaches Whisper as initial_prompt.
         s.asr_hint = "Julius, AcmeCorp."
         self.transcribe(s, recognizer, np.ones(4096) * 0.02)
-        self.assertEqual(
-            recognizer.transcribe.call_args.kwargs["initial_prompt"], "Julius, AcmeCorp."
-        )
+        hint = recognizer.transcribe.call_args.kwargs["initial_prompt"]
+        self.assertTrue(hint.startswith("Julius, AcmeCorp, "), hint)  # the configured words first
+        for word in ("sprite", "NES", "pico8", "Game Boy", "chibi", "palette", "goatee", "afro"):
+            self.assertIn(word, hint)  # then the art vocabulary (and saved sprite names)
 
 
 class SilentRecognitionTests(unittest.TestCase):

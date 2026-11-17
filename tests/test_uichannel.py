@@ -272,7 +272,9 @@ class ConfigAndWiring(unittest.TestCase):
 
         self.assertIn("uichannel.start_from_config", inspect.getsource(inputs))
         s = make_session()
-        self.assertEqual(inputs.ui_typed(s, "hello"), {"queued": True})
+        out = inputs.ui_typed(s, "hello")
+        self.assertTrue(out["queued"])
+        self.assertRegex(out["id"], r"^[0-9a-f]{8}$")
         self.assertIsInstance(s.typed[0], uc.TypedText)
         self.assertIn('"typed_reply") == "text"', inspect.getsource(listen))
         # With text_only set the reply is shown, never synthesized.

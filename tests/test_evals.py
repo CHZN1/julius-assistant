@@ -17,12 +17,16 @@ class EvalToolingTests(unittest.TestCase):
         self.assertGreaterEqual(len(cases), 100)
         self.assertEqual(len({c["id"] for c in cases}), len(cases))
         for c in cases:
-            self.assertIn(c["expect"]["path"], {"shortcut", "direct", "tool", "escalate"}, c["id"])
+            for alt in c["expect"].get("any_of") or [
+                c["expect"]
+            ]:  # several acceptable outcomes: each one is checked
+                self.assertIn(alt["path"], {"shortcut", "direct", "tool", "escalate"}, c["id"])
             self.assertTrue(c["text"].strip())
             for p in c["expect"].get("path_in", []):
                 self.assertIn(p, {"shortcut", "tool", "direct", "escalate"})
         self.assertEqual(
-            {c["expect"]["path"] for c in cases}, {"shortcut", "direct", "tool", "escalate"}
+            {c["expect"]["path"] for c in cases if "path" in c["expect"]},
+            {"shortcut", "direct", "tool", "escalate"},
         )
 
     def test_audio_cases_cover_the_twenty_recorded_phrases(self):

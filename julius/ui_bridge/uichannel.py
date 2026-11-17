@@ -7,6 +7,8 @@ A tiny HTTP server on 127.0.0.1 (default port 8775), JSON in, JSON out, no third
   POST /v1/camera  {"event": "opened"|"closed"|"denied"}     what happened to the orb's camera window
   GET  /v1/sprite                                   the sprite being edited, as layers for the editor window (palette, cells, edits)
   POST /v1/sprite  {"id": "...", "edits": {layer: {"x,y": palette index or -1}}}   pixel edits from the editor window, palette-locked
+  POST /v1/typed/edit    {"id": "...", "text": "..."}   change a typed message that has not been picked up yet (409 when too late)
+  POST /v1/typed/cancel  {"id": "..."}                  cancel it
   POST /v1/sprite/edit  {"id": "...", "ops": ["bigger beard", ...]}   the sprite card's buttons: applied and rendered at once, the new picture back;
                    no turn, no transcript, no speech, no model (its own rate limit, so fast clicking is fine)
   GET  /v1/ping                                     authenticated liveness check
@@ -25,6 +27,7 @@ import hmac
 import http.server
 import json
 import os
+import re
 import secrets
 import socketserver
 import threading
@@ -198,6 +201,19 @@ class Channel:
             res = self._handler("photo", "photos are not available")(data, "auto=1" in path)
             self.audit("photo", 200, bytes=len(data))
             return 200, {"ok": True, **(res or {})}
+        if method == "POST" and route in ("/v1/typed/cancel", "/v1/typed/edit"):
+            body = self._read_json(headers, body_reader)
+            tid = str(body.get("id") or "")
+            if not re.fullmatch(r"[0-9a-f]{8}", tid):
+                raise Refused(400, "bad id")
+            text = None
+            if route == "/v1/typed/edit":
+                text = validate_typed(body)
+            res = self._handler("typed_change", "typing is not available")(tid, text)
+            if not res.get("ok"):
+                raise Refused(409, str(res.get("error") or "too late"))
+            self.audit("typed_change", 200, cancel=text is None)
+            return 200, res
         if method != "POST" or path not in ("/v1/typed", "/v1/drop", "/v1/camera"):
             raise Refused(404, "no such endpoint")
         body = self._read_json(headers, body_reader)

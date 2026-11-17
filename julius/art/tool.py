@@ -203,6 +203,9 @@ def pixel_art(
         shown = _card(res, work, label, res.settings.scale, crop)
     except Exception as exc:
         log.event("pixel_art_card_failed", error=type(exc).__name__)
+    from julius.brain import session_state
+
+    session_state.record("pixel_art", f"made pixel art from {label}")
     log.event(
         "pixel_art",
         w=res.width,
@@ -439,6 +442,9 @@ def filter_style(
         shown = _filter_card(res, img, label, s)
     except Exception as exc:
         log.event("filter_card_failed", error=type(exc).__name__)
+    from julius.brain import session_state
+
+    session_state.record("filter", f"made a {filters.LABELS[s.style].lower()} of {label}")
     log.event("image_filter", style=s.style, w=res.width, h=res.height)
     return (
         f"{filters.LABELS[s.style]} version of {fname}: {res.width} by {res.height} pixels"
@@ -526,6 +532,11 @@ def sprite_style(
         sp = sprite.build(img, face, mask, opts)
         if sp.doc:
             sp.doc["label"] = label
+            sp.doc["source"] = {
+                k: v
+                for k, v in (source.current() or {}).items()
+                if k in ("kind", "label", "path", "at")
+            }
         crop, _found, focus = faces.portrait_crop(img)
         res, compared = None, b""
         if compare:  # the plain pixel-art filter beside the sprite, only when asked ("compare with pixel art")
@@ -558,6 +569,12 @@ def sprite_style(
     if not shown and sp.doc:  # no panel: still editable by voice
         sprite_doc.STUDIO.add(sp.doc)
     o = sp.options
+    from julius.brain import session_state
+
+    session_state.record(
+        "sprite",
+        f"made a sprite ({o.palette}, {o.head} px{', chibi' if o.chibi else ''}) from {label}",
+    )
     log.event("sprite", head=o.head, palette=o.palette, chibi=o.chibi, big_eyes=o.big_eyes)
     return (
         f"Sprite of {fname}: a {o.head} by {o.head} pixel head on a {sp.canvas} by {sp.canvas} canvas, {o.palette} palette, "
@@ -793,6 +810,14 @@ def sprite_edit(change: str = "", sprite_id: str = "") -> str:
         if _OPEN.search(text):
             doc, extra = _open_sprite_file(_OPEN.sub("", text))
             st.add(doc)
+            src = doc.get("source") or {}
+            if src.get(
+                "path"
+            ):  # a sprite made from a file: that file is the session's image again (a camera photo stays as it is)
+                source.set_current_path(Path(src["path"]))
+            from julius.brain import session_state
+
+            session_state.record("open", f"opened the saved sprite {doc.get('name') or 'sprite'}")
             shown = _refresh_card(doc)
             title = doc.get("name") or (
                 ("the sprite of " + doc["label"]) if doc.get("label") else "the sprite"
@@ -808,6 +833,12 @@ def sprite_edit(change: str = "", sprite_id: str = "") -> str:
                 return "That is an older sprite card; I'm editing the newest one. Make or reopen the sprite you want first."
             return "There's no sprite to edit yet. Say make me a sprite, or reopen a saved one."
         low = text.lower()
+        pal = re.search(r"\b(nes|pico\s?-?8|game\s?boy|gameboy)\b", low)
+        if pal and not re.search(r"\b(?:undo|redo)\b", low):
+            # "make it NES", "palette nes": the same face in another palette is a new sprite from the current picture (its colours are measured)
+            word = re.sub(r"[\s-]", "", pal.group(1))
+            palette = "nes" if word == "nes" else "pico8" if word.startswith("pico") else "gameboy"
+            return image_style("dropped", style="sprite", palette=palette)
         if re.search(r"\bredo\b", low) or re.search(r"\bundo\b", low):
             back = bool(re.search(r"\bundo\b", low))
             if not st.step(doc, back):
@@ -837,6 +868,9 @@ def sprite_edit(change: str = "", sprite_id: str = "") -> str:
     except Exception as exc:
         log.event("sprite_edit_failed", error=type(exc).__name__)
         return "I couldn't change the sprite."
+    from julius.brain import session_state
+
+    session_state.record("edit", "edited the sprite: " + ", ".join(done))
     log.event("sprite_edit", changes=len(done))
     return (
         "Done: "
@@ -937,5 +971,9 @@ def sprite_ops(sprite_id: str, ops: list) -> dict:
             panel.update_art(pid, fields)
         out.update({k: fields[k] for k in ("after", "settings", "palette")})
     out["ms"] = round((_time.perf_counter() - t0) * 1000, 1)
+    if changed:
+        from julius.brain import session_state
+
+        session_state.record("edit", "edited the sprite on its card: " + ", ".join(ops))
     log.event("sprite_card_ops", ops=len(ops), ms=out["ms"])
     return out

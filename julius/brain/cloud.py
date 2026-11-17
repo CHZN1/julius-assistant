@@ -53,6 +53,7 @@ PLANNING_PROMPT = (
     "- 'This' (as the thing to change or measure), 'this picture', 'this photo', 'my selfie' or 'this track' with no file name means the one he dropped on the orb: call the tool with source 'dropped' (it asks if nothing was dropped) and do not ask for a file name first.\n"
     "- Making his own picture look like a comic book, pencil sketch, watercolor, cartoon, pop art or pixel art, or showing every style side by side, is image_style on that picture (style 'all' for every style); it never draws anything from nothing. 'Make me a sprite', 'a game sprite of me', 'turn me into a Game Boy character', 'make this photo look like a retro game character' or any sprite or game character of him means his own photo: call image_style right away with style 'sprite' and source 'dropped' (the tool asks for a picture if none was dropped; never ask him first). 'Pixel art', 'pixelate' and a Game Boy or retro LOOK or palette on a photo stay style 'pixel_art'; only the words sprite, character or avatar make style 'sprite'."
     "\n- Changing the sprite he already has ('bigger beard', 'taller afro', 'add glasses', 'close-set eyes', 'give him a cap', 'undo that', 'reopen my sprite') is sprite_edit with his words; making a sprite from a photo is image_style."
+    "\n- SESSION STATE in the request is Julius's own record of this session (the current image, the current sprite, what was made): trust it. Never ask for a photo when it lists a current image (call the tool with source 'dropped'), and never deny an action it lists. In an active context read short or unclear words toward it: after a palette question 'Nes' or 'Miss' means the NES palette; 'yes, sprite' means the current sprite. Ask at most one clarifying question; if the answer is still unclear, act on the most likely reading and say how to undo. When he says you made or did something, check SESSION STATE: if it is there, confirm it plainly and carry on; an earlier reply of yours that said otherwise was wrong, so say so briefly."
 )
 
 CAPABILITIES_PROMPT = (
@@ -293,9 +294,12 @@ class CloudBrain:
             **{k: v for k, v in TIERS["haiku"].items() if k != "max_tokens"},
         }
         if system:
+            static, marker, state = system.partition("\n\nSESSION STATE (")
             kwargs["system"] = [
-                {"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}
-            ]
+                {"type": "text", "text": static, "cache_control": {"type": "ephemeral"}}
+            ] + (
+                [{"type": "text", "text": "SESSION STATE (" + state}] if marker else []
+            )  # per turn: after the cached prefix
         api_tools = convert_tools(self.tool_schemas(tools)) if tools is not None else None
         if api_tools:
             api_tools = _personalize_tools(api_tools)

@@ -137,13 +137,40 @@ def handle_vision(s: Session, text: str) -> str | None:
         return "I couldn't look at that."
 
 
+def _art_context_reply(s: Session, text: str) -> str | None:
+    """A palette word on its own, or "yes, sprite" after "which sprite?", read toward the current art session (no model call)."""
+    from julius.art import commands as art_commands
+    from julius.art import source, sprite_doc
+
+    history = getattr(s, "history", None)
+    last = ""
+    if isinstance(history, list):
+        last = next(
+            (
+                m.get("content")
+                for m in reversed(history)
+                if isinstance(m, dict)
+                and m.get("role") == "assistant"
+                and isinstance(m.get("content"), str)
+            ),
+            "",
+        )
+    active = sprite_doc.STUDIO.get() is not None or source.current() is not None
+    return art_commands.palette_answer(text, last, active) or art_commands.answer_to_open(
+        text, last
+    )
+
+
 def handle_music(s: Session, text: str) -> str | None:
     """ "Rescan my samples", "convert kick.wav to mp3", "turn this photo into pixel art": answered directly by a fixed pattern, no model call."""
     try:
         from julius.art import commands as art_commands
         from julius.music import commands
 
-        return commands.handle(text) or commands.convert_reply(s, text) or art_commands.handle(text)
+        out = commands.handle(text) or commands.convert_reply(s, text) or art_commands.handle(text)
+        if out:
+            return out
+        return _art_context_reply(s, text)
     except Exception as exc:
         log.console(f"  [audio command failed: {type(exc).__name__}: {exc}]", flush=True)
         return "I couldn't do that audio request."

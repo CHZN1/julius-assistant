@@ -101,9 +101,19 @@ class EventHub:
         if level > 0.0005 or was > 0.0005:
             self._send({"type": "level", "level": round(level, 3), "t": round(self.clock(), 3)})
 
-    def say(self, who: str, text: str, turn: int | None = None) -> None:
+    def say(
+        self,
+        who: str,
+        text: str,
+        turn: int | None = None,
+        id: str | None = None,
+        pending: bool | None = None,
+        cancelled: bool | None = None,
+    ) -> None:
+        """A transcript line. A typed message has an `id`: it appears at once with `pending: true`, and later lines with the same id (edited, cancelled,
+        or picked up for its turn) replace it rather than adding a new one."""
         text = (text or "").strip()
-        if not text:
+        if not text and not cancelled:
             return
         line = {
             "type": "transcript",
@@ -112,7 +122,18 @@ class EventHub:
             "turn": turn,
             "t": round(self.clock(), 3),
         }
-        self.transcript.append(line)
+        if id:
+            line["id"] = id
+            if pending is not None:
+                line["pending"] = bool(pending)
+            if cancelled:
+                line["cancelled"] = True
+            for i, old in enumerate(self.transcript):
+                if old.get("id") == id:
+                    del self.transcript[i]
+                    break
+        if not cancelled:
+            self.transcript.append(line)
         self._send(line)
 
     def hello(self) -> dict[str, Any]:

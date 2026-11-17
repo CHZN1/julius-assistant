@@ -115,6 +115,36 @@ def shortcut(text, sb, ctx, turn, case_history=None):
             "ok": True,
             "detail": "camera",
         }
+    from julius.runtime import heard
+
+    last = next(
+        (m["content"] for m in reversed(case_history or []) if m.get("role") == "assistant"), ""
+    )
+    if art_commands.PALETTE_WORD.match(text) and heard.expects_palette(
+        last
+    ):  # "Nes" after a palette question: before the brain
+        return {
+            "path": "shortcut",
+            "tool": "image_style",
+            "args": "sprite " + text.lower(),
+            "ok": True,
+            "detail": "palette answer",
+        }
+    low = last.lower()
+    if (
+        text.strip()
+        and art_commands._YES_OPEN.match(text)
+        and "?" in low
+        and "open" in low
+        and "sprite" in low
+    ):
+        return {
+            "path": "shortcut",
+            "tool": "sprite_edit",
+            "args": "open",
+            "ok": True,
+            "detail": "answer to open",
+        }
     if art_commands.OPEN_SPRITE.match(text) and re.search(r"\bsprite\b", text, re.I):
         return {  # "open my sprite": handled before the brain
             "path": "shortcut",
@@ -252,6 +282,9 @@ def chain_turn(case, brain, system, rounds=3):
 
     msgs = (
         [{"role": "system", "content": system}]
+        + (
+            [{"role": "system", "content": case["state"]}] if case.get("state") else []
+        )  # SESSION STATE, as production adds it
         + case.get("history", [])
         + [{"role": "user", "content": case["text"]}]
     )
@@ -315,6 +348,10 @@ def clarifies(got):
     return got["path"] == "direct" and "?" in detail and bool(CLARIFY.search(detail))
 
 
+def said_all(got: dict) -> str:
+    return " ".join(str(got.get(k) or "") for k in ("final", "detail")).split(" | ")[-1]
+
+
 def judge(case, got):
     e = case["expect"]
     if (
@@ -358,6 +395,11 @@ def judge(case, got):
         success_ok = success_ok and e["detail_contains"].lower() in detail
     if e.get("no_denial") and got["path"] == "direct" and DENIAL.search(detail):
         success_ok = False  # a capability Julius has must never be declined
+    for pat in e.get(
+        "answer_not", []
+    ):  # e.g. a denial of something Julius did ("I haven't made any sprites")
+        if re.search(pat, said_all(got), re.I):
+            success_ok = False
     from julius.runtime.text import is_narration
 
     said = str(got.get("final") or "")
@@ -377,7 +419,12 @@ def brain_turn(case, brain, tracker, system):
     msgs = (
         [{"role": "system", "content": system}]
         + case.get("history", [])
-        + [{"role": "user", "content": case["text"]}]
+        + [
+            {
+                "role": "user",
+                "content": case["text"] + ("\n\n" + case["remind"] if case.get("remind") else ""),
+            }
+        ]
     )
     before, t0 = sum(tracker.today_by_tier().values()), time.perf_counter()
     try:
@@ -522,7 +569,7 @@ def result_row(case, got):
         "id": case["id"],
         "cat": case["cat"],
         "text": case["text"],
-        "expected_path": e["path"],
+        "expected_path": e.get("path") or "|".join(a.get("path", "") for a in e.get("any_of", [])),
         "expected_tool": e.get("tool")
         or "|".join(e.get("tool_in", []))
         or "+".join(e.get("tools_all", [])),

@@ -73,7 +73,35 @@ def process(s: Session, text: str, lang: str) -> None:
         s.turn_active = False
 
 
+def heard_as_meant(s: Session, text: str) -> str:
+    """Art words misheard or mistyped ("Open my sprayer", "Make me a Nest Brite", "Miss." after a palette question) fixed before routing; the
+    original's attributes (a typed message's id) are kept."""
+    from julius.art import sprite_doc
+    from julius.runtime import heard
+
+    last = next(
+        (
+            m.get("content")
+            for m in reversed(s.history)
+            if m.get("role") == "assistant" and isinstance(m.get("content"), str)
+        ),
+        "",
+    )
+    fixed = heard.fix(str(text), last or "", sprite_doc.STUDIO.get() is not None)
+    if not heard.changed(str(text), fixed):
+        return text
+    log.event(
+        "heard_fixed", typed=bool(getattr(text, "from_ui", False))
+    )  # never the words themselves
+    if isinstance(text, str) and type(text) is not str:
+        new = type(text)(fixed)
+        new.__dict__.update(getattr(text, "__dict__", {}))
+        return new
+    return fixed
+
+
 def run_turn(s: Session, text: str, lang: str) -> None:
+    text = heard_as_meant(s, text)
     turn = begin_turn(s, text, lang)
     route(s, turn)
     if turn.routed is not None:
@@ -115,7 +143,7 @@ def begin_turn(s: Session, text: str, lang: str) -> Turn:
     turn = Turn(text, lang, started, snapshot, s.eyes.describe(snapshot))
     log.console(f"  YOU [{lang}]: {text}")
     if s.events_hub is not None:
-        s.events_hub.say("you", text, s.turn + 1)
+        s.events_hub.say("you", text, s.turn + 1, id=getattr(text, "tid", None), pending=False)
     if turn.vision_line:
         log.console(f"  (sees: {turn.vision_line})")
     s.turn += 1

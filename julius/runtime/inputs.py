@@ -49,14 +49,85 @@ def ui_drop(s: Session, paths: Any) -> dict:
     return {key: result[key] for key in ("accepted", "rejected", "expires_in")}
 
 
+TYPED_HOLD_S = 0.8  # a typed message waits this long before its turn: time to edit (up arrow) or cancel (Esc), and for a quick correction to replace it
+REPEAT_S = 5.0  # the same text again this soon after it was picked up is a repeat, not a new turn
+_typed_lock = threading.Lock()
+
+
+def _norm(text: str) -> str:
+    return " ".join(str(text).lower().split()).strip(" .!?")
+
+
+def _waiting_ui(s: Session) -> Any:
+    last = s.typed[-1] if s.typed else None
+    return last if getattr(last, "tid", None) else None
+
+
 def ui_typed(s: Session, text: str) -> dict:
-    """Text typed in the orb: queued exactly like a line typed in the terminal, so it takes the same
-    path as speech (and wakes him for that turn)."""
-    entry = uichannel.TypedText(text)
-    entry.queued_at = time.monotonic()
-    s.typed.append(entry)
-    log.event("ui_typed", stage="queued", queue=len(s.typed))
-    return {"queued": True}
+    """Text typed in the orb. It shows in the transcript at once (pending), stops whatever Julius is saying or doing (like talking over him), and is
+    processed after a short hold. A message still waiting is replaced by a newer one (the latest wins: "new" then "nes"), and the same text again is
+    dropped, so rapid repeats never queue up as separate turns."""
+    import secrets
+
+    from julius.runtime import controls
+
+    t = str(text).strip()
+    now = time.monotonic()
+    with _typed_lock:
+        waiting = _waiting_ui(s)
+        cur = getattr(s, "current_typed", None)
+        if waiting is not None and _norm(waiting) == _norm(t):
+            log.event("ui_typed", stage="repeat_dropped")
+            return {"queued": True, "id": waiting.tid, "merged": "repeat"}
+        if (
+            waiting is None
+            and cur is not None
+            and _norm(cur) == _norm(t)
+            and now - getattr(s, "current_typed_at", 0.0) < REPEAT_S
+        ):
+            log.event("ui_typed", stage="repeat_dropped")
+            return {"queued": False, "id": getattr(cur, "tid", ""), "merged": "repeat"}
+        entry = uichannel.TypedText(t)
+        entry.queued_at = now
+        if (
+            waiting is not None
+        ):  # a correction while the first is still waiting: it takes the first one's place
+            entry.tid = waiting.tid
+            s.typed[-1] = entry
+            merged = "replaced"
+        else:
+            entry.tid = secrets.token_hex(4)
+            s.typed.append(entry)
+            merged = ""
+    if s.events_hub is not None:
+        s.events_hub.say("you", t, None, id=entry.tid, pending=True)
+    controls.stop_now(s, "typed")  # only acts while a response is running
+    log.event("ui_typed", stage="queued", queue=len(s.typed), merged=merged or None)
+    return {"queued": True, "id": entry.tid, **({"merged": merged} if merged else {})}
+
+
+def ui_typed_change(s: Session, tid: str, text: str | None) -> dict:
+    """Edit (text) or cancel (text None) a typed message that has not been picked up yet."""
+    with _typed_lock:
+        for i, entry in enumerate(list(s.typed)):
+            if getattr(entry, "tid", None) == tid:
+                if text is None:
+                    del s.typed[i]
+                    new = None
+                else:
+                    new = uichannel.TypedText(str(text).strip())
+                    new.tid, new.queued_at = tid, time.monotonic()
+                    s.typed[i] = new
+                break
+        else:
+            return {"ok": False, "error": "That message was already sent."}
+    if s.events_hub is not None:
+        if new is None:
+            s.events_hub.say("you", "", None, id=tid, cancelled=True)
+        else:
+            s.events_hub.say("you", new, None, id=tid, pending=True)
+    log.event("ui_typed", stage="cancelled" if new is None else "edited")
+    return {"ok": True, "id": tid}
 
 
 def ui_photo(s: Session, jpeg: bytes, auto: bool = False) -> dict:
@@ -122,6 +193,7 @@ def start_ui_channel(s: Session) -> None:
         )
         handlers = {
             "typed": lambda t: ui_typed(s, t),
+            "typed_change": lambda tid, text: ui_typed_change(s, tid, text),
             "drop": lambda p: ui_drop(s, p),
             "photo": lambda data, auto=False: ui_photo(s, data, auto),
             "camera": lambda event: ui_camera(s, event),

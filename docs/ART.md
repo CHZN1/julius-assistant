@@ -76,6 +76,13 @@ Every sprite is also a **document** (`julius/art/sprite_doc.py`): named layers b
 - **Undo**: a bare "undo" undoes the most recent action of this session: after sprite edits that is the sprite. It never reaches back to something done before Julius started; "undo the file change" names the file agent explicitly.
 - **Saving and reopening**: "save this card" writes the PNGs and `<name>.julius-sprite` (JSON: base layers, parameters, pixel edits, palette) into a folder called "Sprite 2026-11-16 13-58"; "save it as Sunday Roy" names it. "Open my sprite" opens the most recently saved one and lists the other recent ones by name and date; "open Sunday Roy" (a saved sprite's name) or "open sprite Sunday" opens that one; dropping the file on the orb works too. A body added later keeps the same head.
 
+## The art session: what Julius keeps in mind
+
+- **The current image** is the picture the last art request used (the camera photo, or a file). It stays current until another picture replaces it: a camera photo for the session (12 hours at most), a file even after its drop has expired. Opening a saved sprite never clears it; a sprite made from a file remembers that file, and reopening it makes the file current again when there is none.
+- **Julius's record**: every turn the brain gets a short, true record of the session: the current image, the current sprite, how many sprites were made (with times and palettes) and the recent actions. It is in two places: a block after the cached system prompt, and a one-line reminder with the user's words (the model ignored the block alone in a test, and followed the reminder). It must never deny anything in it or ask for a picture it lists.
+- **One question at most**: in an active context, unclear words are read toward it. After one clarifying question, the next answer is acted on (the most likely reading, with how to undo it). "Yes, sprite." after "which sprite?" opens the newest; a palette name on its own ("NES", "pico8", "game boy") with a current picture or right after a palette question makes that sprite from the current picture, without the model.
+- **Hearing art words**: Whisper's hint includes sprite, sprites, NES, Pico 8, pico8, Game Boy, gameboy, chibi, palette, pixel art, pixelate, dither, outline, goatee, afro (and a few more) plus the names of saved sprites. A rule layer (`julius/runtime/heard.py`) fixes the mis-hearings and typos it saw in use, only where the word stands in a command or a palette is expected: "Open my sprayer" / "spray it" → sprite, "Nest Brite" → NES sprite, "Miss" / "Mess" after a palette question → NES, "srpite" → sprite, "Pico 8" → pico8. Ordinary words ("I miss you", "out of spite") are left alone.
+
 ## Saving pictures
 
 Two ways, both explicit:

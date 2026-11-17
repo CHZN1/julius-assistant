@@ -13,12 +13,14 @@ A per-install token lives in `~/.julius/ui_token` (created on first start with m
 | Request | Body | Effect |
 |---|---|---|
 | `GET /v1/ping` | none | `{"ok": true}` when the token is right |
-| `POST /v1/typed` | `{"text": "..."}` | Queued exactly like a line typed in the terminal: same pipeline as speech, wakes him for that turn. Answer is spoken and shown (`[ui] typed_reply = "both"`, default) or shown only (`"text"`). |
+| `POST /v1/typed` | `{"text": "..."}` → `{"queued", "id", "merged"?}` | Queued exactly like a line typed in the terminal: same pipeline as speech, wakes him for that turn. Answer is spoken and shown (`[ui] typed_reply = "both"`, default) or shown only (`"text"`). |
 | `POST /v1/photo` | raw JPEG bytes (`Content-Type: image/jpeg`, at most 4 MiB), optional `?auto=1` | The photo the user kept with Use Photo in the orb's camera window. Held in memory as "this" (never written to disk unless the user says save this card) and shown as a still card; `auto=1` means the orb used it by itself after its timeout. A follow-up the user asked for ("take a selfie and make it a pencil sketch") runs now. |
 | `POST /v1/camera` | `{"event": "opened" \| "closed" \| "denied"}` | The camera window opened, was closed (camera off), or macOS refused the camera. A closed window with no photo drops a waiting follow-up. |
 | `GET /v1/sprite` | none | The sprite being edited, for the orb's editor window: `{"sprite": {id, canvas, palette, layers: [{name, cells: [[x, y, index]]}], edits, body, line}}` (layers as rendered from the parameters, before pixel edits). 404 when no sprite is open. |
 | `POST /v1/sprite` | `{"id": "...", "edits": {layer: {"x,y": palette index or -1}}}` (at most 1 MB) | Pixel edits from the editor window. Checked: known layers, inside the canvas, palette indices only; stored as one undo step and the card updates. 400 with the reason otherwise. |
 | `POST /v1/sprite/edit` | `{"id": "...", "ops": ["bigger beard", ...]}` (button words only: smaller/bigger beard, shorter/taller hair, close-set/wider eyes, glasses, undo, redo; at most 20) | The sprite card's buttons. Applied and rendered at once; answers `{after, settings, palette, undo, redo, ms}` and updates the card in place. Never a turn: no transcript, no speech, no model. Its own rate limit (120 per 10 s). |
+| `POST /v1/typed/edit` | `{"id": "...", "text": "..."}` | Change a typed message that has not been picked up yet (up arrow in the orb). 409 when it is too late (the orb then sends the text as a new message). |
+| `POST /v1/typed/cancel` | `{"id": "..."}` | Cancel a typed message that has not been picked up yet (Esc in the orb). |
 | `POST /v1/drop` | `{"paths": ["/abs/path", ...]}` | Files dropped on the orb. Staged only; nothing runs (see below). |
 
 Responses are `{"ok": true, ...}` or `{"ok": false, "error": "..."}` with the status codes below.
@@ -85,3 +87,8 @@ Each line typed in the orb leaves four events in `~/Library/Logs/Julius/julius.j
 | `failed` | the turn raised | `error` (exception type) |
 
 Requests the channel refuses (`ui_request_refused`: status and reason) or that crash a handler (`ui_request_failed`) are logged too. The typed text itself is never logged.
+
+
+## Typed messages
+
+A typed message shows in the transcript at once (a `transcript` line with its `id` and `pending: true`) and stops whatever Julius is saying or doing, exactly like talking over him. It is picked up after a short hold (0.8 s), so it can still be edited (up arrow) or cancelled (Esc). A newer message typed while one is still waiting replaces it (the latest wins: "new", then "nes"), and the same text again is dropped, so rapid repeats never become separate turns. When it is picked up, a line with the same `id` and `pending: false` replaces the pending one.

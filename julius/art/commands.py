@@ -91,3 +91,42 @@ def _sprite_named(name: str) -> bool:
 
     words = tool._words(name)
     return bool(words) and any(r[0].lower() == " ".join(words) for r in tool.saved_sprites())
+
+
+PALETTE_WORD = re.compile(
+    r"^\W*(?:(?:the|an?|use|in|with|make it|do)\s+)*(nes|pico\s?-?8|pico\s?eight|game\s?boy|gb)(?:\s+(?:palette|one|please|sprite))?\W*$",
+    re.I,
+)
+
+
+def palette_answer(text: str, last_reply: str, active: bool) -> str | None:
+    """A palette name on its own ("NES", "pico8", "game boy") while a sprite or picture is current, or right after a palette question: that
+    sprite from the current picture, no model call and no "drop a photo" (the live test asked for a photo it already had)."""
+    from julius.runtime import heard
+
+    m = PALETTE_WORD.match(text or "")
+    if not m or not (active or heard.expects_palette(last_reply)):
+        return None
+    word = re.sub(r"[\s-]", "", m.group(1).lower())
+    palette = "nes" if word == "nes" else "pico8" if word.startswith("pico") else "gameboy"
+    from julius.art import tool
+
+    return tool.image_style("dropped", style="sprite", palette=palette)
+
+
+_YES_OPEN = re.compile(
+    r"^\W*(?:yes|yeah|yep|yup|sure|right|ok(?:ay)?)?[\s,.!]*(?:(?:my|the|that|the newest|the latest|the last)\s+)?(?:sprite|one|newest(?:\s+one)?|latest(?:\s+one)?)?[\s.!]*$",
+    re.I,
+)
+
+
+def answer_to_open(text: str, last_reply: str) -> str | None:
+    """ "Yes, sprite." / "the newest one" right after Julius asked which sprite to open: open it (one question at most, then act)."""
+    t = (last_reply or "").lower()
+    if not ("?" in t and "open" in t and "sprite" in t):
+        return None
+    if not (text or "").strip() or not _YES_OPEN.match(text):
+        return None
+    from julius.art import tool
+
+    return tool.sprite_edit("open my sprite")

@@ -1,6 +1,7 @@
 """Speech recognition: Whisper transcription, the wake-word second stage, and utterance saving."""
 
 import os
+import re
 import threading
 import time
 from pathlib import Path
@@ -47,11 +48,35 @@ def _free_memory_for_recognition(s: Session) -> None:
         close_backend()
 
 
+_SPRITE_NAMES: dict = {"t": 0.0, "names": []}
+
+
+def request_hint(base: str | None) -> str | None:
+    """The request vocabulary hint plus the art words and the names of saved sprites ("Sunday Roy"), refreshed once a minute."""
+    from julius.runtime import heard
+
+    if not base:  # [asr] vocabulary_hint = false (or no hint at all): leave it off
+        return None
+    now = time.monotonic()
+    if now - _SPRITE_NAMES["t"] > 60:
+        _SPRITE_NAMES["t"] = now
+        try:
+            from julius.art import tool
+
+            _SPRITE_NAMES["names"] = [
+                n for n, _t, _p in tool.saved_sprites()[:10] if not re.match(r"^(?:\d|Sprite )", n)
+            ]
+        except Exception:
+            _SPRITE_NAMES["names"] = []
+    extra = ", ".join(dict.fromkeys(heard.ART_VOCABULARY + _SPRITE_NAMES["names"]))
+    return base.rstrip(". ") + ", " + extra + "."
+
+
 def _whisper(s: Session, audio: ndarray, wake: bool) -> dict:
     """One mlx-whisper run with the wake or the request vocabulary hint."""
     resident_default = "0" if s.tts.backend in CLONE_BACKENDS else "1"
     language = os.environ.get("JULIUS_ASR_LANGUAGE", "en")
-    hint = s.wake_hint if wake else s.asr_hint
+    hint = s.wake_hint if wake else request_hint(s.asr_hint)
     with recognition_resources(os.environ.get("JULIUS_ASR_RESIDENT", resident_default) == "0"):
         return mlx_whisper.transcribe(
             audio,

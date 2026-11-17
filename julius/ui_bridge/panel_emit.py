@@ -601,6 +601,9 @@ def save_art_card(
     except OSError as e:
         log.event("panel_save_failed", error=type(e).__name__)
         return "I couldn't save that card."
+    from julius.brain import session_state
+
+    session_state.record("save", f"saved the {card.get('kind', 'art')} card as {folder.name}")
     log.event("panel_card_saved", images=2, kind="art")
     return f"Saved to {base.name}, in a folder called {folder.name}."
 

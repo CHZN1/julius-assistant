@@ -77,11 +77,18 @@ def cancel_pending() -> None:
     _pending = None
 
 
+def _record_photo() -> None:
+    from julius.brain import session_state
+
+    session_state.record("photo", "took a camera photo (the current image)")
+
+
 def received(
     jpeg: bytes, panel: Any = None, files: Any = None, turn: int | None = None, auto: bool = False
 ) -> str:
     """A photo came back from the orb's camera window: hold it in memory, show it as a still in the panel, return the follow-up request ("" when none)."""
     source.hold(jpeg)
+    _record_photo()
     if panel is not None and files is not None:
         try:
             ref = files.put_memory(jpeg, "jpg")

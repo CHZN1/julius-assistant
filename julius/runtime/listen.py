@@ -27,6 +27,7 @@ from julius.runtime.brain_turn import ask_streaming
 from julius.runtime.capture import microphone_stream
 from julius.runtime.controls import enter_quiet, leave_quiet, sleep_line, wants_quiet
 from julius.runtime.handlers import announce_reminder, release_idle_models
+from julius.runtime.inputs import TYPED_HOLD_S
 from julius.runtime.session import (
     CHUNK,
     HOLD_SECONDS,
@@ -252,6 +253,8 @@ class Listener:
             raise KeyboardInterrupt
         entry = s.typed.popleft()
         log_ui_pickup(entry, len(s.typed))
+        if getattr(entry, "tid", None):
+            s.current_typed, s.current_typed_at = entry, time.monotonic()
         if getattr(entry, "drop_notice", False):
             self.announce_drop(entry)
             return
@@ -489,7 +492,13 @@ class Listener:
         awake = time.time() < s.awake_until
         self.poll_reminders()
         if s.typed:
-            self.handle_typed()
+            first = s.typed[0]
+            held = (
+                getattr(first, "tid", None)
+                and time.monotonic() - getattr(first, "queued_at", 0.0) < TYPED_HOLD_S
+            )
+            if not held:  # a typed message waits a moment so it can be edited or cancelled
+                self.handle_typed()
             return
         if self.answer_held():
             return
