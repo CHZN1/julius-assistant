@@ -43,7 +43,14 @@ IMAGE_REF = re.compile(r"^/p/[A-Za-z0-9_-]{8,64}\.(?:png|jpg|webp|gif)$")
 _BIDI = set("‪‫‬‭‮⁦⁧⁨⁩‎‏؜")
 
 # type -> (required fields, optional fields); values are the JSON type names the validator checks
-COMMON = {"type": "str", "t": "num", "panel_id": "str", "turn": "int?", "seq": "int"}
+COMMON = {
+    "type": "str",
+    "t": "num",
+    "panel_id": "str",
+    "turn": "int?",
+    "seq": "int",
+    "conv": "int?",
+}
 SCHEMAS: dict[str, dict[str, str]] = {
     "panel.research": {
         "question": "str",
@@ -144,7 +151,41 @@ SCHEMAS: dict[str, dict[str, str]] = {
         "main": "bool?",
     },
     "panel.clear": {"scope": "str", "target": "str?", "reason": "str"},
+    # not cards: the conversation list (the sidebar) and the notes the brain was given this turn (the "Memory used" chip)
+    "panel.conversations": {
+        "current": "int?",
+        "title": "str",
+        "project": "str",
+        "projects": "list",
+        "conversations": "list",
+        "trash": "int",
+    },
+    "panel.memory_used": {"items": "list"},
 }
+CONV_FIELDS = {
+    "id": "int",
+    "title": "str",
+    "project": "str",
+    "pinned": "bool",
+    "updated": "num",
+    "n": "int",
+}
+PROJECT_FIELDS = {"id": "int", "name": "str", "pinned": "bool"}
+MEMORY_ITEM_FIELDS = {"id": "int", "scope": "str", "label": "str", "text": "str"}
+# the card types (kept, shown per conversation); the rest are updates and status messages
+CARD_TYPES = {
+    "panel.research",
+    "panel.files",
+    "panel.chart",
+    "panel.table",
+    "panel.images",
+    "panel.vision",
+    "panel.theory",
+    "panel.art",
+    "panel.camera",
+}
+PER_CONVERSATION = 20
+MAX_KEPT = 120
 CLEAR_SCOPES = ("all", "card")
 CLEAR_REASONS = ("new_topic", "dismissed", "expired", "done")
 THEORY_KINDS = ("key", "scale", "progression", "chord")
@@ -383,7 +424,19 @@ _EXTRA_CHECKS: dict[str, Callable[[dict, list[str]], None]] = {
     "panel.camera_open": lambda m, e: None,
     "panel.images": lambda m, e: _v_images(m["images"], e),
     "panel.clear": _v_clear,
+    "panel.conversations": lambda m, e: _v_conversations(m, e),
+    "panel.memory_used": lambda m, e: (
+        [_check(MEMORY_ITEM_FIELDS, it, f"items[{i}]", e) for i, it in enumerate(m["items"][:20])]
+        and None
+    ),
 }
+
+
+def _v_conversations(msg: dict, errors: list[str]) -> None:
+    for i, c in enumerate(msg["conversations"]):
+        _check(CONV_FIELDS, c, f"conversations[{i}]", errors)
+    for i, p in enumerate(msg["projects"]):
+        _check(PROJECT_FIELDS, p, f"projects[{i}]", errors)
 
 
 def validate(msg: Any) -> list[str]:
@@ -595,7 +648,22 @@ class PanelHub:
         ] = {}  # folder-listing cards the agent cut short: where to list further
         self.seq = 0
         self._lock = threading.Lock()
+        self.conv_fn: Callable[[], int | None] | None = (
+            None  # the current conversation's id: each card is kept and shown per conversation
+        )
+        self.conv_state: dict | None = None
         hub.panel = self
+
+    def _keep(self) -> None:
+        """Called under the lock: the last PER_CONVERSATION cards of each conversation, at most MAX_KEPT in all (oldest go first)."""
+        per: dict = {}
+        for pid, c in reversed(list(self.cards.items())):
+            k = c.get("conv")
+            per[k] = per.get(k, 0) + 1
+            if per[k] > PER_CONVERSATION:
+                del self.cards[pid]
+        while len(self.cards) > MAX_KEPT:
+            self.cards.popitem(last=False)
 
     def _next(self) -> tuple[int, str]:
         with self._lock:
@@ -603,6 +671,13 @@ class PanelHub:
             return self.seq, f"c{self.seq}-{int(self.clock())}"
 
     def _emit(self, msg: dict) -> dict | None:
+        if msg.get("type") in CARD_TYPES and self.conv_fn is not None and "conv" not in msg:
+            try:
+                cid = self.conv_fn()
+            except Exception:
+                cid = None
+            if isinstance(cid, int):
+                msg["conv"] = cid
         problems = validate(msg)
         raw = json.dumps(msg, separators=(",", ":"))
         if not problems and len(raw.encode()) > MAX_BYTES:
@@ -657,8 +732,7 @@ class PanelHub:
             return None
         with self._lock:
             self.cards[pid] = msg
-            while len(self.cards) > HISTORY:
-                self.cards.popitem(last=False)
+            self._keep()
         return pid
 
     # ---- chart, table and image-gallery cards -----------------------------------------------------
@@ -676,8 +750,7 @@ class PanelHub:
             return None
         with self._lock:
             self.cards[pid] = msg
-            while len(self.cards) > HISTORY:
-                self.cards.popitem(last=False)
+            self._keep()
         return pid
 
     def chart(self, card: dict, turn: int | None = None) -> str | None:
@@ -909,8 +982,7 @@ class PanelHub:
             for old in list(self._rest):
                 if old not in self.cards:
                     del self._rest[old]
-            while len(self.cards) > HISTORY:
-                self.cards.popitem(last=False)
+            self._keep()
         return pid
 
     def show_more(self, target: str, n: int = ITEM_PAGE) -> int:
@@ -1068,7 +1140,77 @@ class PanelHub:
             out = {"cards": list(self.cards.values()), "base": self.base}
             if getattr(self, "camera_state", None):
                 out["camera_status"] = dict(self.camera_state)
+            if self.conv_state:
+                out["conversations"] = dict(self.conv_state)
             return out
+
+    def conversations(self, state: dict) -> bool:
+        """The conversation list for the sidebar (not a card): sent on every change and in the hello snapshot."""
+        body = {
+            "current": state.get("current") if isinstance(state.get("current"), int) else None,
+            "title": clean(state.get("title"), CAPS["title"]),
+            "project": clean(state.get("project"), 60),
+            "projects": [
+                {
+                    "id": int(p["id"]),
+                    "name": clean(p.get("name"), 60),
+                    "pinned": bool(p.get("pinned")),
+                }
+                for p in (state.get("projects") or [])[:50]
+            ],
+            "conversations": [
+                {
+                    "id": int(c["id"]),
+                    "title": clean(c.get("title"), 80),
+                    "project": clean(c.get("project"), 60),
+                    "pinned": bool(c.get("pinned")),
+                    "updated": float(c.get("updated") or 0),
+                    "n": int(c.get("n") or 0),
+                }
+                for c in (state.get("conversations") or [])[:200]
+            ],
+            "trash": int(state.get("trash") or 0),
+        }
+        seq, pid = self._next()
+        msg = {
+            "type": "panel.conversations",
+            "t": round(self.clock(), 3),
+            "panel_id": pid,
+            "turn": None,
+            "seq": seq,
+            **body,
+        }
+        if not self._emit(msg):
+            return False
+        with self._lock:
+            self.conv_state = msg
+        return True
+
+    def memory_used(self, items: list[dict], turn: int | None = None) -> bool:
+        """The notes the brain was given for this turn, each with its scope (the "Memory used" chip). Not kept."""
+        body = {
+            "items": [
+                {
+                    "id": int(it["id"]),
+                    "scope": it["scope"]
+                    if it.get("scope") in ("global", "project", "conversation")
+                    else "global",
+                    "label": clean(it.get("label"), 60),
+                    "text": clean(it.get("text"), 300),
+                }
+                for it in items[:12]
+            ]
+        }
+        seq, pid = self._next()
+        msg = {
+            "type": "panel.memory_used",
+            "t": round(self.clock(), 3),
+            "panel_id": pid,
+            "turn": turn,
+            "seq": seq,
+            **body,
+        }
+        return self._emit(msg) is not None
 
     def lookup(self, panel_id: str | None = None) -> dict | None:
         """A remembered card (the newest when no id) for typed commands like "open source 3"."""

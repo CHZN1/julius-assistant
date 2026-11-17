@@ -167,6 +167,18 @@ def ui_sprite_ops(sprite_id: str, ops: Any) -> dict:
     return tool.sprite_ops(sprite_id, ops)
 
 
+def ui_conversation(s: Session, body: dict) -> dict:
+    """The conversations sidebar: switch, new, rename, pin, move, delete (to the trash), restore, search, forget a note. Never under a turn:
+    a switch asked while Julius is answering happens when that turn ends."""
+    conv = getattr(s, "conversations", None)
+    if conv is None:
+        return {"ok": False, "error": "conversations are off"}
+    from julius.conversations import channel
+
+    busy = bool(getattr(s, "turn_active", False))
+    return channel.op(conv, body, busy=busy, history=s.history)
+
+
 def ui_camera(s: Session, event: str) -> dict:
     """What happened to the orb's camera window: closed (a pending follow-up is dropped) or denied (the camera buttons say why)."""
     from julius.art import camera
@@ -200,6 +212,7 @@ def start_ui_channel(s: Session) -> None:
             "sprite_get": ui_sprite_get,
             "sprite_post": ui_sprite_post,
             "sprite_ops": ui_sprite_ops,
+            "conversation": lambda body: ui_conversation(s, body),
         }
         s.ui_channel = uichannel.start_from_config(config.load_config().get("ui"), handlers)
     except Exception as exc:

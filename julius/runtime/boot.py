@@ -348,6 +348,13 @@ def setup_conversations(s: Session) -> None:
 
         s.conversations = Conversations(ConversationStore())
         jt.conversations_manager = s.conversations
+        hub = getattr(s, "panel_hub", None)
+        if (
+            hub is not None
+        ):  # the sidebar feed, and each card kept with the conversation it was made in
+            hub.conv_fn = s.conversations.ensure
+            s.conversations.on_change = hub.conversations
+            s.conversations.changed()
         title = s.conversations.resume(s.history)
         if title:
             log.console(

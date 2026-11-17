@@ -35,6 +35,10 @@ Responses are `{"ok": true, ...}` or `{"ok": false, "error": "..."}` with the st
 * For the next four turns (or until it expires) the model sees the selection in a block that says it is untrusted data, not instructions. File names are cleaned first (control characters, line breaks, brackets and backticks removed, length-capped). File contents are never read.
 * Nothing is opened, moved, copied or deleted by the drop. What the user then asks for goes through the normal file and coding agents, which build a plan and ask him to confirm.
 
+## Conversations: `POST /v1/conversation`
+
+The sidebar's actions, by id: `{"action": "list"}`, `switch` (`id`), `new` (`title?`, `project?`), `rename` (`id`, `title`), `pin` (`id`, `on`), `move` (`id`, `project`: an existing project with a close name first, a new one only when none is close), `delete` (`id`, `confirm: true`, after the sidebar's own confirm sheet: to the trash), `restore` (`id`), `trash` (the list), `search` (`query`: local full-text search), `forget_note` (`id`: a project or chat note). The answer is `{"ok": true, "state": <the panel.conversations body>, "said"?: ..., "results"?: [...]}`. A switch asked while Julius is answering happens when the turn ends. The audit log records the action only, never titles or search words.
+
 ## What is refused
 
 Checks run in this order; the first failure answers.

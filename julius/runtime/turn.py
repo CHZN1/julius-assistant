@@ -173,6 +173,10 @@ def route(s: Session, turn: Turn) -> None:
     undo_said = None
     if not read_back and s.undo_coordinator is not None:
         undo_said = s.undo_coordinator.handle(turn.text)  # bare "undo": the latest action, named
+    if not undo_said and not read_back and s.conversations is not None:
+        replay = s.conversations.take_replay(turn.text, s.history)
+        if replay:  # "yes" to "want me to answer it now?": his cut-off question, answered in its own conversation
+            turn.text = replay
     turn.routed = undo_said or read_back or _command_reply(s, turn.text)
 
 
@@ -400,7 +404,14 @@ def finish_turn(s: Session, turn: Turn) -> None:
         s.conversations is not None
     ):  # keep the turn in the current conversation; a switch asked for this turn happens now
         s.conversations.after_turn(
-            s.history, turn.text, turn.answer, {"typed": turn.typed, "error": bool(turn.error)}
+            s.history,
+            turn.text,
+            turn.answer,
+            {
+                "typed": turn.typed,
+                "error": bool(turn.error),
+                "cancelled": turn.error == "cancelled",
+            },
         )
     trim_history(s.history)
     if s.validation_output:

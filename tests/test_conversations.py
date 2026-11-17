@@ -151,7 +151,7 @@ class CommandTests(Base):
     def test_the_commands(self):
         self.assertEqual(
             self.say("Move this to the Music project"),
-            "Moved drum loops to the Music project (a new project).",
+            "No project is close to Music, so I created a new project, Music, and moved drum loops into it.",
         )
         self.assertEqual(
             self.say("Rename this conversation to Dub tempo"),
@@ -201,6 +201,55 @@ class CommandTests(Base):
             self.conv.notes_block("which BPM and where are the drums?"), ""
         )  # never another conversation's notes
 
+    def test_moving_matches_a_close_project_before_creating_one(self):
+        self.store.project_id("Julius")
+        self.assertEqual(
+            self.say("Move this to the Julias project"), "Moved drum loops to the Julius project."
+        )
+        self.assertIn("created a new project, Hockey", self.say("move this to the hockey project"))
+        self.assertEqual(len(self.store.projects()), 3)  # Inbox, Julius, Hockey: no "Julias"
+
+    def test_a_recap_says_plainly_when_the_last_question_was_cut_off_and_answers_it_on_yes(self):
+        from julius.runtime import turn as rt
+
+        self.say("Go back to the conversation about the sprite editor")
+        self.conv.after_turn(
+            self.history,
+            "What palette should the editor default to?",
+            "Response stopped by user.",
+            {"cancelled": True},
+        )
+        self.say("New conversation")
+        out = self.say("What were we talking about in the sprite editor conversation?")
+        self.assertIn(
+            "you asked “What palette should the editor default to?” and it got cut off before I answered. Want me to answer it now?",
+            out,
+        )
+        self.assertNotIn(
+            "palette", self.llm_calls[-1][1]
+        )  # the recap model never sees the unanswered exchange
+        s = make_session(conversations=self.conv)
+        s.history = list(self.history)
+        t = rt.Turn("Yes.", "en", 0.0)
+        with mock.patch.object(rt, "_command_reply", return_value=None):
+            rt.route(s, t)
+        self.assertEqual(t.text, "What palette should the editor default to?")
+        self.assertEqual(self.conv.current, self.sprite)  # answered in its own conversation
+        self.assertEqual(
+            [m["content"] for m in s.history[1:]], ["How big should the sprite be?", "ok."]
+        )
+
+    def test_a_recap_offer_lapses_on_anything_but_yes(self):
+        self.conv.after_turn(self.history, "And the tempo?", "[interrupted by the user]")
+        self.say("New conversation")
+        self.assertIn(
+            "got cut off", self.say("What were we talking about in the dub drums conversation?")
+        )
+        self.assertIsNone(
+            self.conv.take_replay("never mind, what time is it", self.history)
+        )  # the next turn, as route() sees it
+        self.assertIsNone(self.conv.take_replay("yes", self.history))
+
     def test_ordinary_requests_are_left_alone(self):
         for t in (
             "remember that I like jazz",
@@ -230,6 +279,97 @@ class CommandTests(Base):
                 for s in tools.select_schemas("go back to yesterday's chat about the drum loops")
             ],
         )
+
+
+class SidebarTests(Base):
+    def setUp(self):
+        super().setUp()
+        import julius.ui_bridge.events as ev
+        import julius.ui_bridge.panel as pn
+
+        self.pn = pn
+        hub = ev.EventHub()
+        self.sent = []
+        hub._send = lambda m: self.sent.append(m)
+        self.panel = pn.PanelHub(hub, base="http://127.0.0.1:1/t")
+        self.panel.conv_fn = self.conv.ensure
+        self.conv.on_change = self.panel.conversations
+        self.say("How big should the sprite be?")
+        self.a = self.conv.current
+        self.store.rename(self.a, "Sprite editor")
+        self.say("New conversation about drums")
+        self.say("Which tempo?")
+        self.b = self.conv.current
+
+    def op(self, **body):
+        from julius.conversations import channel
+
+        return channel.op(self.conv, body, busy=False, history=self.history)
+
+    def test_the_feed_lists_conversations_and_validates(self):
+        msg = [m for m in self.sent if m["type"] == "panel.conversations"][-1]
+        self.assertEqual(self.pn.validate(msg), [])
+        self.assertEqual(msg["current"], self.b)
+        self.assertEqual({c["id"] for c in msg["conversations"]}, {self.a, self.b})
+        self.assertEqual(self.panel.snapshot()["conversations"]["current"], self.b)
+
+    def test_sidebar_actions_by_id(self):
+        r = self.op(action="switch", id=self.a)
+        self.assertEqual((r["ok"], r["state"]["current"]), (True, self.a))
+        self.assertEqual(self.history[1]["content"], "How big should the sprite be?")
+        self.assertTrue(self.op(action="pin", id=self.b, on=True)["ok"])
+        self.assertTrue(self.store.get(self.b)["pinned"])
+        self.assertTrue(self.op(action="rename", id=self.b, title="Dub drums")["ok"])
+        self.assertIn(
+            "created a new project", self.op(action="move", id=self.b, project="music")["said"]
+        )
+        self.assertEqual(
+            self.op(action="move", id=self.a, project="Musik")["said"],
+            "Moved Sprite editor to the Music project.",
+        )
+        self.assertFalse(self.op(action="delete", id=self.b)["ok"])  # the sheet confirms first
+        self.assertTrue(self.op(action="delete", id=self.b, confirm=True)["ok"])
+        self.assertEqual(self.op(action="trash")["results"][0]["id"], self.b)
+        self.assertTrue(self.op(action="restore", id=self.b)["ok"])
+        hits = self.op(action="search", query="sprite")["results"]
+        self.assertEqual(hits[0]["id"], self.a)
+        self.assertFalse(self.op(action="switch", id=999)["ok"])
+        self.assertFalse(self.op(action="drop_tables")["ok"])
+
+    def test_a_switch_while_answering_waits_for_the_turn(self):
+        from julius.conversations import channel
+
+        r = channel.op(
+            self.conv, {"action": "switch", "id": self.a}, busy=True, history=self.history
+        )
+        self.assertEqual((r["said"], self.conv.current), ("after this answer", self.b))
+        self.conv.after_turn(self.history, "and the swing?", "Light swing.")
+        self.assertEqual(self.conv.current, self.a)
+        self.assertEqual(
+            self.store.messages(self.b)[-1]["content"], "Light swing."
+        )  # the answer stayed where it was asked
+
+    def test_cards_carry_their_conversation_and_are_kept_per_conversation(self):
+        for i in range(25):
+            self.panel.table({"title": f"t{i}", "unit": "", "columns": ["a"], "rows": [["1"]]})
+        self.assertTrue(
+            all(m.get("conv") == self.b for m in self.sent if m["type"] == "panel.table")
+        )
+        self.op(action="switch", id=self.a)
+        self.panel.table({"title": "sprite table", "unit": "", "columns": ["a"], "rows": [["1"]]})
+        kept = list(self.panel.cards.values())
+        self.assertEqual(sum(1 for c in kept if c["conv"] == self.b), 20)
+        self.assertEqual(sum(1 for c in kept if c["conv"] == self.a), 1)
+
+    def test_memory_used_lists_the_notes_with_their_scope(self):
+        self.say("Note for this chat: we picked 72 BPM")
+        items = self.conv.recall_items("which BPM did we pick")
+        self.assertEqual(items[0]["scope"], "conversation")
+        self.assertTrue(self.panel.memory_used(items, turn=3))
+        self.assertEqual(self.pn.validate(self.sent[-1]), [])
+        r = self.op(action="forget_note", id=items[0]["id"])
+        self.assertTrue(r["ok"])
+        self.assertEqual(self.conv.recall_items("which BPM did we pick"), [])
 
 
 class RuntimeTests(Base):

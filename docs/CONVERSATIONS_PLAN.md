@@ -1,7 +1,13 @@
-# Conversations sidebar: plan, and Half 1 (built)
+# Conversations sidebar: plan, Half 1 and Half 2 (built)
 
-Status: **Half 1 (the backend) is built**, 2026-11-16; Half 2 (the sidebar UI in the orb, the panel feed, `POST /v1/conversation`, cards per
-conversation, the "Memory used" chip) is not. Half 1 is voice and typed only:
+Status: **Half 1 (the backend) and Half 2 (the UI) are built**, 2026-11-16. Half 2: a collapsible sidebar in the panel (collapsed by
+default; Pinned, Inbox, then each project; search; + New; per row Rename, Pin, Move to… (a close project name first, a new project only when
+none is close), Delete… through a confirm sheet, to the trash; Trash with Restore), the current conversation's title in the panel header (it
+opens the sidebar too), cards kept and shown per conversation (the last 20 of each), and the "Memory used" chip (each note with its scope;
+Forget removes a chat or project note, and asks Julius to forget a fact about you). The same panel frame serves the attached, split and
+detached layouts. Feed: `panel.conversations`, `panel.memory_used`, and `conv` on every card; channel: `POST /v1/conversation`.
+
+Half 1 is voice and typed only:Half 1 is voice and typed only:
 
 - `julius/conversations/store.py`: the SQLite store of section 2 (`~/.julius/conversations.sqlite3`, 0600, WAL, FTS5 over turns, titles and
   notes). Delete is the trash (restorable); nothing is purged.

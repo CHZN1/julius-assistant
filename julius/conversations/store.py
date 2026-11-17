@@ -149,7 +149,36 @@ class ConversationStore:
                 return dict(r)
         parts = [p for p in re.findall(r"[a-z0-9]+", w.lower()) if p not in _STOP]
         hits = [dict(r) for r in rows if parts and all(p in r["name"].lower() for p in parts)]
-        return hits[0] if len(hits) == 1 else None
+        if len(hits) == 1:
+            return hits[0]
+        return self.close_project(w, rows) if not hits else None
+
+    @staticmethod
+    def close_project(words: str, rows: list) -> dict | None:
+        """A project whose name is close to his words ("Julias" -> Julius, "sprite" -> Sprites, "music stuff" -> Music): the closest one when
+        it is clearly closest, else None."""
+        import difflib
+
+        want = re.sub(r"[^a-z0-9 ]+", "", words.lower()).strip()
+        if not want:
+            return None
+        scored = []
+        for r in rows:
+            name = r["name"].lower()
+            score = difflib.SequenceMatcher(None, want, name).ratio()
+            for (
+                w
+            ) in want.split():  # one of his words close to the whole name, or to one of its words
+                for n in [name, *name.split()]:
+                    if len(w) >= 3 and len(n) >= 3:
+                        score = max(score, difflib.SequenceMatcher(None, w, n).ratio() - 0.05)
+            scored.append((score, dict(r)))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        if not scored or scored[0][0] < 0.78:
+            return None
+        if len(scored) > 1 and scored[1][0] >= scored[0][0] - 0.04:
+            return None  # two equally close: not a guess
+        return scored[0][1]
 
     def projects(self) -> list[dict]:
         return [

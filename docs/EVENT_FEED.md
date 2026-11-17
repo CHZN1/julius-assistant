@@ -38,6 +38,10 @@ Data for a side panel (research results, file previews, charts, tables and image
 | `panel.images` | `title`, `question`, `images` `[{n, image, alt, page_url, page_title}]` | "show the images": the pictures of a research card as a gallery of their own |
 | `panel.update` | `target` (a card's `panel_id`), `images?` (more images, numbered after the card's existing ones), `note?`, `items?` (more file rows, numbered after the existing ones), `shown?`, `more?`, `status?` (a file card's new status), `summary?`, `after?`, `export?`, `small?`, `settings?`, `palette?`, `editing?` (a sprite card after an edit: the new pictures and settings in place) | pieces that arrive late: fetched images, the rows revealed by "show more", a plan being completed, cancelled or undone |
 | `panel.clear` | `scope` (`all` or `card`), `target|null`, `reason` (`new_topic`, `dismissed`, `expired`, `done`) | remove one card or all |
+| `panel.conversations` | `current` (id or null), `title`, `project`, `projects` `[{id, name, pinned}]`, `conversations` `[{id, title, project, pinned, updated, n}]` (pinned first, then newest; empty ones left out), `trash` (count) | the conversation list changed (a turn was kept, a title or summary arrived, a sidebar or voice action). Not a card: the orb's sidebar and the panel header's title come from it; the latest is also in the hello snapshot as `conversations` |
+| `panel.memory_used` | `items` `[{id, scope (global, project, conversation), label, text}]` | the notes the brain was given for this turn (empty clears the chip). Not a card: the panel's "Memory used" chip |
+
+Every card also carries `conv`: the id of the conversation it was made in. The orb shows the current conversation's cards; the backend keeps the last 20 cards of each conversation in memory (120 in all).
 
 `summary` and each finding's `claim` may use a tiny markdown subset, which a UI renders as text nodes (never as HTML): `**bold**`, `*italic*`, `` `code` ``, `- ` bullet lines and `1. ` numbered lines; paragraphs are separated by a blank line, and everything else is plain text. Line breaks are kept in those two fields only.
 

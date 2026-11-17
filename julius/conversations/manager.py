@@ -30,7 +30,31 @@ SUMMARY_SYSTEM = (
     "Write 3 to 5 short plain sentences: what was asked, what was decided or made, and anything left open. No preamble, no lists."
 )
 TITLE_SYSTEM = "Give a short title (2 to 5 words, no quotes, no final full stop) for a conversation that starts with these messages. Plain words only."
-RECAP_SYSTEM = "In 2 or 3 short spoken sentences, say what this earlier conversation between Roy and Julius was about, addressed to Roy ('we talked about...'). No lists."
+RECAP_SYSTEM = (
+    "In 2 or 3 short spoken sentences, say what this earlier conversation between Roy and Julius was about, addressed to Roy ('we talked about...'). "
+    "Say only what the messages show; never guess at anything missing or unanswered. No lists."
+)
+CUT_OFF = ("Response stopped by user.", "[interrupted by the user]")
+REPLAY_S = 180  # how long "want me to answer it now?" waits for a yes
+
+
+def cut_off(rows: list[dict]) -> str | None:
+    """His last question when its answer never came: stopped, interrupted, or no answer recorded. None when it was answered."""
+    import json as _json
+
+    users = [i for i, r in enumerate(rows) if r["role"] == "user"]
+    if not users:
+        return None
+    i = users[-1]
+    meta = {}
+    try:
+        meta = _json.loads(rows[i].get("meta") or "{}") or {}
+    except (TypeError, ValueError):
+        meta = {}
+    after = [r for r in rows[i + 1 :] if r["role"] == "assistant"]
+    if meta.get("cancelled") or not after or after[0]["text"].strip() in CUT_OFF:
+        return rows[i]["text"]
+    return None
 
 
 def haiku(system: str, text: str, max_tokens: int = 250) -> str:
@@ -86,10 +110,18 @@ class Conversations:
         self.fresh_pending = False  # switch to "no conversation yet" (the next turn starts one)
         self.pending_delete: tuple[int, float] | None = None
         self.choices: list[dict] = []
+        self.pending_replay: tuple[int, str, float] | None = (
+            None  # (conversation, his cut-off question, until)
+        )
         self.command_turn = (
             False  # this turn was a conversation command: not recorded in any conversation
         )
         self._busy: set[tuple[str, int]] = set()
+        self.lock = threading.RLock()  # the turn thread and the sidebar's channel thread
+        self.on_change: Callable[[dict], None] | None = (
+            None  # the sidebar feed (panel.conversations)
+        )
+        self.last_items: list[dict] = []  # the notes given to the brain this turn ("Memory used")
 
     # ---- the current conversation ----
     def info(self) -> dict | None:
@@ -125,6 +157,11 @@ class Conversations:
         self, history: list[dict], user: str, answer: str, meta: dict | None = None
     ) -> None:
         """Called once a turn has finished: record it (unless it was a conversation command), then apply a pending switch."""
+        with self.lock:
+            self._after_turn(history, user, answer, meta)
+        self.changed()
+
+    def _after_turn(self, history: list[dict], user: str, answer: str, meta: dict | None) -> None:
         try:
             if self.command_turn:
                 self.command_turn = False
@@ -177,6 +214,7 @@ class Conversations:
             log.event("conversations_" + kind + "_failed", error=type(exc).__name__)
         finally:
             self._busy.discard(job)
+            self.changed()
 
     def make_title(self, cid: int) -> str:
         rows = self.store.turns(cid, 12)
@@ -225,24 +263,58 @@ class Conversations:
             "- " + x for x in lines
         )
 
-    def notes_block(self, text: str) -> str:
+    def recall_items(self, text: str) -> list[dict]:
         """Project and conversation notes that share words with his request: narrower scope first, capped, about 400 tokens at most."""
         c = self.info()
         if c is None:
-            return ""
-        picked = []
+            return []
+        out, size = [], 0
         for scope, sid in (("conversation", c["id"]), ("project", c["project_id"])):
             for m in self.store.recall(text, scope, sid, CAPS[scope]):
-                picked.append(
-                    f"({'this chat' if scope == 'conversation' else c['project'] + ' project'}) {m['text']}"
-                )
-        out, size = [], 0
-        for p in picked:
-            if size + len(p) > NOTE_CHARS:
-                break
-            out.append(p)
-            size += len(p)
-        return ("Notes that may be relevant:\n" + "\n".join("- " + x for x in out)) if out else ""
+                if size + len(m["text"]) > NOTE_CHARS:
+                    return out
+                size += len(m["text"])
+                label = "this chat" if scope == "conversation" else c["project"] + " project"
+                out.append({"id": m["id"], "scope": scope, "label": label, "text": m["text"]})
+        return out
+
+    def notes_block(self, text: str) -> str:
+        self.last_items = self.recall_items(text)
+        if not self.last_items:
+            return ""
+        return "Notes that may be relevant:\n" + "\n".join(
+            f"- ({it['label']}) {it['text']}" for it in self.last_items
+        )
+
+    # ---- the sidebar ----
+    def state(self) -> dict:
+        """What the sidebar shows: the current conversation, the projects, the conversations (pinned and newest first), the trash count."""
+        c = self.info()
+        return {
+            "current": c["id"] if c else None,
+            "title": (c["title"] or "Untitled") if c else "New conversation",
+            "project": c["project"] if c else "",
+            "projects": self.store.projects(),
+            "conversations": [
+                x for x in self.store.list(limit=200) if x["n"] > 0 or (c and x["id"] == c["id"])
+            ],
+            "trash": len(self.store.list(trash=True, limit=500)),
+        }
+
+    def changed(self) -> None:
+        if self.on_change is None:
+            return
+        try:
+            self.on_change(self.state())
+        except Exception as exc:
+            log.event("conversations_feed_failed", error=type(exc).__name__)
+
+    def apply_now(self, cid: int | None, history: list[dict]) -> None:
+        """A sidebar switch while Julius is idle: at once (while he is answering, switch() waits for the turn to end)."""
+        with self.lock:
+            self.current, self.pending_switch, self.fresh_pending = cid, None, False
+            self.store.set_kv("current", str(cid or ""))
+            history[:] = history[:1] + (self.store.messages(cid, HISTORY_MESSAGES) if cid else [])
 
     # ---- actions (voice commands and the conversations tool) ----
     def new(self, title: str = "", project: str | None = None) -> str:
@@ -310,25 +382,70 @@ class Conversations:
             return said
         self.choices = []
         name = c["title"] or "that conversation"
-        s = self.store.summary(c["id"])
-        if s:
-            return f"In {name} ({when(c['updated'])}): {s['text']}"
         rows = self.store.turns(c["id"], 16)
-        if self.llm is not None and rows:
+        question = cut_off(rows)
+        body = self._recap_body(c, rows, question)
+        if question is None:
+            return (
+                f"In {name} ({when(c['updated'])}): {body}"
+                if body
+                else f"{name} has nothing in it yet."
+            )
+        self.pending_replay = (c["id"], question, time.time() + REPLAY_S)
+        cut = f"you asked {_quote(question)} and it got cut off before I answered. Want me to answer it now?"
+        if body:
+            return f"In {name} ({when(c['updated'])}): {body} Then {cut}"
+        return f"In {name} ({when(c['updated'])}), {cut}"
+
+    def _recap_body(self, c: dict, rows: list[dict], question: str | None) -> str:
+        """What the answered part of the conversation was about: its summary, a Haiku recap of the messages, or his questions quoted."""
+        if (
+            question is not None
+        ):  # leave the cut-off exchange out: nothing is guessed about an answer that never came
+            last = max(i for i, r in enumerate(rows) if r["role"] == "user")
+            rows = rows[:last]
+        s = self.store.summary(c["id"])
+        if s and question is None:
+            return s["text"]
+        if not rows:
+            return ""
+        if self.llm is not None:
             try:
                 out = self.llm(RECAP_SYSTEM, _transcript(rows, 4000), 160)
                 if out:
-                    return f"In {name} ({when(c['updated'])}): {out}"
+                    return out
             except Exception as exc:
                 log.event("conversations_recap_failed", error=type(exc).__name__)
         asked = [r["text"] for r in rows if r["role"] == "user"][-3:]
-        if not asked:
-            return f"{name} has nothing in it yet."
-        return (
-            f"In {name} ({when(c['updated'])}) you asked: "
-            + "; ".join(_quote(a) for a in asked)
-            + "."
-        )
+        return ("You asked: " + "; ".join(_quote(a) for a in asked) + ".") if asked else ""
+
+    def take_replay(self, text: str, history: list[dict]) -> str | None:
+        """ "Yes" to "want me to answer it now?": switch to that conversation now (the turn has not been answered yet) and return his
+        cut-off question, to be answered as this turn. None otherwise (and the offer lapses on anything else)."""
+        if self.pending_replay is None:
+            return None
+        cid, question, until = self.pending_replay
+        self.pending_replay = None
+        from julius.conversations.commands import YES
+
+        if time.time() > until or not YES.match(text or ""):
+            return None
+        rows = self.store.turns(cid, HISTORY_MESSAGES + 2)
+        if rows and rows[-1]["role"] == "assistant" and rows[-1]["text"].strip() in CUT_OFF:
+            rows = rows[:-1]
+        if rows and rows[-1]["role"] == "user" and rows[-1]["text"] == question:
+            rows = rows[:-1]  # the question is asked again as this turn
+        self.current, self.pending_switch, self.fresh_pending = cid, None, False
+        self.store.set_kv("current", str(cid))
+        msgs = [
+            {"role": r["role"], "content": r["text"]}
+            for r in rows
+            if r["role"] in ("user", "assistant") and r["text"].strip() not in CUT_OFF
+        ]
+        while msgs and msgs[0]["role"] != "user":
+            msgs.pop(0)
+        history[:] = history[:1] + msgs[-HISTORY_MESSAGES:]
+        return question
 
     def rename(self, title: str) -> str:
         c = self.info()
@@ -349,18 +466,25 @@ class Conversations:
         c = self.info()
         if c is None:
             c = self.store.get(self.ensure())
+        return self.move_to(c, project)
+
+    def move_to(self, c: dict, project: str) -> str:
+        """Into the project his words name: an existing one with a close name first; a new project only when nothing is close (and says so)."""
         name = re.sub(
             r"^(?:the|my|our)\s+|\s+project$", "", project.strip(" .!?"), flags=re.I
         ).strip()
         if not name:
             return "Which project? Say move this to the, then the project's name."
         found = self.store.find_project(name)
-        made = found is None
-        self.store.move(c["id"], found["name"] if found else name)
-        p = found["name"] if found else name
-        return f"Moved {c['title'] or 'this conversation'} to the {p} project" + (
-            " (a new project)." if made else "."
-        )
+        what = c["title"] or "this conversation"
+        if found is None:
+            name = (
+                name[:1].upper() + name[1:] if name.islower() else name
+            )  # spoken words arrive in lower case
+            self.store.move(c["id"], name)
+            return f"No project is close to {name}, so I created a new project, {name}, and moved {what} into it."
+        self.store.move(c["id"], found["name"])
+        return f"Moved {what} to the {found['name']} project."
 
     def ask_delete(self) -> str:
         c = self.info()

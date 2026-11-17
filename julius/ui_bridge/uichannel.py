@@ -9,6 +9,8 @@ A tiny HTTP server on 127.0.0.1 (default port 8775), JSON in, JSON out, no third
   POST /v1/sprite  {"id": "...", "edits": {layer: {"x,y": palette index or -1}}}   pixel edits from the editor window, palette-locked
   POST /v1/typed/edit    {"id": "...", "text": "..."}   change a typed message that has not been picked up yet (409 when too late)
   POST /v1/typed/cancel  {"id": "..."}                  cancel it
+  POST /v1/conversation {"action": "switch" | "new" | "rename" | "pin" | "move" | "delete" | "restore" | "trash" | "search" | "list" | "forget_note", ...}
+                         the conversations sidebar: the same actions as the voice commands (delete only after the sidebar's own confirm sheet);
   POST /v1/sprite/edit  {"id": "...", "ops": ["bigger beard", ...]}   the sprite card's buttons: applied and rendered at once, the new picture back;
                    no turn, no transcript, no speech, no model (its own rate limit, so fast clicking is fine)
   GET  /v1/ping                                     authenticated liveness check
@@ -196,6 +198,16 @@ class Channel:
                 raise Refused(400, why)
             self.audit("sprite_post", 200)
             return 200, {"ok": True}
+        if method == "POST" and route == "/v1/conversation":
+            body = self._read_json(headers, body_reader)
+            action = str(body.get("action") or "")
+            if not re.fullmatch(r"[a-z_]{2,20}", action):
+                raise Refused(400, "bad action")
+            res = self._handler("conversation", "conversations are not available")(body)
+            if not res.get("ok"):
+                raise Refused(400, str(res.get("error") or "refused"))
+            self.audit("conversation", 200, action=action)  # never titles or search words
+            return 200, res
         if method == "POST" and route == "/v1/photo":
             data = self._read_photo(headers, body_reader)
             res = self._handler("photo", "photos are not available")(data, "auto=1" in path)

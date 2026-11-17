@@ -157,6 +157,7 @@ class BrainTurn:
             scoped = conv.notes_block(self.user_text)
             if scoped:
                 notes = (notes + "\n\n" if notes else "") + scoped
+        self.show_memory_used(conv)
         if s.drop_stage is not None:  # files dropped on the orb: a labelled, data-only selection
             block = s.drop_stage.model_block()
             if block:
@@ -198,6 +199,30 @@ class BrainTurn:
             self.messages = conversation_messages(
                 self.messages, s.memory_context, vision_enabled=s.vision_enabled
             )
+
+    def show_memory_used(self, conv: object) -> None:
+        """The "Memory used" chip: every note given to the brain this turn, with its scope (empty clears it)."""
+        s = self.s
+        hub = getattr(s, "panel_hub", None)
+        if hub is None:
+            return
+        try:
+            items = list(getattr(conv, "last_items", None) or []) if conv is not None else []
+            mem = s.memory
+            ids = list(getattr(mem, "last_used", None) or []) if mem is not None else []
+            if ids:
+                items += [
+                    {
+                        "id": int(r["id"]),
+                        "scope": "global",
+                        "label": "about you",
+                        "text": str(r["text"]),
+                    }
+                    for r in mem.store.get(ids)
+                ]
+            hub.memory_used(items, turn=s.turn)
+        except Exception as exc:  # the chip must never break a turn
+            log.event("memory_used_failed", error=type(exc).__name__)
 
     def prepare_inference(self) -> None:
         """Check for cancellation; run the caller's pre-inference hook once."""
