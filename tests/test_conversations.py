@@ -313,7 +313,8 @@ class SidebarTests(Base):
         self.assertEqual({c["id"] for c in msg["conversations"]}, {self.a, self.b})
         self.assertEqual(self.panel.snapshot()["conversations"]["current"], self.b)
         self.assertEqual(
-            msg["messages"], [{"who": "you", "text": "Which tempo?"}, {"who": "julius", "text": "ok."}]
+            msg["messages"],
+            [{"who": "you", "text": "Which tempo?"}, {"who": "julius", "text": "ok."}],
         )  # the transcript beside the orb, when this one is opened
 
     def test_sidebar_actions_by_id(self):
