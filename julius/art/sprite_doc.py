@@ -739,6 +739,11 @@ EDIT_HELP = (
 
 
 # ---- the session: the current sprite, its card, undo and redo ------------------------------------------
+def state_of(doc: dict) -> str:
+    """The editable state of a sprite (parameters and pixel edits), to tell whether it changed since it was saved."""
+    return json.dumps([doc.get("params"), doc.get("edits")], sort_keys=True)
+
+
 class Studio:
     """The sprites of this session (in memory only, the last 20), which one is being edited, and its undo / redo history."""
 
@@ -748,6 +753,17 @@ class Studio:
         self.current = ""
         self.undo: dict[str, list] = {}
         self.redo: dict[str, list] = {}
+        self.saved: dict[
+            str, tuple[str, str]
+        ] = {}  # sprite id -> (its .julius-sprite path, its state when saved or opened)
+
+    def mark_saved(self, doc: dict, path: str) -> None:
+        self.saved[doc["id"]] = (str(path), state_of(doc))
+
+    def saved_path(self, doc: dict) -> str | None:
+        """The .julius-sprite file that holds this sprite as it is now, or None (never saved, or edited since)."""
+        hit = self.saved.get(doc["id"])
+        return hit[0] if hit and hit[1] == state_of(doc) else None
 
     def add(self, doc: dict, card: str = "") -> None:
         self.docs[doc["id"]] = doc

@@ -173,6 +173,39 @@ class LiveTranscript(unittest.TestCase):
         self.assertIn("the camera selfie is the current image", note)
         self.assertIn("Julius made 4 sprites this session", session_state.block(""))
 
+    def test_the_second_live_session_naming_and_the_main_sprite(self):
+        # 2026-11-16 evening: "Save as Roy's main sprite" fell through to the brain, which said "I don't have a way to save a sprite"
+        art_tool.image_style("dropped", style="sprite")
+        for said, name in (
+            ("Save as Roy's main sprite.", "Roy's main sprite"),
+            ("Save it as Sunday Roy.", "Sunday Roy"),
+            ("Save this as Pixel Roy.", "Pixel Roy"),
+            ("Call it Bob.", "Bob"),
+            ("Name it Lou.", "Lou"),
+        ):
+            out = self.shortcut(self.hear(said))
+            self.assertIn(f"in a folder called {name}.", out or "", said)
+        # the brain's own way to save (any wording the patterns miss): a tool, so it never says it can't
+        from julius.brain import tools
+
+        self.assertIn("Saved to", tools.save_card(name="Roy brain save"))
+        self.assertIn(
+            "never say you can't",
+            next(x for x in tools.SCHEMAS if x["function"]["name"] == "save_card")["function"][
+                "description"
+            ],
+        )
+
+        # "Make this my main sprite." pins the current one (already saved as Roy brain save: no second copy)
+        out = commands.handle("Make this my main sprite.")
+        self.assertEqual(out, "Roy brain save is now your main sprite.")
+        art_tool.image_style("dropped", style="sprite", palette="nes")
+        out = commands.handle("Set as main sprite.")
+        self.assertIn("is now your main sprite. It replaces Roy brain save.", out)
+        self.assertIn("Opened your main sprite", commands.handle(self.hear("Open my main sprite.")))
+        self.assertEqual(sd.STUDIO.get()["palette"], "nes")
+        self.assertIn("Main sprite:", session_state.block(""))
+
     def test_a_bare_undo_with_nothing_this_session_never_touches_old_files(self):
         ran = []
         c = UndoCoordinator(

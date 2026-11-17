@@ -72,6 +72,14 @@ def block(last_reply: str = "") -> str:
             + "; ".join(f"{_when(t)} {text}" for t, _k, text in list(_actions)[-8:])
             + "."
         )
+    if lines:
+        from julius.art import tool as art_tool
+
+        main = art_tool.main_sprite()
+        if main:
+            lines.append(
+                f"Main sprite: {main[0]} (body, clothing and animation start from it unless he names another; 'open my main sprite' opens it)."
+            )
     if "?" in last_reply:
         lines.append(
             "You asked a clarifying question last turn: do not ask another. Act on the most likely reading (toward the current image or sprite) and say how to undo it."

@@ -220,8 +220,14 @@ MORE_RE = re.compile(
     r"(?:\s+(?:files?|items?|results?|rows?))?[\s.!?]*$",
     re.I,
 )
+_SAVE_OBJ = r"(?:it|this|that|the\s+sprite|this\s+sprite|that\s+sprite|my\s+sprite|the\s+card|this\s+card|that\s+card|this\s+one|the\s+picture|this\s+picture)"
 SAVE_AS_RE = re.compile(
-    r"^\W*(?:please\s+|can you\s+|could you\s+)?save\s+(?:it|this|that|the\s+sprite|this\s+sprite|my\s+sprite|this\s+card|the\s+card)\s+(?:as|under(?:\s+the\s+name)?|called|named)\s+[\"']?(.{1,60}?)[\"']?[\s.!?]*$",
+    rf"^\W*(?:please\s+|can you\s+|could you\s+|now\s+)?(?:save|store|keep)(?:\s+{_SAVE_OBJ})?\s+(?:as|under(?:\s+the\s+name)?|called|named|with\s+the\s+name)\s+[\"'“]?(.{{1,60}}?)[\"'”]?(?:,?\s+please)?[\s.!?]*$",
+    re.I,
+)
+# "call it Sunday Roy", "name it Sunday Roy": naming is saving under that name ("call it a day" is not a name)
+CALL_IT_RE = re.compile(
+    rf"^\W*(?:please\s+|can you\s+|could you\s+|let'?s\s+|now\s+)?(?:call|name|title)\s+{_SAVE_OBJ}\s+(?!a\s+day\b|a\s+night\b|quits\b|even\b|off\b)[\"'“]?(.{{1,60}}?)[\"'”]?(?:,?\s+please)?[\s.!?]*$",
     re.I,
 )
 SAVE_WHAT_RE = re.compile(
@@ -382,6 +388,28 @@ def card_by_words(panel: Any, what: str) -> dict | None:
         if ok:
             return c
     return None
+
+
+def save_named(
+    panel: Any, files: Any, cfg_value: str | None, name: str | None, what: str | None = None
+) -> str:
+    """Save with a name (the brain's save_card tool and every "save as X" / "call it X"): the card his words describe, else the newest
+    sprite card, else the newest picture card, else the newest card. A name only applies to pictures (a research card keeps its dated name)."""
+    name = (name or "").strip().strip("\"'“”").strip() or None
+    card = card_by_words(panel, what) if what else None
+    if what and card is None:
+        return f"I don't have a {what.lower()} from this session to save."
+    if card is None and name:
+        card = card_by_words(panel, "sprite")
+        if card is None and panel is not None:
+            with panel._lock:
+                arts = [c for c in panel.cards.values() if c.get("type") == "panel.art"]
+            card = arts[-1] if arts else None
+        if card is None:
+            return "I don't have a sprite or picture from this session to save under that name."
+    if card is not None and card.get("type") == "panel.art":
+        return save_art_card(card, files, cfg_value, name=name)
+    return save_card(panel, files, cfg_value, card=card)
 
 
 def save_card(
@@ -547,7 +575,7 @@ def save_art_card(
         base = saved_dir(cfg_value)
         base.mkdir(parents=True, exist_ok=True)
         stamp = time.strftime("%Y-%m-%d %H%M", time.localtime(now()))
-        if card.get("kind") == "sprite":
+        if card.get("kind") == "sprite" or name:
             fname = sprite_folder_name(name, now())
         else:
             fname = f"{stamp} {_slug(card.get('title', 'pixel art'))}"
@@ -575,9 +603,9 @@ def save_art_card(
             ):  # the layers, parameters and pixel edits, to reopen and keep editing
                 if name:
                     doc["name"] = folder.name
-                (folder / f"{folder.name}.julius-sprite").write_text(
-                    sprite_doc.dumps(doc), encoding="utf-8"
-                )
+                fpath = folder / f"{folder.name}.julius-sprite"
+                fpath.write_text(sprite_doc.dumps(doc), encoding="utf-8")
+                sprite_doc.STUDIO.mark_saved(doc, str(fpath))
         else:
             (folder / "pixel-art.png").write_bytes(export[0])
             (folder / "pixel-art-1x.png").write_bytes(small[0])
@@ -700,14 +728,11 @@ def handle(
         return open_source(panel, n, m.group(2), opener)
     if SAVE_RE.match(t):
         return save_card(panel, files, saved_cfg)
-    m = SAVE_AS_RE.match(t)
-    if m:  # "save it as Sunday Roy": the newest sprite card, in a folder with that name
-        card = card_by_words(panel, "sprite")
-        if card is None:
-            return (
-                "Naming a save works for sprites. I don't have a sprite from this session to save."
-            )
-        return save_art_card(card, files, saved_cfg, name=m.group(1))
+    m = SAVE_AS_RE.match(t) or CALL_IT_RE.match(t)
+    if m and re.fullmatch(r"(?:my\s+|the\s+)?main(?:\s+(?:sprite|one))?", m.group(1).strip(), re.I):
+        m = None  # "save as main sprite" is making it the main sprite (the art commands)
+    if m:  # "save it as Sunday Roy", "save as Roy's main sprite", "call it Sunday Roy": a folder with that name
+        return save_named(panel, files, saved_cfg, m.group(1))
     m = SAVE_WHAT_RE.match(t)
     if m:
         card = card_by_words(panel, m.group(1))

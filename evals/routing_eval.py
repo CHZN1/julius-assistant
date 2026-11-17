@@ -115,6 +115,26 @@ def shortcut(text, sb, ctx, turn, case_history=None):
             "ok": True,
             "detail": "camera",
         }
+    from julius.art import tool as art_tool
+    from julius.ui_bridge import panel_emit as pe
+
+    if (
+        pe.SAVE_RE.match(text)
+        or pe.SAVE_WHAT_RE.match(text)
+        or (
+            (pe.SAVE_AS_RE.match(text) or pe.CALL_IT_RE.match(text))
+            and not art_tool.SET_MAIN.match(text)
+        )
+    ):  # "save this card", "save as Roy's main sprite", "call it Bob": the panel commands, before the brain
+        return {"path": "shortcut", "tool": "save_card", "args": "", "ok": True, "detail": "save"}
+    if art_tool.SET_MAIN.match(text):  # "make this my main sprite": before the brain
+        return {
+            "path": "shortcut",
+            "tool": "sprite_edit",
+            "args": "main",
+            "ok": True,
+            "detail": "main sprite",
+        }
     from julius.runtime import heard
 
     last = next(

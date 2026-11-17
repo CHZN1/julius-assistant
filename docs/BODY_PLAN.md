@@ -2,6 +2,8 @@
 
 Status: plan only, 2026-11-16. It extends the editable sprite document (`julius/art/sprite_doc.py`): the head stays exactly as it is; a body and clothes are more layers on the same canvas, with the same rules (parameters re-render, palette locked, per-layer pixel edits, undo/redo, `.julius-sprite` files). Nothing generative: every pixel is drawn by code from parameters, measured from the user's photo, or drawn by the user in the editor.
 
+**Which sprite**: body, clothing and animation start from his **main sprite** (`art.tool.main_sprite()`, set by "make this my main sprite") unless he names another.
+
 ## 1. The canvas and the rig
 
 - The head canvas (2 x head) becomes the top of a taller **figure canvas**: for a 24 px head, 48 x 96 (normal) or 48 x 72 (chibi). The head document is embedded unchanged; its `outline` keeps following the head.

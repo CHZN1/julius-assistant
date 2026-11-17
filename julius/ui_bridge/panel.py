@@ -114,6 +114,7 @@ SCHEMAS: dict[str, dict[str, str]] = {
         "palette": "list",
         "editing": "bool?",
         "sprite_id": "str?",
+        "main": "bool?",
     },
     "panel.camera": {"title": "str", "image": "str", "note": "str"},
     "panel.camera_open": {"autostart": "bool", "auto_use_s": "int"},
@@ -140,6 +141,7 @@ SCHEMAS: dict[str, dict[str, str]] = {
         "settings": "list?",
         "palette": "list?",
         "editing": "bool?",
+        "main": "bool?",
     },
     "panel.clear": {"scope": "str", "target": "str?", "reason": "str"},
 }
@@ -735,6 +737,7 @@ class PanelHub:
             ],
             "editing": bool(card.get("editing")),
             "sprite_id": re.sub(r"[^0-9a-f]", "", str(card.get("sprite_id") or ""))[:16],
+            "main": bool(card.get("main")),
         }
         return self._publish("panel.art", body, turn)
 
@@ -760,6 +763,8 @@ class PanelHub:
             patch["summary"] = clean(fields["summary"], CAPS["summary"])
         if "editing" in fields:
             patch["editing"] = bool(fields["editing"])
+        if "main" in fields:
+            patch["main"] = bool(fields["main"])
         seq, pid = self._next()
         msg = {
             "type": "panel.update",

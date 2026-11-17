@@ -956,13 +956,36 @@ SCHEMAS.append(
     _utility_schema(
         "sprite_edit",
         "Change the game sprite he already has (the newest one, or one he reopens): pass his words as change, e.g. 'bigger beard', 'taller afro', "
-        "'add glasses', 'close-set eyes', 'a cap', 'smile', 'lighter hair', 'undo', 'redo', 'reset', or 'open my sprite <name>' to reopen a saved "
-        ".julius-sprite file. Never for making a new sprite from a photo (that is image_style with style sprite).",
+        "'add glasses', 'close-set eyes', 'a cap', 'smile', 'lighter hair', 'undo', 'redo', 'reset', 'open my sprite <name>' to reopen a saved "
+        ".julius-sprite file, 'make this my main sprite' (in any words: 'the main one from now on') or 'open my main sprite'. Never for making a new sprite from a photo (that is image_style with style sprite).",
         {"change": "string"},
         ["change"],
     )
 )
 
+
+def save_card(name: str = "", what: str = "") -> str:
+    from julius import config
+    from julius.ui_bridge import charts, panel_emit
+
+    if charts._panel is None:
+        return "The side panel isn't available, so there is no card to save."
+    panel, files, _turn = charts._panel
+    saved = (config.load_config().get("ui") or {}).get("saved_dir")
+    return panel_emit.save_named(panel, files, saved, name or None, what or None)
+
+
+REGISTRY["save_card"] = save_card
+SCHEMAS.append(
+    _utility_schema(
+        "save_card",
+        "Save a card from the side panel to disk (his Julius Saved folder): the newest card, or the one 'what' names (sprite, pixel art, pencil, "
+        "selfie, chart, research). name is optional: 'save as Roy's main sprite', 'call it Sunday Roy', 'name it Bob' give the folder that name. "
+        "You can always save his sprites and pictures: call this, never say you can't. Never for making a sprite his MAIN sprite (that is sprite_edit).",
+        {"name": "string", "what": "string"},
+        [],
+    )
+)
 
 SCHEMAS.append(
     _utility_schema(
@@ -1154,6 +1177,10 @@ _SCHEMA_GROUPS = (
         ("file_request",),
     ),
     (CHART_WORDS, ("render_chart",)),
+    (  # "save as Roy's main sprite" matched only the memory tools, so the brain said it had no way to save a sprite
+        r"\bsav(?:e|ed|ing)\b|\b(?:call|name|title) (?:it|this|that)\b|\bmain sprite\b",
+        ("save_card", "sprite_edit", "image_style"),
+    ),
     (
         r"\bbpm\b|\btempo\b|beats per minute|what key|\bkey of\b|\bkey is\b|\banaly[sz]e (?:this|the|that|my)\b.*\b(?:track|song|file|audio|loop|sample|wav|mp3)|\.(?:wav|aiff?|mp3|flac|m4a)\b",
         ("analyze_audio",),

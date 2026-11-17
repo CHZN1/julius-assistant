@@ -131,7 +131,7 @@ META_LEAK = re.compile(
 TOOL_NARRATION = re.compile(
     r"\b(?:I|I'll|I will|I'm|I am|let me|let's)\b[^.!?]{0,40}?\b(?:call|run|us(?:e|ing)|invok|trigger)\w*\s+(?:the\s+|a\s+|my\s+)?(?:[\w-]+\s+){0,2}(?:tool|function)s?\b"
     r"|\b(?:tool|function) call\b|\bI need to actually (?:run|call|do|use|make|perform)\b|\b(?:let me|I'll|I will|I'm going to) (?:call|invoke)\b"
-    r"|\b[a-z]+_[a-z_]+\s*\(|\b(?:sprite_edit|image_style|escalate_to_planner|research_task|file_request|code_request|render_chart)\b",
+    r"|\b[a-z]+_[a-z_]+\s*\(|\b(?:sprite_edit|save_card|image_style|escalate_to_planner|research_task|file_request|code_request|render_chart)\b",
     re.I,
 )  # "I'll call the sprite tool now": what the model does is never narrated aloud
 

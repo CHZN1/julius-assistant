@@ -63,6 +63,12 @@ def handle(text: str) -> str | None:
         from julius.art import tool
 
         return tool.sprite_edit(m.group(2), m.group(1).lower())
+    from julius.art import tool as _tool
+
+    if _tool.SET_MAIN.match(
+        text or ""
+    ):  # "make this my main sprite", "set as main sprite": no model call
+        return _tool.sprite_edit("make this my main sprite")
     m = OPEN_SPRITE.match(text or "")
     if m and (
         re.search(r"\bsprite\b", text, re.I) or (m.group(1).strip() and _sprite_named(m.group(1)))

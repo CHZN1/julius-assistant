@@ -47,6 +47,7 @@ OWNERS = {
     "find_samples": "audio",
     "image_style": "art",
     "sprite_edit": "art",
+    "save_card": "art",
     "music_theory": "theory",
 }
 

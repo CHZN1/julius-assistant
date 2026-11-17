@@ -690,6 +690,7 @@ def _refresh_card(doc: dict) -> bool:
         "palette": sprite_doc.used_colors(doc),
         "summary": f"{doc['head']}×{doc['head']} head, being edited (palette locked)",
         "editing": True,
+        "main": is_main(doc),
     }
     pid = sprite_doc.STUDIO.cards.get(doc["id"])
     if pid and panel.update_art(pid, fields):
@@ -709,15 +710,20 @@ def _refresh_card(doc: dict) -> bool:
     return pid is not None
 
 
-def saved_sprites() -> list[tuple[str, float, Path]]:
-    """Every saved .julius-sprite in the saved-cards folder as (name, saved time, path), newest first. The name is its folder's name."""
+def _saved_base() -> Path:
     from julius import config
     from julius.ui_bridge import panel_emit
 
     try:
-        base = panel_emit.saved_dir((config.load_config().get("ui") or {}).get("saved_dir"))
+        return panel_emit.saved_dir((config.load_config().get("ui") or {}).get("saved_dir"))
     except Exception:
-        base = Path.home() / "Julius Saved"
+        return Path.home() / "Julius Saved"
+
+
+def saved_sprites() -> list[tuple[str, float, Path]]:
+    """Every saved .julius-sprite in the saved-cards folder as (name, saved time, path), newest first. The name is its folder's name."""
+
+    base = _saved_base()
     if not base.exists():
         return []
     out = []
@@ -776,29 +782,166 @@ def _open_sprite_file(name: str) -> tuple[dict, str]:
     pending = source._drop_source() if source._drop_source else None
     for item in (pending or {}).get("items", []):
         if item.get("kind") == "file" and str(item.get("path", "")).endswith(".julius-sprite"):
-            return sprite_doc.loads(Path(item["path"]).read_text(encoding="utf-8")), ""
+            p = Path(item["path"])
+            return _load_saved(p.stem, p), ""
     hits = matching_sprites(name)
     if not hits:
         raise sprite_doc.DocProblem(
             "I couldn't find a saved sprite by that name. Drop the .julius-sprite file on the orb, or say open my sprite for the newest one."
         )
     chosen = hits[0]
-    doc = sprite_doc.loads(chosen[2].read_text(encoding="utf-8"))
-    doc["name"] = chosen[0]
+    return _load_saved(chosen[0], chosen[2]), _others(name, hits, chosen)
+
+
+def _load_saved(name: str, path: Path) -> dict:
+    doc = sprite_doc.loads(path.read_text(encoding="utf-8"))
+    doc["name"] = name
+    sprite_doc.STUDIO.mark_saved(doc, str(path))
+    return doc
+
+
+def _others(name: str, hits: list, chosen: tuple) -> str:
     others = [r for r in (saved_sprites() if not _words(name) else hits)[1:4] if r[2] != chosen[2]][
         :3
     ]
-    extra = ""
-    if others:
-        extra = (
-            " Other recent ones: "
-            + "; ".join(f"{n} ({_when(t)})" for n, t, _ in others)
-            + ". Say open and the name for one of those."
-        )
-    return doc, extra
+    if not others:
+        return ""
+    return (
+        " Other recent ones: "
+        + "; ".join(f"{n} ({_when(t)})" for n, t, _ in others)
+        + ". Say open and the name for one of those."
+    )
 
 
 _OPEN = re.compile(r"^\s*(?:re)?open\b|\bload\b", re.I)
+
+# ---- the main sprite: one at a time, a pointer file next to the saves (never a copy) ------------------------
+MAIN_FILE = ".julius-main-sprite.json"
+MAIN_WORDS = re.compile(
+    r"\s*(?:up\s+)?(?:my\s+|the\s+)?main(?:\s+(?:sprite|one|character))?[\s.!?]*", re.I
+)
+SET_MAIN = re.compile(
+    r"^\W*(?:please\s+|can you\s+|could you\s+|now\s+)?(?:"
+    r"(?:make|set|mark|use|pin|save)\s+(?:(?:this|it|that|this\s+one|this\s+sprite|that\s+sprite|the\s+current\s+sprite|him)\s+)?(?:as\s+|to\s+be\s+|to\s+)?(?:my\s+|the\s+)?main(?:\s+(?:sprite|one|character))?"
+    r"|(?:this|it|that)(?:\s+one)?\s+is\s+(?:my|the)\s+(?:new\s+)?main(?:\s+(?:sprite|one|character))?"
+    r")(?:,?\s+please)?[\s.!?]*$",
+    re.I,
+)
+
+
+def _main_pointer() -> Path:
+    return _saved_base() / MAIN_FILE
+
+
+def main_sprite() -> tuple[str, Path] | None:
+    """(name, path) of his main sprite, or None. Body, clothing and animation work start from this one unless he names another."""
+    import json
+
+    try:
+        data = json.loads(_main_pointer().read_text(encoding="utf-8"))
+        path = (_saved_base() / str(data["path"])).resolve()
+        if _saved_base().resolve() not in path.parents or path.suffix != ".julius-sprite":
+            return None
+        return str(data.get("name") or path.parent.name), path
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def is_main(doc: dict) -> bool:
+    main = main_sprite()
+    hit = sprite_doc.STUDIO.saved.get(doc.get("id", ""))
+    return bool(main and hit and Path(hit[0]).resolve() == main[1])
+
+
+def set_main(doc: dict) -> str:
+    """ "Make this my main sprite": point the main-sprite file at this sprite's .julius-sprite (saving it first when it has no file yet, or
+    was edited since). One at a time; the reply says which one it replaced."""
+    import json
+
+    st = sprite_doc.STUDIO
+    path = st.saved_path(doc)
+    saved_now = ""
+    if path is None:
+        from julius.ui_bridge import charts, panel_emit
+
+        card = None
+        if charts._panel is not None:
+            panel = charts._panel[0]
+            with panel._lock:
+                card = panel.cards.get(st.cards.get(doc["id"], ""))
+        if card is None:
+            return "I need to save this sprite before it can be your main one, and its card is gone. Reopen it, then say make this my main sprite."
+        from julius import config
+
+        said = panel_emit.save_art_card(
+            card,
+            charts._panel[1],
+            (config.load_config().get("ui") or {}).get("saved_dir"),
+            name=doc.get("name") or None,
+        )
+        path = st.saved_path(doc)
+        if path is None:
+            return said
+        saved_now = f" I saved it first, as {Path(path).parent.name}."
+    old = main_sprite()
+    base = _saved_base()
+    target = Path(path).resolve()
+    if old and old[1] == target:
+        return f"{target.parent.name} is already your main sprite."
+    try:
+        rel = target.relative_to(base.resolve())
+    except ValueError:
+        return "Your main sprite has to be one saved in your Julius Saved folder."
+    tmp = _main_pointer().with_suffix(".tmp")
+    tmp.write_text(
+        json.dumps({"path": str(rel), "name": target.parent.name}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    tmp.replace(_main_pointer())
+    _badge(doc, old)
+    from julius.brain import session_state
+
+    session_state.record("main", f"made {target.parent.name} the main sprite")
+    log.event("sprite_main_set", replaced=bool(old))
+    replaced = f" It replaces {old[0]}." if old and old[1].exists() else ""
+    return f"{target.parent.name} is now your main sprite.{replaced}{saved_now}"
+
+
+def _badge(doc: dict, old: tuple[str, Path] | None) -> None:
+    """The Main badge: on this sprite's card, off the card of the one it replaced."""
+    from julius.ui_bridge import charts
+
+    if charts._panel is None:
+        return
+    panel = charts._panel[0]
+    st = sprite_doc.STUDIO
+    for sid, (p, _state) in list(st.saved.items()):
+        pid = st.cards.get(sid)
+        if not pid:
+            continue
+        if sid == doc["id"]:
+            panel.update_art(pid, {"main": True})
+        elif old and Path(p).resolve() == old[1]:
+            panel.update_art(pid, {"main": False})
+
+
+def open_main() -> str:
+    main = main_sprite()
+    if main is None:
+        return "You haven't picked a main sprite yet. Open or make one, then say make this my main sprite."
+    name, path = main
+    if not path.exists():
+        return f"Your main sprite, {name}, is no longer in your Julius Saved folder. Open another and say make this my main sprite."
+    doc = _load_saved(name, path)
+    sprite_doc.STUDIO.add(doc)
+    from julius.brain import session_state
+
+    session_state.record("open", f"opened the main sprite {name}")
+    shown = _refresh_card(doc)
+    return (
+        f"Opened your main sprite, {name}: {doc['head']} pixel head, {doc['palette']} palette. "
+        + ("It's in the panel; say what to change." if shown else "Say what to change.")
+    )
 
 
 def sprite_edit(change: str = "", sprite_id: str = "") -> str:
@@ -808,7 +951,10 @@ def sprite_edit(change: str = "", sprite_id: str = "") -> str:
     st = sprite_doc.STUDIO
     try:
         if _OPEN.search(text):
-            doc, extra = _open_sprite_file(_OPEN.sub("", text))
+            rest = _OPEN.sub("", text)
+            if MAIN_WORDS.fullmatch(rest):
+                return open_main()
+            doc, extra = _open_sprite_file(rest)
             st.add(doc)
             src = doc.get("source") or {}
             if src.get(
@@ -833,6 +979,10 @@ def sprite_edit(change: str = "", sprite_id: str = "") -> str:
                 return "That is an older sprite card; I'm editing the newest one. Make or reopen the sprite you want first."
             return "There's no sprite to edit yet. Say make me a sprite, or reopen a saved one."
         low = text.lower()
+        if SET_MAIN.match(text) or re.search(
+            r"\bmain\s+(?:sprite|one|character)\b|\bthe\s+main\b", low
+        ):
+            return set_main(doc)
         pal = re.search(r"\b(nes|pico\s?-?8|game\s?boy|gameboy)\b", low)
         if pal and not re.search(r"\b(?:undo|redo)\b", low):
             # "make it NES", "palette nes": the same face in another palette is a new sprite from the current picture (its colours are measured)
