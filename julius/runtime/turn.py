@@ -27,6 +27,7 @@ from julius.runtime.brain_turn import ask_streaming
 from julius.runtime.handlers import (
     handle_camera,
     handle_code,
+    handle_conversations,
     handle_files,
     handle_memory,
     handle_music,
@@ -182,6 +183,7 @@ def _command_reply(s: Session, text: str) -> str | None:
     return (
         handle_panel(s, text)
         or handle_camera(s, text)
+        or handle_conversations(s, text)
         or handle_vision(s, text)
         or handle_music(s, text)
         or handle_memory(s, text)
@@ -394,6 +396,12 @@ def finish_turn(s: Session, turn: Turn) -> None:
     report_timing(s, turn)
     if s.cloud_tracker is not None:
         log.console(s.cloud_tracker.status_line(), flush=True)
+    if (
+        s.conversations is not None
+    ):  # keep the turn in the current conversation; a switch asked for this turn happens now
+        s.conversations.after_turn(
+            s.history, turn.text, turn.answer, {"typed": turn.typed, "error": bool(turn.error)}
+        )
     trim_history(s.history)
     if s.validation_output:
         record_validation(s, turn, underflows)

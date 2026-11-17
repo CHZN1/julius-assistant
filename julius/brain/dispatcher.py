@@ -48,6 +48,7 @@ OWNERS = {
     "image_style": "art",
     "sprite_edit": "art",
     "save_card": "art",
+    "conversations": "conversations",
     "music_theory": "theory",
 }
 

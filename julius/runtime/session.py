@@ -96,6 +96,7 @@ class Session:
     code_session: CodeSession | None = None
     utility_session: UtilitySession | None = None
     undo_coordinator: UndoCoordinator | None = None
+    conversations: Any | None = None  # julius.conversations.manager.Conversations; None when off
     lowconf_gate: LowConfidenceGate | None = None
     wake_engine: WakeEngine | None = None
     wake_listener: Hotkey | None = None

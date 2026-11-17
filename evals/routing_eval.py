@@ -115,6 +115,18 @@ def shortcut(text, sb, ctx, turn, case_history=None):
             "ok": True,
             "detail": "camera",
         }
+    from julius.conversations import commands as conv_commands
+
+    if conv_commands.is_command(
+        text
+    ):  # new / open / rename / move a conversation: fixed patterns, before the brain
+        return {
+            "path": "shortcut",
+            "tool": "conversations",
+            "args": "",
+            "ok": True,
+            "detail": "conversation",
+        }
     from julius.art import tool as art_tool
     from julius.ui_bridge import panel_emit as pe
 

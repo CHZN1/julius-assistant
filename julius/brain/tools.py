@@ -987,6 +987,39 @@ SCHEMAS.append(
     )
 )
 
+conversations_manager = (
+    None  # the running Conversations (set at start-up); None in tests and when off
+)
+
+
+def conversations(
+    action: str = "", query: str = "", title: str = "", project: str = "", text: str = ""
+) -> str:
+    from julius.conversations import commands as conv_commands
+
+    return conv_commands.tool(conversations_manager, action, query, title, project, text)
+
+
+REGISTRY["conversations"] = conversations
+SCHEMAS.append(
+    _utility_schema(
+        "conversations",
+        "His saved conversations with you (chats, threads, grouped in projects). action: new (title optional, project optional), switch (query: words "
+        "about the conversation, e.g. 'yesterday's chat about the drum loops'; or project alone for that project's latest), recap (query: what was "
+        "said in that conversation, without switching), rename (title), pin, unpin, move (project), delete (asks him first; to the trash), restore "
+        "(query optional), list, current, note (text: a note kept for this conversation, or for its project when project is set). Never for facts "
+        "about him (remember_fact / forget_fact / list_memories) or files (file tools).",
+        {
+            "action": "string",
+            "query": "string",
+            "title": "string",
+            "project": "string",
+            "text": "string",
+        },
+        ["action"],
+    )
+)
+
 SCHEMAS.append(
     _utility_schema(
         "find_samples",
@@ -1177,6 +1210,10 @@ _SCHEMA_GROUPS = (
         ("file_request",),
     ),
     (CHART_WORDS, ("render_chart",)),
+    (
+        r"\b(?:conversations?|chats?|threads?)\b|\bprojects?\b|talking about|talked about",
+        ("conversations",),
+    ),
     (  # "save as Roy's main sprite" matched only the memory tools, so the brain said it had no way to save a sprite
         r"\bsav(?:e|ed|ing)\b|\b(?:call|name|title) (?:it|this|that)\b|\bmain sprite\b",
         ("save_card", "sprite_edit", "image_style"),

@@ -96,6 +96,19 @@ def handle_panel(s: Session, text: str) -> str | None:
         return None
 
 
+def handle_conversations(s: Session, text: str) -> str | None:
+    """ "New conversation", "open the conversation about sprites", "move this to the Julius project"...: fixed patterns, no model call."""
+    if getattr(s, "conversations", None) is None:
+        return None
+    try:
+        from julius.conversations import commands as conv_commands
+
+        return conv_commands.handle(s.conversations, text)
+    except Exception as exc:
+        log.console(f"  [conversation command failed: {type(exc).__name__}: {exc}]", flush=True)
+        return None
+
+
 def handle_camera(s: Session, text: str) -> str | None:
     """ "Take a photo", "take a selfie", "take a selfie and make it pixel art": opens the orb's camera window with the countdown running. No model call, no upload."""
     from julius.art import camera

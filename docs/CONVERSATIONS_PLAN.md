@@ -1,6 +1,21 @@
-# Conversations sidebar: plan (not built)
+# Conversations sidebar: plan, and Half 1 (built)
 
-Status: plan only, 2026-11-16. Nothing here is implemented. Numbers are from the live logs (`julius_memory/costs.jsonl`, last 14 days).
+Status: **Half 1 (the backend) is built**, 2026-11-16; Half 2 (the sidebar UI in the orb, the panel feed, `POST /v1/conversation`, cards per
+conversation, the "Memory used" chip) is not. Half 1 is voice and typed only:
+
+- `julius/conversations/store.py`: the SQLite store of section 2 (`~/.julius/conversations.sqlite3`, 0600, WAL, FTS5 over turns, titles and
+  notes). Delete is the trash (restorable); nothing is purged.
+- `julius/conversations/manager.py`: recording each finished turn in the current conversation; the last 8 messages of that conversation only;
+  switching after the turn ends; auto-titles after his third message and summaries past 16 messages, every 12 (one Haiku call each, in the
+  background, in the cost ledger); a recent conversation (12 hours) carries on after a restart. The brain gets the title and summary as an
+  uncached SESSION STATE block and matching project and conversation notes (capped, about 400 tokens) with his words.
+- `julius/conversations/commands.py`: the commands of section 5 (no model call), one question when two conversations match closely, delete
+  asks first; and the `conversations` brain tool for looser wording (routing cases r259 to r268).
+- Memory scopes: "remember for this project: ..." and "note for this chat: ..." go to the store's project and conversation scopes; global
+  memory stays in `memory.sqlite3` as before (it holds 0 facts today, so nothing to migrate).
+- Migration: `scripts/migrate_conversations.py` is a dry run by default (19 files, 916 turns, 81,816 bytes of text); the real run
+  (`--apply --yes`) waits for Roy's yes, copies only, verifies turns and bytes per file, and logs to `~/dev/MOVE_LOG.md`.
+- `[conversations] enabled = false` in julius.toml switches it off. Numbers are from the live logs (`julius_memory/costs.jsonl`, last 14 days).
 
 ## Where things are today
 

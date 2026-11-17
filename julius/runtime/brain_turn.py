@@ -150,6 +150,13 @@ class BrainTurn:
         """The request plus recalled notes and any dropped-file block (sent to the model only)."""
         s = self.s
         notes = s.memory.block(self.user_text) if s.memory is not None else ""
+        conv = getattr(s, "conversations", None)
+        if (
+            conv is not None
+        ):  # project and conversation notes that share words with his request (local search, capped)
+            scoped = conv.notes_block(self.user_text)
+            if scoped:
+                notes = (notes + "\n\n" if notes else "") + scoped
         if s.drop_stage is not None:  # files dropped on the orb: a labelled, data-only selection
             block = s.drop_stage.model_block()
             if block:
@@ -169,6 +176,11 @@ class BrainTurn:
             "",
         )
         state = session_state.block(last or "")
+        if (
+            conv is not None
+        ):  # the conversation's title and, past 16 messages, its summary: also after the cached prompt
+            here = conv.context_block()
+            state = (state + "\n\n" + here) if state and here else (state or here)
         note = session_state.reminder(last or "")
         if note:  # the short version rides with his words: Haiku acts on it there (it ignored the block alone)
             self.messages[-1] = {

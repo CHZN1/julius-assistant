@@ -335,6 +335,28 @@ def setup_memory(s: Session) -> None:
         log.console(f"  [memory: {len(context.splitlines())} lines]")
     s.system = build_system(s.vision_enabled, LLM_BACKEND == "cloud", context)
     s.history = [{"role": "system", "content": s.system}]
+    setup_conversations(s)
+
+
+def setup_conversations(s: Session) -> None:
+    """Conversations (julius/conversations): each turn is kept in the current conversation; a recent one carries on after a restart."""
+    if not (config.load_config().get("conversations") or {}).get("enabled", True):
+        return
+    try:
+        from julius.conversations.manager import Conversations
+        from julius.conversations.store import ConversationStore
+
+        s.conversations = Conversations(ConversationStore())
+        jt.conversations_manager = s.conversations
+        title = s.conversations.resume(s.history)
+        if title:
+            log.console(
+                f"  [conversation: carrying on {title!r}, {len(s.history) - 1} messages]",
+                flush=True,
+            )
+    except Exception as exc:
+        s.conversations = None
+        log.console(f"  [conversations unavailable: {type(exc).__name__}: {exc}]", flush=True)
 
 
 def setup_agents(s: Session) -> None:
