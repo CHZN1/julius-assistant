@@ -299,6 +299,10 @@ class Conversations:
                 x for x in self.store.list(limit=200) if x["n"] > 0 or (c and x["id"] == c["id"])
             ],
             "trash": len(self.store.list(trash=True, limit=500)),
+            "messages": [  # the transcript beside the orb shows these when he opens another conversation
+                {"who": "you" if m["role"] == "user" else "julius", "text": m["content"]}
+                for m in (self.store.messages(c["id"], 12) if c else [])
+            ],
         }
 
     def changed(self) -> None:

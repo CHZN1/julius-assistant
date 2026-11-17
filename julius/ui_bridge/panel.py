@@ -159,6 +159,7 @@ SCHEMAS: dict[str, dict[str, str]] = {
         "projects": "list",
         "conversations": "list",
         "trash": "int",
+        "messages": "list?",
     },
     "panel.memory_used": {"items": "list"},
 }
@@ -1167,9 +1168,17 @@ class PanelHub:
                     "updated": float(c.get("updated") or 0),
                     "n": int(c.get("n") or 0),
                 }
-                for c in (state.get("conversations") or [])[:200]
+                for c in (state.get("conversations") or [])[:150]
             ],
             "trash": int(state.get("trash") or 0),
+            "messages": [
+                {
+                    "who": "you" if m.get("who") == "you" else "julius",
+                    "text": clean(m.get("text"), 400),
+                }
+                for m in (state.get("messages") or [])[-12:]
+                if isinstance(m, dict)
+            ],
         }
         seq, pid = self._next()
         msg = {
