@@ -125,6 +125,12 @@ SCHEMAS: dict[str, dict[str, str]] = {
         "reveal": "list?",
     },
     "panel.camera": {"title": "str", "image": "str", "note": "str"},
+    "panel.planner": {
+        "title": "str",
+        "kind": "str",
+        "items": "list",
+        "note": "str?",
+    },  # the schedule as time blocks, or a reminder just set
     "panel.code": {  # a coding task's changes: the files and the diff of its scratch copy (nothing is in the project until a merge)
         "title": "str",
         "project": "str",
@@ -194,6 +200,7 @@ CARD_TYPES = {
     "panel.art",
     "panel.camera",
     "panel.code",
+    "panel.planner",
 }
 PER_CONVERSATION = 20
 MAX_KEPT = 120
@@ -340,6 +347,26 @@ CODE_STATUSES = ("added", "modified", "deleted")
 MAX_DIFF_LINES = 160
 
 
+PLANNER_KINDS = ("schedule", "reminder")
+PLANNER_ITEM_FIELDS = {
+    "day": "str",
+    "start": "num",
+    "end": "num?",
+    "label": "str",
+    "title": "str",
+    "kind": "str",
+}
+
+
+def _v_planner(msg: dict, errors: list[str]) -> None:
+    if msg["kind"] not in PLANNER_KINDS:
+        errors.append("panel.planner: bad kind")
+    if not 1 <= len(msg["items"]) <= 12:
+        errors.append("panel.planner.items: 1 to 12")
+    for i, it in enumerate(msg["items"][:12]):
+        _check(PLANNER_ITEM_FIELDS, it, f"items[{i}]", errors)
+
+
 def _v_code(msg: dict, errors: list[str]) -> None:
     for i, f in enumerate(msg["files"]):
         _check(CODE_FILE_FIELDS, f, f"files[{i}]", errors)
@@ -462,6 +489,7 @@ _EXTRA_CHECKS: dict[str, Callable[[dict, list[str]], None]] = {
     "panel.research": _v_research,
     "panel.files": _v_files,
     "panel.code": _v_code,
+    "panel.planner": _v_planner,
     "panel.update": _v_update,
     "panel.chart": _v_chart,
     "panel.table": _v_table,
@@ -877,6 +905,31 @@ class PanelHub:
             return card.get("conv") != self.conv_fn()
         except Exception:
             return False
+
+    def planner(self, card: dict, turn: int | None = None) -> str | None:
+        """A planner card: the schedule as time blocks, or a reminder just set. Times arrive formatted (`label`) in the user's time zone."""
+        items = []
+        for it in (card.get("items") or [])[:12]:
+            if not isinstance(it, dict) or not isinstance(it.get("start"), int | float):
+                continue
+            row = {
+                "day": clean(it.get("day"), 40),
+                "start": float(it["start"]),
+                "label": clean(it.get("label"), 40),
+                "title": clean(it.get("title"), 120),
+                "kind": clean(it.get("kind"), 20),
+            }
+            if isinstance(it.get("end"), int | float):
+                row["end"] = float(it["end"])
+            items.append(row)
+        body = {
+            "title": clean(card.get("title") or "Schedule", CAPS["title"]),
+            "kind": str(card.get("kind") or "schedule"),
+            "items": items,
+        }
+        if card.get("note"):
+            body["note"] = clean(card["note"], 200)
+        return self._publish("panel.planner", body, turn)
 
     def code(self, card: dict, turn: int | None = None) -> str | None:
         """A coding task's changes: the changed files and the unified diff of the scratch copy (cut to MAX_DIFF_LINES lines of 200 characters)."""

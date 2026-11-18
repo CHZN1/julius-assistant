@@ -103,7 +103,14 @@ def handle_conversations(s: Session, text: str) -> str | None:
     try:
         from julius.conversations import commands as conv_commands
 
-        return conv_commands.handle(s.conversations, text)
+        s.conversations.shown_items = None
+        said = conv_commands.handle(s.conversations, text)
+        hub = getattr(s, "panel_hub", None)
+        if said is not None and s.conversations.shown_items and hub is not None:
+            hub.memory_used(
+                s.conversations.shown_items, turn=s.turn
+            )  # the notes the answer came from
+        return said
     except Exception as exc:
         log.console(f"  [conversation command failed: {type(exc).__name__}: {exc}]", flush=True)
         return None

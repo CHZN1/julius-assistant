@@ -76,6 +76,15 @@ class UtilitySession:
             elif out["data"].get("apple", {}).get("ok"):
                 spoken += " Saved to Apple Reminders."
             out["data"]["speech_message"] = spoken
+            from julius.ui_bridge import planner_card
+
+            planner_card.show_reminder(
+                title,
+                due,
+                zone or self.timezone_name,
+                self.planner.clock(),
+                "Announced while Julius is running",
+            )
         return out
 
     def handle(self, text: str, turn: int) -> AgentResult | None:

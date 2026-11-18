@@ -189,3 +189,17 @@ class WholeReplySpeechTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WrittenTranscriptTests(unittest.TestCase):
+    """The transcript shows his words as written; only the voice gets the spoken form ("settings dot json", "three P M")."""
+
+    def test_display_text_keeps_file_names_and_times(self):
+        from julius.runtime.speech import display_text
+
+        self.assertEqual(
+            display_text("Open **settings.json** at `3 PM`."), "Open settings.json at 3 PM."
+        )
+        self.assertEqual(
+            display_text("It costs $155.20 — about 10%."), "It costs $155.20 — about 10%."
+        )

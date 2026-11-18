@@ -573,7 +573,17 @@ def planner() -> Any:
 
 def list_planner_items(kind: str | None = None) -> Any:
     # local times: the model read UTC timestamps back as UTC ("7 PM UTC") and asked for the time zone
-    return planner().list(kind, tz=os.environ.get("JULIUS_TIMEZONE", "America/Los_Angeles"))
+    tz = os.environ.get("JULIUS_TIMEZONE", "America/Los_Angeles")
+    out = planner().list(kind, tz=tz)
+    if out.get("ok") and kind in (
+        None,
+        "event",
+        "reminder",
+    ):  # the schedule as time blocks in the side panel
+        from julius.ui_bridge import planner_card
+
+        planner_card.show_schedule(out["data"]["items"], tz, planner().clock())
+    return out
 
 
 def convert_units(value: float, from_unit: str, to_unit: str) -> str:

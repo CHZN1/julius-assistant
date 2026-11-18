@@ -122,6 +122,9 @@ class Conversations:
             None  # the sidebar feed (panel.conversations)
         )
         self.last_items: list[dict] = []  # the notes given to the brain this turn ("Memory used")
+        self.shown_items: list[dict] | None = (
+            None  # notes a command answered from (a project recap), shown on the same chip
+        )
 
     # ---- the current conversation ----
     def info(self) -> dict | None:
@@ -411,7 +414,12 @@ class Conversations:
 
     def recap_project(self, p: dict) -> str:
         """A project's saved notes (newest first, up to five), else its latest conversation's recap. Never from the model's memory."""
-        notes = [m["text"] for m in self.store.memories("project", p["id"])][:5]
+        rows = self.store.memories("project", p["id"])[:5]
+        notes = [m["text"] for m in rows]
+        self.shown_items = [
+            {"id": int(m["id"]), "scope": "project", "label": p["name"], "text": m["text"]}
+            for m in rows
+        ]  # the "Memory used" chip
         if notes:
             items = [
                 re.sub(r"^decided:\s*", "", t, flags=re.I).rstrip(".") for t in reversed(notes)

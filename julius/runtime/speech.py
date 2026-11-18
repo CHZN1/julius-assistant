@@ -100,12 +100,26 @@ def _release_brain_for_voice(s: Session) -> None:
         close_backend()
 
 
-def _speak_piece(s: Session, text: str) -> None:
+def display_text(t: str) -> str:
+    """What the transcript shows: his words as written ("settings.json", "3 PM", "$155"), not the spoken form the voice gets
+    ("settings dot json", "three P M"). Only markdown marks are taken out."""
+    t = re.sub(r"\*\*|__|`|^#+\s*", "", t, flags=re.M)
+    t = re.sub(r"(?<!\w)\*(?=\S)|(?<=\S)\*(?!\w)", "", t)
+    return re.sub(r"\s+", " ", t).strip()
+
+
+def _show(s: Session, display: str) -> None:
+    if s.events_hub is not None and display:
+        s.events_hub.say("julius", display, s.turn)
+
+
+def _speak_piece(s: Session, text: str, show: bool = True) -> None:
+    raw = text
     text = clean_for_speech(text)
     if not text:
         return
-    if s.events_hub is not None:
-        s.events_hub.say("julius", text, s.turn)
+    if show:
+        _show(s, display_text(raw))
     if s.text_only:
         return  # typed in the orb with ui.typed_reply = text: shown, not spoken
     if s.self_echo is not None:
@@ -114,15 +128,14 @@ def _speak_piece(s: Session, text: str) -> None:
     _play(s, s.tts.synthesize(text, speed=_speed_for(text)))
 
 
-def speak_sentence(s: Session, text: str) -> None:
-    """Speak one sentence, split into clauses when it is long so the voice does not slow down."""
-    parts = split_long_sentence(text)
-    if len(parts) > 1:
-        for part in parts:
-            speak_sentence(s, part)
-        return
-    with s.microphone_gate.output():
-        _speak_piece(s, text)
+def speak_sentence(s: Session, text: str, display: str | None = None) -> None:
+    """Speak one sentence, split into clauses when it is long so the voice does not slow down. The transcript gets the sentence once,
+    as written (`display`, else the text itself without markdown)."""
+    if clean_for_speech(text):
+        _show(s, display_text(display if display is not None else text))
+    for part in split_long_sentence(text):
+        with s.microphone_gate.output():
+            _speak_piece(s, part, show=False)
 
 
 def speak(s: Session, text: str) -> None:
@@ -135,9 +148,21 @@ def speak(s: Session, text: str) -> None:
                 s.cancellation.check()
                 speak_sentence(s, text)
                 return
-            sentences = re.split(r"(?<=[.!?…])\s+", clean_for_speech(text))
-            for sentence in (x.strip() for x in sentences if x.strip()):
+            sentences = [
+                x.strip() for x in re.split(r"(?<=[.!?…])\s+", clean_for_speech(text)) if x.strip()
+            ]
+            written = [
+                x.strip() for x in re.split(r"(?<=[.!?…])\s+", display_text(text)) if x.strip()
+            ]
+            same = len(written) == len(
+                sentences
+            )  # the transcript shows the written sentence when the two line up
+            for i, sentence in enumerate(sentences):
                 s.cancellation.check()
-                speak_sentence(s, sentence)
+                shown = written[i] if same else None
+                if shown is None or shown == sentence:
+                    speak_sentence(s, sentence)
+                else:
+                    speak_sentence(s, sentence, display=shown)
     finally:
         s.tts.response_delivery_mode = previous
