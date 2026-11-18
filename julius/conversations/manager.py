@@ -380,10 +380,18 @@ class Conversations:
         return self.open(convs[0]["id"])
 
     def recap(self, words: str) -> str:
-        """ "What were we talking about in X": that conversation's summary, without switching to it."""
+        """ "What were we talking about in X": that conversation's summary, without switching to it. "In the X project": that project's notes."""
+        named = re.fullmatch(r"(?:the\s+|my\s+|our\s+)?(.+?)\s+project", words.strip(" .?!"), re.I)
+        if named:
+            p = self.store.find_project(named.group(1))
+            if p is not None:
+                return self.recap_project(p)
         c, said = self.find(words)
         if c is None:
             return said
+        return self._recap_conv(c)
+
+    def _recap_conv(self, c: dict) -> str:
         self.choices = []
         name = c["title"] or "that conversation"
         rows = self.store.turns(c["id"], 16)
@@ -400,6 +408,19 @@ class Conversations:
         if body:
             return f"In {name} ({when(c['updated'])}): {body} Then {cut}"
         return f"In {name} ({when(c['updated'])}), {cut}"
+
+    def recap_project(self, p: dict) -> str:
+        """A project's saved notes (newest first, up to five), else its latest conversation's recap. Never from the model's memory."""
+        notes = [m["text"] for m in self.store.memories("project", p["id"])][:5]
+        if notes:
+            items = [
+                re.sub(r"^decided:\s*", "", t, flags=re.I).rstrip(".") for t in reversed(notes)
+            ]
+            return f"In the {p['name']} project you decided: " + "; ".join(items) + "."
+        convs = self.store.list(p["id"], 1)
+        if not convs:
+            return f"The {p['name']} project has nothing in it yet."
+        return self._recap_conv(convs[0])
 
     def _recap_body(self, c: dict, rows: list[dict], question: str | None) -> str:
         """What the answered part of the conversation was about: its summary, a Haiku recap of the messages, or his questions quoted."""

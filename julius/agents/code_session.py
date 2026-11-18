@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import julius.agents.code_agent as ca
+from julius import log
 from julius.agents.code_agent import Task
 from julius.agents.file_agent import result
 from julius.agents.result import AgentResult
@@ -62,6 +63,32 @@ LOOSE_STATUS = re.compile(
 )
 PENDING_TTL = 90.0  # a start question stays open this long through a garbled or unrelated utterance
 FINISHED = {"done", "capped", "timeout", "failed", "cancelled"}
+
+
+def _code_card(t: Any, c: dict, what: str) -> None:
+    """The changes as a panel card (files and the diff of the scratch copy). The test line is the agent's own report, labelled as such."""
+    try:
+        from julius.ui_bridge import charts
+
+        if charts._panel is None:
+            return
+        panel, _files, turn_fn = charts._panel
+        said = re.search(r"[^.\n]*\btests?\b[^.\n]*[.]?", t.summary or "", re.I)
+        panel.code(
+            {
+                "title": f"Code: {Path(t.project).name}",
+                "project": Path(t.project).name,
+                "summary": f"Changed {what}. Nothing is in the project until you say merge it.",
+                "files": [
+                    {"path": n, "status": k} for k in ("added", "modified", "deleted") for n in c[k]
+                ],
+                "diff": ca.diff_lines(t),
+                "tests": f"The agent reports: {said.group(0).strip()}" if said else "",
+            },
+            turn=turn_fn(),
+        )
+    except Exception as exc:  # the card is extra: the spoken answer stands without it
+        log.event("code_card", error=type(exc).__name__)
 
 
 def _key(s: str) -> str:
@@ -375,6 +402,8 @@ class CodeSession:
         )
         what = ca.summarize(t) if t.work.is_dir() else "The copy is gone."
         agent = f" The agent said: {t.summary}" if t.summary else ""
+        if t.work.is_dir():
+            _code_card(t, c, what)
         return self._out(
             True,
             "changes",

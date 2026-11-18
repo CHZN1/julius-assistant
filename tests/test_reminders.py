@@ -73,3 +73,53 @@ class ServiceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ClockTimeWithoutDayTests(unittest.TestCase):
+    """ "Remind me at 3 to send the invoice": no day and no AM/PM (a live demo turn answered with a raw "Invalid isoformat string")."""
+
+    def setUp(self):
+        import tempfile
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        from julius.agents.utility_session import UtilitySession
+
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.z = ZoneInfo("America/Los_Angeles")
+        self.now = datetime(2026, 11, 17, 16, 20, tzinfo=self.z).timestamp()  # 4:20 PM
+        self.planner = Planner(Path(self.tmp.name), clock=lambda: self.now)
+        self.u = UtilitySession(self.planner)
+
+    def due(self):
+        from datetime import datetime
+
+        item = self.planner.list()["data"]["items"][-1]
+        return datetime.fromtimestamp(item["due"], self.z)
+
+    def test_at_3_means_3_pm_tomorrow_once_it_has_passed(self):
+        r = self.u.handle("Remind me at 3 to send the invoice", 1)
+        self.assertTrue(r["ok"], r)
+        self.assertEqual((self.due().day, self.due().hour), (18, 15))
+        self.assertIn("3:00 PM tomorrow", r["data"]["speech_message"])
+
+    def test_at_5_pm_is_still_today(self):
+        self.assertTrue(self.u.handle("remind me at 5 pm to call Sam", 1)["ok"])
+        self.assertEqual((self.due().day, self.due().hour), (17, 17))
+
+    def test_at_9_needs_am_or_pm(self):
+        r = self.u.handle("remind me at 9 to call Sam", 1)
+        self.assertFalse(r["ok"])
+        self.assertIn("AM or PM", r["message"])
+
+    def test_an_unreadable_time_is_a_sentence_not_an_exception(self):
+        r = self.u.handle("remind me at noonish to eat", 1)
+        self.assertFalse(r["ok"])
+        self.assertNotIn("isoformat", r["message"])
+
+    def test_the_list_shows_local_times(self):
+        self.u.handle("remind me at 5 pm to call Sam", 1)
+        msg = self.planner.list(tz="America/Los_Angeles")["message"]
+        self.assertIn("5:00 PM PST", msg)
+        self.assertNotIn("+00:00", msg)

@@ -21,6 +21,19 @@ def output(ok: bool, code: str, message: str, **data) -> dict[str, Any]:
     return dict(ok=ok, code=code, message=message, data=data)
 
 
+def _when(due: float, end: float | None, tz: str | None) -> str:
+    if not tz:
+        return datetime.fromtimestamp(due, UTC).isoformat()
+    from zoneinfo import ZoneInfo
+
+    z = ZoneInfo(tz)
+    a = datetime.fromtimestamp(due, z)
+    out = a.strftime("%a %b %-d, %-I:%M %p")
+    if end:
+        out += " to " + datetime.fromtimestamp(end, z).strftime("%-I:%M %p")
+    return out + " " + a.strftime("%Z")
+
+
 def utc_timestamp(value: Any) -> Any:
     parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     if parsed.tzinfo is None:
@@ -142,7 +155,8 @@ class Planner:
             overlaps=overlaps,
         )
 
-    def list(self, kind: str | None = None) -> dict[str, Any]:
+    def list(self, kind: str | None = None, tz: str | None = None) -> dict[str, Any]:
+        """Active items. With tz, times are local ("Wed Nov 18, 11:00 AM to 1:00 PM PST"); without it, ISO in UTC."""
         if kind is not None and kind not in {"reminder", "task", "event"}:
             raise ValueError("Unsupported planner category.")
         with self.db() as con:
@@ -156,7 +170,7 @@ class Planner:
             if not items
             else "\n".join(
                 f"{r['id']}: {r['kind']} — {r['title']}"
-                + (f" at {datetime.fromtimestamp(r['due'], UTC).isoformat()}" if r["due"] else "")
+                + (f" at {_when(r['due'], r['end'], tz)}" if r["due"] else "")
                 for r in items
             )
         )

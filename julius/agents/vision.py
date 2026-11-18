@@ -144,6 +144,14 @@ def window_status(
 
 def capture_camera(runner: Callable = subprocess.run, binary: Path | None = None) -> bytes:
     """One camera frame as JPEG bytes. The helper opens the camera, grabs a frame and closes it again; the temp file is removed straight away."""
+    demo = os.environ.get(
+        "JULIUS_DEMO_CAMERA_FILE"
+    )  # demo mode (scripts/demo_mode.py): a frame of the demo clip instead of the camera
+    if demo:
+        try:
+            return Path(demo).read_bytes()
+        except OSError:
+            raise VisionProblem("I couldn't take a picture.") from None
     folder = tempfile.mkdtemp(prefix="julius_look_")
     out = Path(folder) / "frame.jpg"
     try:

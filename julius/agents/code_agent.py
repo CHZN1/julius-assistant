@@ -497,6 +497,21 @@ def diff_stat(task: Task) -> tuple[int, int]:
     return ins, dele
 
 
+def diff_lines(task: Task, limit: int = 160) -> list[str]:
+    """The unified diff of the work folder against the baseline (new files included), for the panel's code card. [] when git cannot say."""
+    try:
+        _git(task.work, "add", "-A")
+        out = _git(task.work, "diff", "--cached", "--no-color", "-U2", "HEAD").stdout
+    except subprocess.CalledProcessError:
+        return []
+    keep = [
+        ln
+        for ln in out.splitlines()
+        if not ln.startswith(("diff --git", "index ", "new file mode", "deleted file mode", "--- "))
+    ]
+    return keep[:limit]
+
+
 def summarize(task: Task) -> str:
     c = changes(task)
     ins, dele = diff_stat(task)

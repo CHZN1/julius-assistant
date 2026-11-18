@@ -29,6 +29,34 @@ def _before_png(img: Any) -> bytes:
     return out.getvalue()
 
 
+def _hexgrid(im: Any, w: int, h: int) -> str:
+    """A picture as w*h pixels of 6 hex digits ("------" where it is clear)."""
+    px = (
+        im.convert("RGBA").resize((w, h), 0).getdata()
+    )  # nearest neighbour: sprite pixels stay exact
+    return "".join("------" if a < 128 else f"{r:02X}{g:02X}{b:02X}" for r, g, b, a in px)
+
+
+def reveal(photo: Any | None, sprite_png: bytes) -> list | None:
+    """The sprite card's sand reveal: the photo and the sprite as small grids, so the page can dissolve one into grains that settle as the other
+    (the page cannot read pixels from the panel file server). None when the sprite is larger than the grid allows."""
+    from PIL import Image
+
+    try:
+        spr = Image.open(io.BytesIO(sprite_png))
+        w, h = spr.size
+        if w > 64 or h > 64:
+            return None
+        canvas = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        if photo is not None:
+            ph = photo.copy().convert("RGB")
+            ph.thumbnail((w, h))
+            canvas.paste(ph, ((w - ph.width) // 2, (h - ph.height) // 2))
+        return [w, h, _hexgrid(canvas, w, h), _hexgrid(spr, w, h)]
+    except Exception:  # the reveal is decoration: a card without one is still a card
+        return None
+
+
 def _card(res: pixel.Result, before: Any, label: str, scale: int, crop: str = "") -> bool:
     from julius.ui_bridge import charts
 
@@ -500,6 +528,7 @@ def _sprite_card(
         "palette": sp.palette,
         "editing": False,
         "sprite_id": sp.doc["id"] if sp.doc else "",
+        "reveal": reveal(crop, sp.png(1)),
     }
     pid = panel.art(card, turn=turn_fn())
     if pid and sp.doc:
@@ -702,6 +731,9 @@ def _refresh_card(doc: dict) -> bool:
         "compare": "",
         "alt": f"{doc['head']} pixel head sprite",
         "sprite_id": doc["id"],
+        "reveal": reveal(
+            None, sprite_doc.png(doc, 1)
+        ),  # reopened: no photo, so the sprite forms out of loose sand
         **fields,
     }
     pid = panel.art(card, turn=turn_fn())

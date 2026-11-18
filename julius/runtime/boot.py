@@ -416,6 +416,8 @@ def build_session() -> Session:
         setup_stop_hotkey(s)
         setup_events_feed(s)
         setup_wake_hotkey(s)
+    elif s.demo:
+        setup_events_feed(s)  # demo mode: the orb is the only input
     setup_cloud_brain(s)
     setup_memory(s)
     setup_agents(s)

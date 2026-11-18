@@ -151,7 +151,9 @@ class UtilitySession:
     def _relative_reminder(self, t: Any, _low: str, _turn: int) -> Any:
         """ "remind me tomorrow at 9 am to X"."""
         relative = re.fullmatch(
-            r"remind me (today|tomorrow) at (\d{1,2})(?::(\d{2}))?\s*(am|pm)? to (.+)", t, re.I
+            r"remind me (?:(today|tomorrow) )?at (\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)? to (.+)",
+            t,
+            re.I,
         )
         if not relative:
             return None
@@ -160,14 +162,21 @@ class UtilitySession:
         minute = int(minute or 0)
         if minute > 59 or hour > 23 or period and not 1 <= hour <= 12:
             raise ValueError("Please use a valid clock time.")
-        if not period and hour <= 12:
-            raise ValueError("Please specify AM or PM for that clock time.")
         if period:
-            hour = hour % 12 + (12 if period.lower() == "pm" else 0)
+            hour = hour % 12 + (12 if period.lower().startswith("p") else 0)
+        elif (
+            1 <= hour <= 7
+        ):  # "at 3" means 3 PM: nobody sets a reminder for 3 in the morning without saying so (the reply says the time)
+            hour += 12
+        elif hour <= 12:
+            raise ValueError("Please specify AM or PM for that clock time.")
         local = datetime.fromtimestamp(self.planner.clock(), ZoneInfo(self.timezone_name))
-        target = local.replace(
-            tzinfo=None, hour=hour, minute=minute, second=0, microsecond=0
-        ) + timedelta(days=day.lower() == "tomorrow")
+        target = local.replace(tzinfo=None, hour=hour, minute=minute, second=0, microsecond=0)
+        passed = not day and target <= local.replace(
+            tzinfo=None
+        )  # no day given and the time has passed
+        if passed or (day and day.lower() == "tomorrow"):
+            target += timedelta(days=1)
         due = local_datetime(target.isoformat(), self.timezone_name).timestamp()
         return self._add("reminder", title, due)
 
@@ -176,7 +185,12 @@ class UtilitySession:
         if not dated:
             return None
         stamp, zone, title = dated.groups()
-        due = local_datetime(stamp, zone or self.timezone_name).timestamp()
+        try:
+            due = local_datetime(stamp, zone or self.timezone_name).timestamp()
+        except ValueError:
+            raise ValueError(
+                "I didn't catch the time. Say it like remind me at 3 PM to call Sam, or remind me tomorrow at 9 AM to call Sam."
+            ) from None
         return self._add("reminder", title, due, zone=zone or self.timezone_name)
 
     def _task(self, t: Any, _low: str, _turn: int) -> Any:

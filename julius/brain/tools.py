@@ -1,5 +1,6 @@
 """Tools Julius can call. Each returns a short string he reads aloud."""
 
+import os
 import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -571,7 +572,8 @@ def planner() -> Any:
 
 
 def list_planner_items(kind: str | None = None) -> Any:
-    return planner().list(kind)
+    # local times: the model read UTC timestamps back as UTC ("7 PM UTC") and asked for the time zone
+    return planner().list(kind, tz=os.environ.get("JULIUS_TIMEZONE", "America/Los_Angeles"))
 
 
 def convert_units(value: float, from_unit: str, to_unit: str) -> str:

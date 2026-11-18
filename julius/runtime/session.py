@@ -63,6 +63,9 @@ class Session:
     no_devices: bool = field(
         default_factory=lambda: os.environ.get("JULIUS_VALIDATION_NO_DEVICES") == "1"
     )
+    demo: bool = field(  # demo mode (scripts/demo_mode.py): no microphone or speaker, but the orb's feed and channel stay on
+        default_factory=lambda: os.environ.get("JULIUS_DEMO") == "1"
+    )
     validation_output: str | None = field(
         default_factory=lambda: os.environ.get("JULIUS_VALIDATION_OUTPUT")
     )

@@ -197,7 +197,7 @@ def ui_camera(s: Session, event: str) -> dict:
 
 def start_ui_channel(s: Session) -> None:
     """Open the orb's local channel (typed text and file drops), unless running without devices."""
-    if s.no_devices:
+    if s.no_devices and not s.demo:
         return
     try:
         s.drop_stage = dropstage.DropStage(

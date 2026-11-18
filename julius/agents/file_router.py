@@ -210,6 +210,27 @@ def _destination(
     }
 
 
+_GENERIC = {
+    "file",
+    "thing",
+    "stuff",
+    "item",
+    "everything",
+    "one",
+    "other",
+    "rest",
+    "new",
+    "old",
+    "same",
+    "folder",
+    "download",
+    "document",
+    "desktop",
+    "lot",
+    "bunch",
+}
+
+
 def _file_pattern(selection: str) -> str | list[str] | dict[str, str]:
     """The filename pattern the words select, or a clarification dict."""
     pattern = _ext_pattern(selection) or "*"
@@ -232,6 +253,15 @@ def _file_pattern(selection: str) -> str | list[str] | dict[str, str]:
         fragment = re.search(r"\b[\w.-]*[_-][\w.-]+\b", selection)
         if fragment:
             return "*" + fragment.group() + "*"
+        noun = re.search(
+            r"\b(?:the|my|all(?: the| my)?)\s+([a-z][a-z0-9]{2,30}?)s?\b(?!\s+(?:file|files)\b)",
+            selection,
+            re.I,
+        )
+        if (
+            noun and noun.group(1).lower() not in _GENERIC
+        ):  # "the invoices" -> *invoice* (the move is always previewed before the yes)
+            return f"*{noun.group(1).lower()}*"
         if not re.search(r"\b(all|everything)\b", selection, re.I):
             return {
                 "clarification": "Which files should I select? Name a file, file type, or say all files."

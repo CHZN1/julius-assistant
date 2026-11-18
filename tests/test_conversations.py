@@ -480,3 +480,30 @@ class MigrationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ProjectRecapTests(unittest.TestCase):
+    """ "What did we decide in the Julius project?" recaps that project's notes, not whichever conversation mentions the words."""
+
+    def test_project_notes(self):
+        import tempfile
+
+        from julius.conversations.manager import Conversations
+        from julius.conversations.store import ConversationStore
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        store = ConversationStore(Path(tmp.name) / "c.sqlite3")
+        conv = Conversations(store)
+        pid = store.project_id("Julius")
+        store.add_memory("project", pid, "Decided: the panel docks on the right.")
+        store.add_memory("project", pid, "Decided: the demo is 9:16.")
+        cur = store.new("Julius project folder talk")  # a conversation whose words match better
+        store.add(cur, "user", "which project folder for the Julius project?")
+        said = conv.recap("Julius project")
+        self.assertTrue(
+            said.startswith(
+                "In the Julius project you decided: the panel docks on the right; the demo is 9:16"
+            ),
+            said,
+        )

@@ -122,8 +122,17 @@ SCHEMAS: dict[str, dict[str, str]] = {
         "editing": "bool?",
         "sprite_id": "str?",
         "main": "bool?",
+        "reveal": "list?",
     },
     "panel.camera": {"title": "str", "image": "str", "note": "str"},
+    "panel.code": {  # a coding task's changes: the files and the diff of its scratch copy (nothing is in the project until a merge)
+        "title": "str",
+        "project": "str",
+        "summary": "str",
+        "files": "list",
+        "diff": "list",
+        "tests": "str?",
+    },
     "panel.camera_open": {"autostart": "bool", "auto_use_s": "int"},
     "panel.camera_status": {"enabled": "bool", "reason": "str", "cause": "str"},
     "panel.theory": {
@@ -184,6 +193,7 @@ CARD_TYPES = {
     "panel.theory",
     "panel.art",
     "panel.camera",
+    "panel.code",
 }
 PER_CONVERSATION = 20
 MAX_KEPT = 120
@@ -199,7 +209,12 @@ THEORY_CHORD_FIELDS = {
     "root": "int",
 }
 MAX_THEORY_CHORDS = 16
-FINDING_FIELDS = {"n": "int", "claim": "str", "cite": "list"}
+FINDING_FIELDS = {
+    "n": "int",
+    "claim": "str",
+    "cite": "list",
+    "verified": "bool?",
+}  # verified: false when its quote was not found on the cited page
 SOURCE_FIELDS = {"n": "int", "title": "str", "site": "str", "date": "str?", "url": "str"}
 ITEM_FIELDS = {
     "n": "int",
@@ -320,6 +335,20 @@ def _v_files(msg: dict, errors: list[str]) -> None:
         _check(ITEM_FIELDS, it, f"items[{i}]", errors)
 
 
+CODE_FILE_FIELDS = {"path": "str", "status": "str"}
+CODE_STATUSES = ("added", "modified", "deleted")
+MAX_DIFF_LINES = 160
+
+
+def _v_code(msg: dict, errors: list[str]) -> None:
+    for i, f in enumerate(msg["files"]):
+        _check(CODE_FILE_FIELDS, f, f"files[{i}]", errors)
+        if isinstance(f, dict) and f.get("status") not in CODE_STATUSES:
+            errors.append(f"files[{i}].status: bad status")
+    if len(msg["diff"]) > MAX_DIFF_LINES or not all(isinstance(x, str) for x in msg["diff"]):
+        errors.append("panel.code.diff: lines of text, at most 160")
+
+
 def _v_camera(msg: dict, errors: list[str]) -> None:
     if not IMAGE_REF.match(str(msg["image"])):
         errors.append("panel.camera.image: not a panel file reference")
@@ -363,6 +392,22 @@ MAX_ART_PALETTE = 64
 HEX6 = re.compile(r"^[0-9A-F]{6}$")
 
 
+REVEAL_MAX = 64  # the sand reveal's grids are at most 64 x 64
+REVEAL_PX = re.compile(r"^(?:[0-9A-F]{6}|-{6})*$")
+
+
+def reveal_ok(r: Any) -> bool:
+    """The sprite card's sand reveal: [w, h, photo, sprite], each grid w*h pixels as 6 hex digits ("------" is clear)."""
+    if not (isinstance(r, list) and len(r) == 4 and all(isinstance(x, int) for x in r[:2])):
+        return False
+    w, h = r[0], r[1]
+    return (
+        0 < w <= REVEAL_MAX
+        and 0 < h <= REVEAL_MAX
+        and all(isinstance(g, str) and len(g) == w * h * 6 and REVEAL_PX.match(g) for g in r[2:])
+    )
+
+
 def _v_art(msg: dict, errors: list[str]) -> None:
     for k in ("before", "after", "export", "small"):
         if not IMAGE_REF.match(str(msg[k])):
@@ -379,6 +424,8 @@ def _v_art(msg: dict, errors: list[str]) -> None:
         isinstance(c, str) and HEX6.match(c) for c in msg["palette"]
     ):
         errors.append("panel.art.palette: colours as 6 hex digits")
+    if msg.get("reveal") and not reveal_ok(msg["reveal"]):
+        errors.append("panel.art.reveal: [w, h, photo, sprite] grids of 6 hex digits per pixel")
 
 
 def _v_theory(msg: dict, errors: list[str]) -> None:
@@ -414,6 +461,7 @@ def _v_clear(msg: dict, errors: list[str]) -> None:
 _EXTRA_CHECKS: dict[str, Callable[[dict, list[str]], None]] = {
     "panel.research": _v_research,
     "panel.files": _v_files,
+    "panel.code": _v_code,
     "panel.update": _v_update,
     "panel.chart": _v_chart,
     "panel.table": _v_table,
@@ -485,7 +533,12 @@ def research_card(result: dict, images: list[dict] | None = None) -> dict:
         claim = clean_text(f.get("claim"), CAPS["claim"])
         n = index.get(clean_url(f.get("url")))
         if claim:
-            findings.append({"n": len(findings) + 1, "claim": claim, "cite": [n] if n else []})
+            item = {"n": len(findings) + 1, "claim": claim, "cite": [n] if n else []}
+            if (
+                "verified" in f
+            ):  # the research agent checked the claim's quote against the page it cites
+                item["verified"] = bool(f["verified"])
+            findings.append(item)
     imgs = []
     for im in (images or [])[:MAX_IMAGES]:
         if IMAGE_REF.match(str(im.get("image"))):
@@ -813,13 +866,47 @@ class PanelHub:
             "sprite_id": re.sub(r"[^0-9a-f]", "", str(card.get("sprite_id") or ""))[:16],
             "main": bool(card.get("main")),
         }
+        if reveal_ok(card.get("reveal")):
+            body["reveal"] = card["reveal"]
         return self._publish("panel.art", body, turn)
+
+    def _other_conversation(self, card: dict) -> bool:
+        if self.conv_fn is None or card.get("conv") is None:
+            return False
+        try:
+            return card.get("conv") != self.conv_fn()
+        except Exception:
+            return False
+
+    def code(self, card: dict, turn: int | None = None) -> str | None:
+        """A coding task's changes: the changed files and the unified diff of the scratch copy (cut to MAX_DIFF_LINES lines of 200 characters)."""
+        body = {
+            "title": clean(card.get("title") or "Code changes", CAPS["title"]),
+            "project": clean(card.get("project"), CAPS["title"]),
+            "summary": clean(card.get("summary"), CAPS["summary"]),
+            "files": [
+                {"path": clean(f.get("path"), 200), "status": str(f.get("status"))}
+                for f in (card.get("files") or [])[:40]
+                if isinstance(f, dict) and f.get("status") in CODE_STATUSES
+            ],
+            "diff": [
+                str(x).replace("\t", "    ")[:200]
+                for x in (card.get("diff") or [])[:MAX_DIFF_LINES]
+            ],
+        }
+        if card.get("tests"):
+            body["tests"] = clean(card["tests"], 200)
+        return self._publish("panel.code", body, turn)
 
     def update_art(self, target: str, fields: dict) -> bool:
         """A sprite card after an edit: new pictures, settings and palette in place (one card, not one per edit); folded into the remembered card."""
         with self._lock:
             card = self.cards.get(target)
         if card is None or card.get("type") != "panel.art":
+            return False
+        if self._other_conversation(
+            card
+        ):  # reopened in another conversation: that one gets its own card
             return False
         patch: dict[str, Any] = {}
         for k in ("after", "export", "small"):
