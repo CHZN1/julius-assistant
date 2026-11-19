@@ -195,6 +195,14 @@ def _demo_files(home: Path) -> None:
         home / "dev" / "export-tools"
     )  # the coding segment's project: the agent works on a scratch copy of it
     (proj / "tests").mkdir(parents=True, exist_ok=True)
+    (
+        proj / "export_tool.py"
+    ).write_text(  # the screen segment's real bug: "~" is never expanded, so the settings file is not found
+        "import json\nfrom pathlib import Path\n\n\ndef load_settings(path):\n    with open(path) as f:\n        return json.load(f)\n\n\n"
+        'if __name__ == "__main__":\n    settings = load_settings(Path("~/Exports/settings.json"))\n    print(settings["format"])\n'
+    )
+    (home / "Exports").mkdir(exist_ok=True)
+    (home / "Exports" / "settings.json").write_text('{"format": "png"}\n')
     (proj / "README.md").write_text(
         "# export-tools\n\nSmall scripts for my design exports in ~/Documents/Exports.\n"
     )

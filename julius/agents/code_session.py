@@ -39,6 +39,13 @@ IN_PROJECT = re.compile(
     r"\s+(?:in|on|for|inside)\s+(?:the\s+|my\s+)?(?P<p>[\w .-]+?)(?:\s+(?:project|folder|repo|repository))?\s*$",
     re.I,
 )
+FIX_IT = re.compile(
+    r"^(?:(?:can|could|would) you |please |ok(?:ay)?,? |now |go ahead and |julius,? )*(?:fix|solve|debug|repair) (?:it|that|this|them|the (?:error|bug|problem|issue|crash)|that (?:error|bug|problem))(?: for me)?(?: please| now)?[?.!]*$",
+    re.I,
+)
+CODE_FILE = re.compile(
+    r"\b[\w.-]+\.(?:py|js|ts|tsx|jsx|sh|rb|go|rs|swift|java|kt|c|cc|cpp|h|cs|php|lua)\b"
+)
 STATUS = re.compile(
     r"(?:how(?:'s| is)|what(?:'s| is)(?: the)? (?:status|state) of)\s+(?:the\s+)?(?:coding|code)\s+(?:task|agent)|(?:coding|code)\s+(?:task|agent)\s+(?:status|progress)",
     re.I,
@@ -226,6 +233,10 @@ class CodeSession:
             answered, out = self._answer_pending(text, lowered)
             if answered:
                 return out
+        if FIX_IT.match(lowered):  # "fix it" right after Julius read an error on the screen
+            fixed = self._fix_from_screen()
+            if fixed is not None:
+                return fixed
         m = START.match(lowered)
         if m:
             return self._start_command(m.group("goal").strip())
@@ -268,6 +279,37 @@ class CodeSession:
             )  # garbled / stray speech (his own preview heard back) must not lose the question; merge and discard stay strict
         self.pending = None  # an unrelated request cancels the question, as with files
         return False, None
+
+    def project_with(self, filename: str) -> str | None:
+        """The one project under the projects folder that has a file of this name (searched two levels down), else None."""
+        hits = []
+        for name in self.projects():
+            base = self.root / name
+            try:
+                if (
+                    any(base.glob(filename))
+                    or any(base.glob(f"*/{filename}"))
+                    or any(base.glob(f"*/*/{filename}"))
+                ):
+                    hits.append(name)
+            except OSError:
+                continue
+        return hits[0] if len(hits) == 1 else None
+
+    def _fix_from_screen(self) -> Any:
+        """Stage a fix for the error Julius just read on the screen, in the project that has the file it names. Starting still takes a yes."""
+        from julius.agents import vision
+
+        seen = vision.recent_screen()
+        if not seen:
+            return None
+        names = CODE_FILE.findall(seen["answer"] + " " + seen.get("question", ""))
+        project = next((p for p in (self.project_with(n) for n in names) if p), None)
+        goal = (
+            f"Fix the error I just saw on the screen. What it showed: {seen['answer']} "
+            "Reproduce it first, fix the cause (not the symptom), and add a test that fails before the fix and passes after it."
+        )
+        return self.stage(goal, project)
 
     def _start_command(self, goal: str) -> dict[str, str | bool | dict[str, float | str]]:
         cap = None

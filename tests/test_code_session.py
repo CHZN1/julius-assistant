@@ -268,3 +268,50 @@ class PlannerToolTests(FlowBase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FixWhatIsOnScreenTests(FlowBase):
+    """ "Read this error on my screen" then "fix it": the coding agent gets what was read, in the project that has the file named in it."""
+
+    def setUp(self):
+        super().setUp()
+        from julius.agents import vision
+
+        self.vision = vision
+        self.addCleanup(vision.LAST_SCREEN.clear)
+
+    def seen(self, answer, age=0):
+        self.vision.LAST_SCREEN.clear()
+        self.vision.LAST_SCREEN.update(
+            t=time.time() - age, question="read this error on my screen", answer=answer
+        )
+
+    def test_fix_it_stages_a_task_in_the_project_with_the_file(self):
+        (self.dev / "demo" / "export_tool.py").write_text("print(1)\n")
+        self.seen(
+            "Running python export_tool.py failed with a FileNotFoundError for ~/Exports/settings.json."
+        )
+        out = self.s.handle("Fix it")
+        self.assertEqual(out["code"], "preview", out)
+        self.assertIn("demo", out["message"])
+        task = ca.all_tasks()[0]
+        self.assertEqual((task.status, task.project.rstrip("/").split("/")[-1]), ("staged", "demo"))
+        self.assertIn("FileNotFoundError", task.goal)
+        self.assertIn("add a test", task.goal)
+        self.assertEqual(ca.running(), [])  # starting still takes its own yes
+
+    def test_without_a_recent_screen_look_fix_it_is_not_a_coding_command(self):
+        self.seen("an error in export_tool.py", age=3600)
+        self.assertIsNone(self.s.handle("fix it"))
+
+    def test_the_phrases(self):
+        for ok in (
+            "fix it",
+            "Can you fix that?",
+            "okay fix the error",
+            "please fix it for me",
+            "fix that bug",
+        ):
+            self.assertTrue(cs.FIX_IT.match(ok.lower().rstrip("?.!")), ok)
+        for no in ("fix my sleep schedule", "fix it later when you can and also email Sam"):
+            self.assertFalse(cs.FIX_IT.match(no), no)

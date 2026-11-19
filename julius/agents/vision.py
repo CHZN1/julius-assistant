@@ -15,6 +15,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -59,6 +60,17 @@ NUTRITION_RULE = (
     " The user is asking about nutrition: if a nutrition label is readable in the picture, read its numbers exactly and say they are from the "
     "label; otherwise give typical values per serving for what you see and say plainly that they are estimates."
 )
+
+
+LAST_SCREEN: dict = {}  # the last look at the screen or a window: {"t", "question", "answer"} ("fix it" hands it to the coding agent)
+SCREEN_MEMORY_S = 600
+
+
+def recent_screen(max_age: float = SCREEN_MEMORY_S) -> dict | None:
+    """What Julius last read on the screen, if it was in the last few minutes (else None)."""
+    if LAST_SCREEN and time.time() - LAST_SCREEN.get("t", 0) <= max_age:
+        return dict(LAST_SCREEN)
+    return None
 
 
 class VisionProblem(Exception):
@@ -459,6 +471,9 @@ def look(
         if not answer:
             return "I looked, but I couldn't tell what I was seeing."
         log.event("vision_look", source=req.source, tier=tier, usd=round(actual, 6))
+        if req.source in ("window", "screen"):
+            LAST_SCREEN.clear()
+            LAST_SCREEN.update(t=time.time(), question=req.question, answer=answer)
         if panel is not None and files is not None:
             card = {
                 "title": label,
