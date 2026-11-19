@@ -102,3 +102,10 @@ class Shop(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WholeSentences(unittest.TestCase):
+    def test_long_fields_end_on_a_sentence_never_mid_word(self):
+        t = "The body is pink. A second keyboard in the background is a pink and neon-yellow keytar-style instrument, possibly custom too."
+        self.assertEqual(vision._whole(t, 60), "The body is pink.")
+        self.assertFalse(vision._whole("word " * 80, 50).endswith("wor"))
