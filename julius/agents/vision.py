@@ -326,6 +326,15 @@ def ask_model(
     return text, costs.cost_of(tier, r.usage)
 
 
+def _whole(text: str, cap: int) -> str:
+    """At most cap characters, cut after a whole sentence (or a whole word), never inside a word."""
+    if len(text) <= cap:
+        return text
+    cut = text[:cap]
+    end = max(cut.rfind(". "), cut.rfind("; "))
+    return cut[: end + 1] if end > cap // 3 else cut[: cut.rfind(" ")].rstrip(",;") + "…"
+
+
 def identify(brain: Any, jpeg: bytes, question: str, source: str) -> tuple[dict, float]:
     """The item as {name, details, customized, confidence, search}, from one Sonnet look. {} when the model gave nothing usable."""
     raw, usd = ask_model(brain, "sonnet", jpeg, question, source, system=IDENTIFY)
@@ -335,7 +344,7 @@ def identify(brain: Any, jpeg: bytes, question: str, source: str) -> tuple[dict,
     except ValueError:
         d = {}
     d = {
-        k: " ".join(str(d.get(k) or "").split())[:200]
+        k: _whole(" ".join(str(d.get(k) or "").split()), 220)
         for k in ("name", "details", "customized", "confidence", "search")
     }
     if d["confidence"] not in ("high", "medium", "low"):
