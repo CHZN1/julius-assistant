@@ -332,7 +332,7 @@ def _whole(text: str, cap: int) -> str:
         return text
     cut = text[:cap]
     end = max(cut.rfind(". "), cut.rfind("; "))
-    return cut[: end + 1] if end > cap // 3 else cut[: cut.rfind(" ")].rstrip(",;") + "…"
+    return cut[: end + 1] if end > 0 else cut[: cut.rfind(" ")].rstrip(",;") + "…"
 
 
 def identify(brain: Any, jpeg: bytes, question: str, source: str) -> tuple[dict, float]:
