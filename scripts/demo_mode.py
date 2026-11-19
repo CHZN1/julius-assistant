@@ -186,6 +186,11 @@ def _demo_files(home: Path) -> None:
         p = ex / name
         Image.new("RGB", (320, 200), (30 + 40 * i, 80, 160 - 20 * i)).save(p)
         os.utime(p, (base + i * 1.7 * 86400, base + i * 1.7 * 86400))
+    drop = (
+        Path.home() / "dev" / "julius-demo" / "drop_src" / "mystery_keyboard.jpg"
+    )  # the redacted photo the shop segment drops on the orb
+    if drop.exists():
+        shutil.copy(drop, dl / "mystery_keyboard.jpg")
     proj = (
         home / "dev" / "export-tools"
     )  # the coding segment's project: the agent works on a scratch copy of it
