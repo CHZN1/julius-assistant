@@ -83,7 +83,10 @@ class Look:
     closely: bool = False
     question: str = ""
     shop: bool = (
-        False  # "what is this and where can I buy one": identify the item, then find it online
+        False  # identify the item, then find it online ("what is this and where can I buy one")
+    )
+    page: bool = (
+        False  # transcribe it word for word into a note ("save this page", julius/agents/pages.py)
     )
 
 
@@ -121,6 +124,19 @@ def parse(text: str, has_dropped: bool = False) -> Look | None:
     if not t or len(t) > 240:
         return None
     closely = bool(_CLOSELY.search(t))
+    from julius.agents import pages
+
+    if pages.is_save(
+        t
+    ):  # the camera, unless an image was just dropped and the words do not say camera
+        return Look(
+            "image"
+            if has_dropped and not _CAMERA.search(t) and "camera" not in t.lower()
+            else "camera",
+            True,
+            t,
+            page=True,
+        )
     if _SHOP.search(t) and (
         has_dropped or _CAMERA.search(t)
     ):  # identify it and find where to buy it: the closer (Sonnet) look
@@ -467,6 +483,12 @@ def look(
         est = estimate_usd(tier, w, h)
         if req.shop:
             return shop(req, brain, jpeg, w, h, label, panel, files, turn)
+        if req.page:
+            from julius.agents import pages
+
+            return pages.save_page(
+                brain, ask_model, jpeg, w, h, req.source, req.question, panel, files, turn, cfg
+            )
         answer, actual = ask_model(brain, tier, jpeg, req.question, req.source)
         if not answer:
             return "I looked, but I couldn't tell what I was seeing."

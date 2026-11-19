@@ -125,6 +125,15 @@ SCHEMAS: dict[str, dict[str, str]] = {
         "reveal": "list?",
     },
     "panel.camera": {"title": "str", "image": "str", "note": "str"},
+    "panel.page": {
+        "title": "str",
+        "kind": "str",
+        "image": "str",
+        "text": "str",
+        "saved": "str",
+        "words": "int",
+        "note": "str?",
+    },  # a page saved word for word, or its rewrite
     "panel.planner": {
         "title": "str",
         "kind": "str",
@@ -201,6 +210,7 @@ CARD_TYPES = {
     "panel.camera",
     "panel.code",
     "panel.planner",
+    "panel.page",
 }
 PER_CONVERSATION = 20
 MAX_KEPT = 120
@@ -358,6 +368,19 @@ PLANNER_ITEM_FIELDS = {
 }
 
 
+PAGE_KINDS = ("verbatim", "rewrite")
+MAX_PAGE_CHARS = 12000
+
+
+def _v_page(msg: dict, errors: list[str]) -> None:
+    if msg["kind"] not in PAGE_KINDS:
+        errors.append("panel.page: bad kind")
+    if msg["image"] and not IMAGE_REF.match(str(msg["image"])):
+        errors.append("panel.page.image: not a panel file reference")
+    if len(msg["text"]) > MAX_PAGE_CHARS:
+        errors.append("panel.page.text: too long")
+
+
 def _v_planner(msg: dict, errors: list[str]) -> None:
     if msg["kind"] not in PLANNER_KINDS:
         errors.append("panel.planner: bad kind")
@@ -490,6 +513,7 @@ _EXTRA_CHECKS: dict[str, Callable[[dict, list[str]], None]] = {
     "panel.files": _v_files,
     "panel.code": _v_code,
     "panel.planner": _v_planner,
+    "panel.page": _v_page,
     "panel.update": _v_update,
     "panel.chart": _v_chart,
     "panel.table": _v_table,
@@ -905,6 +929,21 @@ class PanelHub:
             return card.get("conv") != self.conv_fn()
         except Exception:
             return False
+
+    def page(self, card: dict, turn: int | None = None) -> str | None:
+        """A page saved word for word (kind verbatim, with the photo) or its rewrite (kind rewrite): the text and where the note was saved."""
+        img = str(card.get("image") or "")
+        body = {
+            "title": clean(card.get("title") or "Saved page", CAPS["title"]),
+            "kind": "rewrite" if card.get("kind") == "rewrite" else "verbatim",
+            "image": img if IMAGE_REF.match(img) else "",
+            "text": str(card.get("text") or "").replace("\x00", "")[:MAX_PAGE_CHARS],
+            "saved": clean(card.get("saved"), 300),
+            "words": int(card.get("words") or 0),
+        }
+        if card.get("note"):
+            body["note"] = clean(card["note"], 300)
+        return self._publish("panel.page", body, turn)
 
     def planner(self, card: dict, turn: int | None = None) -> str | None:
         """A planner card: the schedule as time blocks, or a reminder just set. Times arrive formatted (`label`) in the user's time zone."""

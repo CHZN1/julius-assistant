@@ -4,6 +4,7 @@ import contextlib
 import os
 import threading
 import time
+from pathlib import Path
 
 import julius.agents.files as jf
 import julius.brain.tools as jt
@@ -134,8 +135,17 @@ def handle_camera(s: Session, text: str) -> str | None:
 
 def handle_vision(s: Session, text: str) -> str | None:
     """ "What am I holding", "what's on my screen", "look at this image": one picture, only on request, answered by Claude vision and shown in a card."""
-    from julius.agents import vision
+    from julius.agents import pages, vision
 
+    form = pages.rewrite_form(text)
+    if form is not None:  # "rewrite it as bullet notes" right after a page was saved
+        try:
+            import julius.brain.cloud as jc
+
+            return pages.rewrite(jc.get_brain(), form, getattr(s, "panel_hub", None), s.turn)
+        except Exception as exc:
+            log.console(f"  [page rewrite failed: {type(exc).__name__}: {exc}]", flush=True)
+            return "I couldn't rewrite that page."
     req = vision.parse(text, has_dropped=bool(s.drop_stage and s.drop_stage.pending()))
     if req is None:
         return None
@@ -143,7 +153,8 @@ def handle_vision(s: Session, text: str) -> str | None:
         import julius.brain.cloud as jc
 
         cfg = config.load_config().get("vision") or {}
-        return vision.look(
+        before = pages.LAST_PAGE.get("t")
+        said = vision.look(
             req,
             brain=jc.get_brain(),
             panel=getattr(s, "panel_hub", None),
@@ -152,6 +163,18 @@ def handle_vision(s: Session, text: str) -> str | None:
             drop_stage=s.drop_stage,
             cfg=cfg,
         )
+        conv = getattr(s, "conversations", None)
+        if (
+            req.page and pages.LAST_PAGE.get("t") != before and conv is not None
+        ):  # so "what did that page say" can find the note later
+            with contextlib.suppress(Exception):
+                cid = conv.ensure() if hasattr(conv, "ensure") else None
+                conv.store.add_memory(
+                    "conversation",
+                    cid,
+                    f"Saved a page, {pages.LAST_PAGE['title']}, word for word to {pages.shown(Path(pages.LAST_PAGE['path']))}",
+                )
+        return said
     except Exception as exc:
         log.console(f"  [vision failed: {type(exc).__name__}: {exc}]", flush=True)
         return "I couldn't look at that."
