@@ -185,7 +185,9 @@ class CodeSession:
         criteria: str = "",
         cap: int | float | None = None,
         origin: str = "human",
+        spoken: str = "",
     ) -> dict[str, str | bool | dict[str, float | str]]:
+        """spoken: what to call the task out loud when the goal itself is long (the full goal still goes to the agent)."""
         if ca.running():
             return self._out(
                 False,
@@ -219,7 +221,7 @@ class CodeSession:
             else ""
         )
         message = (
-            f"I can start a coding task on {name}: {task.goal}. It works on a copy, spends at most ${task.cap_usd:.2f} and stops after {task.timeout_s // 60} minutes. "
+            f"I can start a coding task on {name}: {spoken or task.goal.rstrip('.')}. It works on a copy, spends at most ${task.cap_usd:.2f} and stops after {task.timeout_s // 60} minutes. "
             f"Nothing in the project changes unless you merge it later.{asked} Say yes to start or cancel."
         )
         return self._out(True, "preview", message, task=task.id, project=name, cap=task.cap_usd)
@@ -307,9 +309,9 @@ class CodeSession:
         project = next((p for p in (self.project_with(n) for n in names) if p), None)
         goal = (
             f"Fix the error I just saw on the screen. What it showed: {seen['answer']} "
-            "Reproduce it first, fix the cause (not the symptom), and add a test that fails before the fix and passes after it."
+            "Reproduce it first, fix the cause (not the symptom), and add a test that fails before the fix and passes after it"
         )
-        return self.stage(goal, project)
+        return self.stage(goal, project, spoken="fix that error and add a test that proves the fix")
 
     def _start_command(self, goal: str) -> dict[str, str | bool | dict[str, float | str]]:
         cap = None
