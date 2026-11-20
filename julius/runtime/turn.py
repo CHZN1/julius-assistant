@@ -180,7 +180,14 @@ def route(s: Session, turn: Turn) -> None:
     turn.routed = undo_said or read_back or _command_reply(s, turn.text)
 
 
+NARRATE = "Narrate:"
+
+
 def _command_reply(s: Session, text: str) -> str | None:
+    if s.demo and text.startswith(
+        NARRATE
+    ):  # demo mode only: the video's narration, said verbatim through the real voice
+        return text[len(NARRATE) :].strip() or None
     discussion = authority_discussion_reply(text)
     if discussion or incomplete_fragment(text):
         return discussion or NOT_CAUGHT

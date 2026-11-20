@@ -15,6 +15,10 @@ from julius import state
 from julius.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
+if os.environ.get(
+    "JULIUS_TTS_HF_HOME"
+):  # a caller whose HF_HOME is for other models (demo mode) points the voice at its own cache
+    os.environ["HF_HOME"] = os.environ["JULIUS_TTS_HF_HOME"]
 os.environ.setdefault("HF_HOME", str(ROOT / ".cache/huggingface-mlx-tts"))
 
 

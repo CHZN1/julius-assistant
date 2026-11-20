@@ -1,8 +1,11 @@
 """Speaking: one sentence at a time through the voice, the speaker and the microphone gate."""
 
+import json
+import os
 import re
 import time
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 import sounddevice as sd
@@ -76,6 +79,54 @@ def _play_on_one_stream(s: Session, audio: Iterator[Any]) -> None:
         audio.close()
 
 
+def _play_demo(s: Session, audio: Any, text: str) -> None:
+    """Demo mode, no speaker: the voice is made as usual (all of it first: it is made slower than it plays), then "played" silently in real
+    time so the orb's speaking FX follow the real audio (the level tap gets each 1/30 s as it would leave the speakers), and the utterance
+    is saved for the video's soundtrack (JULIUS_DEMO_SPEECH_DIR: one WAV per utterance, and speech.jsonl with its wall-clock start, length
+    and text)."""
+    import numpy as np
+
+    parts, rate = [], 0
+    for samples, sample_rate in audio:
+        if s.cancellation:
+            s.cancellation.check()
+        parts.append(np.asarray(samples, dtype=np.float32).reshape(-1))
+        rate = rate or int(sample_rate)
+    if not parts or not rate:
+        return
+    wav = np.concatenate(parts)
+    _note_audio(s)
+    t0, step = time.time(), max(1, rate // 30)
+    for i in range(0, len(wav), step):
+        if s.cancellation:
+            s.cancellation.check()
+        if s.ui_level_tap is not None:
+            s.ui_level_tap.out(wav[i : i + step], rate)
+        ahead = t0 + (i + step) / rate - time.time()
+        if ahead > 0:
+            time.sleep(ahead)
+    out_dir = os.environ.get("JULIUS_DEMO_SPEECH_DIR", "")
+    if out_dir:
+        import soundfile as sf
+
+        folder = Path(out_dir)
+        folder.mkdir(parents=True, exist_ok=True)
+        name = f"{t0:.3f}.wav"
+        sf.write(folder / name, wav, rate)
+        with (folder / "speech.jsonl").open("a") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "t": round(t0, 3),
+                        "dur": round(len(wav) / rate, 3),
+                        "text": text,
+                        "file": name,
+                    }
+                )
+                + "\n"
+            )
+
+
 def _play_chunks(s: Session, audio: Any) -> None:
     """Fallback: play each chunk to completion."""
     for samples, sample_rate in audio:
@@ -85,8 +136,10 @@ def _play_chunks(s: Session, audio: Any) -> None:
             sd.wait()
 
 
-def _play(s: Session, audio: Iterator[Any]) -> None:
-    if s.tts.backend == "qwen-mlx" and not s.no_devices and s.speech_player is not None:
+def _play(s: Session, audio: Iterator[Any], text: str = "") -> None:
+    if s.demo and s.no_devices:
+        _play_demo(s, audio, text)
+    elif s.tts.backend == "qwen-mlx" and not s.no_devices and s.speech_player is not None:
         _play_with_player(s, audio)
     elif s.tts.backend == "qwen-mlx" and not s.no_devices:
         _play_on_one_stream(s, audio)
@@ -125,7 +178,7 @@ def _speak_piece(s: Session, text: str, show: bool = True) -> None:
     if s.self_echo is not None:
         s.self_echo.note(text)
     _release_brain_for_voice(s)
-    _play(s, s.tts.synthesize(text, speed=_speed_for(text)))
+    _play(s, s.tts.synthesize(text, speed=_speed_for(text)), text)
 
 
 def speak_sentence(s: Session, text: str, display: str | None = None) -> None:

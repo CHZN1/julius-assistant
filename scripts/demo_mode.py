@@ -7,7 +7,8 @@ What keeps it apart from the real Julius:
 - HOME is RUN_DIR/home, so every ~/ path (state, conversations, research, saved cards, Downloads, Documents, the code agent's folders) is the
   sandbox's. JULIUS_STATE_DIR and JULIUS_MEMORY_DIR point inside it too. Your own files, conversations and memory are never opened.
 - Its own ports (feed 18765, UI channel 18775, panel files 18785), so it runs beside the real service without touching it.
-- No microphone or speaker (JULIUS_VALIDATION_NO_DEVICES): the demo is typed into the orb. Speech is still made (the light kokoro voice), so the orb
+- No microphone or speaker (JULIUS_VALIDATION_NO_DEVICES): the demo is typed into the orb. Speech is still made in Julius's real voice and played
+  silently in real time, so the orb speaks in sync, and each utterance is saved to RUN_DIR/speech for the soundtrack. "Narrate: ..." is said verbatim. The orb
   still shows Julius speaking. No Apple Calendar or Reminders connection, so nothing reaches your real calendar or notifications.
 - The camera is a demo clip (JULIUS_DEMO_CAMERA_FILE): "what am I holding" looks at a frame of it instead of the camera.
 - Spending goes on the real ledger (JULIUS_COSTS_FILE), so the daily cap still applies.
@@ -58,9 +59,15 @@ def env_for(run: Path) -> dict[str, str]:
             "JULIUS_COSTS_FILE": str(ROOT / "julius_memory" / "costs.jsonl"),
             "JULIUS_VALIDATION_NO_DEVICES": "1",
             "JULIUS_DEMO": "1",  # keeps the orb's feed and channel on without devices
-            "JULIUS_TTS": "kokoro",
+            "JULIUS_TTS": "qwen-mlx",  # Julius's real voice (the seed-1301 clone), as in the live service
+            "JULIUS_DEMO_SPEECH_DIR": str(
+                run / "speech"
+            ),  # every utterance saved as a WAV with its start time (the video's soundtrack)
             "HF_HOME": str(REAL_HOME / ".cache" / "huggingface"),  # the voice's weights, read only
             "HF_HUB_OFFLINE": "1",  # already downloaded: no network check
+            "JULIUS_TTS_HF_HOME": str(
+                ROOT / ".cache" / "huggingface-mlx-tts"
+            ),  # the voice's own weights (the live service's cache), read only
             "JULIUS_VISIOND": str(REAL_HOME / ".julius" / "bin" / "julius-visiond"),
             "PYTHONUNBUFFERED": "1",
         }

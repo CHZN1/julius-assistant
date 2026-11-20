@@ -199,7 +199,11 @@ def setup_events_feed(s: Session) -> None:
     try:
         from julius.ui_bridge import events
 
-        if s.duplex is None and s.speech_player is not None:
+        if (
+            s.demo and s.no_devices
+        ):  # demo mode plays the voice silently in real time (speech._play_demo) and meters it here
+            s.ui_level_tap = events.LevelTap()
+        elif s.duplex is None and s.speech_player is not None:
             s.ui_level_tap = events.LevelTap()
             previous = getattr(s.speech_player, "tap", None)
 
