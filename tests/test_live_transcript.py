@@ -130,6 +130,10 @@ class LiveTranscript(unittest.TestCase):
         art_tool.image_style("dropped", style="sprite")
         art_tool.sprite_edit("Add sunglasses and a cap.")
         self.assertIn("Saved to", self.shortcut("Save it as Sunday Roy."))
+        renamed = [m for m in self.sent if m.get("type") == "panel.update" and m.get("title")]
+        self.assertEqual(
+            renamed[-1]["title"], "Sprite: Sunday Roy"
+        )  # the card takes the name it was saved under
 
         # "Open my sprayer." / "Open my, I'm gonna spray it." / "Yes, Sprite." / "Open Sunday, Roy."
         for said in ("Open my sprayer.", "Open my, I'm gonna spray it."):

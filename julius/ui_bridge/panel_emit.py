@@ -606,6 +606,13 @@ def save_art_card(
                 fpath = folder / f"{folder.name}.julius-sprite"
                 fpath.write_text(sprite_doc.dumps(doc), encoding="utf-8")
                 sprite_doc.STUDIO.mark_saved(doc, str(fpath))
+                if name and card.get("panel_id"):  # the card takes the name it was saved under
+                    from julius.ui_bridge import charts
+
+                    if charts._panel is not None:
+                        charts._panel[0].update_art(
+                            card["panel_id"], {"title": f"Sprite: {folder.name}"}
+                        )
         else:
             (folder / "pixel-art.png").write_bytes(export[0])
             (folder / "pixel-art-1x.png").write_bytes(small[0])

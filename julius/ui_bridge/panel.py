@@ -173,6 +173,7 @@ SCHEMAS: dict[str, dict[str, str]] = {
         "palette": "list?",
         "editing": "bool?",
         "main": "bool?",
+        "title": "str?",  # a sprite card saved under a name ("save it as Roy's Main Sprite") takes that name
     },
     "panel.clear": {"scope": "str", "target": "str?", "reason": "str"},
     # not cards: the conversation list (the sidebar) and the notes the brain was given this turn (the "Memory used" chip)
@@ -1018,6 +1019,8 @@ class PanelHub:
             patch["editing"] = bool(fields["editing"])
         if "main" in fields:
             patch["main"] = bool(fields["main"])
+        if fields.get("title"):
+            patch["title"] = clean(fields["title"], CAPS["title"])
         seq, pid = self._next()
         msg = {
             "type": "panel.update",

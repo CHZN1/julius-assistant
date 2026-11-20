@@ -80,7 +80,10 @@ def _code_card(t: Any, c: dict, what: str) -> None:
         if charts._panel is None:
             return
         panel, _files, turn_fn = charts._panel
-        said = re.search(r"[^.\n]*\btests?\b[^.\n]*[.]?", t.summary or "", re.I)
+        sentences = re.split(
+            r"(?<=[.!?])\s+|\n+", t.summary or ""
+        )  # a dot inside a file name (export_tool.py) is no sentence end
+        said = next((x.strip() for x in sentences if re.search(r"\btests?\b", x, re.I)), "")
         panel.code(
             {
                 "title": f"Code: {Path(t.project).name}",
@@ -90,7 +93,7 @@ def _code_card(t: Any, c: dict, what: str) -> None:
                     {"path": n, "status": k} for k in ("added", "modified", "deleted") for n in c[k]
                 ],
                 "diff": ca.diff_lines(t),
-                "tests": f"The agent reports: {said.group(0).strip()}" if said else "",
+                "tests": f"The agent reports: {said}" if said else "",
             },
             turn=turn_fn(),
         )
