@@ -494,7 +494,7 @@ class ResearchAgent:
     # run
     def run(self, question: Any) -> Any:
         """-> result dict. Always returns one, including on limits and failures (stopped says which)."""
-        self.pages, self.page_order, self.seen_search, self.retried = {}, [], set(), False
+        self.pages, self.page_order, self.seen_search, self.retried = {}, [], set(), 0
         question = " ".join(str(question).split())[:600]
         loop = _CostLoop(self.brain, SYSTEM, SCHEMAS, self.max_usd)
         messages, final, stopped = [{"role": "user", "content": question}], None, "done"
@@ -555,12 +555,16 @@ class ResearchAgent:
             if url and url not in self.pages and len(self.pages) < self.max_pages:
                 self._open({"url": url})
         kept, _ = self._verify(findings)
-        if kept or self.retried or (not findings and args.get("answered") is False):
-            return ""  # cited findings, a second try, or a plain "could not verify it"
-        self.retried = True
-        if (
-            not findings and self.pages
-        ):  # an answer in the summary with no findings: nothing on the card can be cited (live, 2026-11-19)
+        summary_only = not findings and bool(
+            self.pages
+        )  # an answer in the summary, nothing on the card citable
+        limit = (
+            2 if summary_only else 1
+        )  # Haiku sometimes sends a summary alone twice running (live, 2026-11-19)
+        if kept or self.retried >= limit or (not findings and args.get("answered") is False):
+            return ""  # cited findings, the send-backs used up, or a plain "could not verify it"
+        self.retried += 1
+        if summary_only:  # an answer in the summary with no findings: nothing on the card can be cited (live, 2026-11-19)
             return (
                 "Not accepted: your summary makes claims but findings is empty, so none of them can be cited. Call research_finish again "
                 "with one finding per claim, each citing a page you opened (its url) with an exact quote from that page. If no page you "
