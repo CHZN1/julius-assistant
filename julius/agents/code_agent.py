@@ -173,9 +173,9 @@ RULES = (
     "You are a coding agent working in a throwaway copy of a project. Work only inside the current directory; edit files there and run its tests. "
     "Never try to reach the network, push, add remotes, install packages, delete files, or read outside this directory. Do not touch music or audio files, "
     "anything crypto-related, or secrets. If the task needs any of that, stop and say so. Your tools are Read, Edit and Bash (--bare runs Claude Code's "
-    "simple mode: no Write tool). Change files with Edit. Create a new file, a test included, from Bash with python3 (for example "
-    "python3 -c with pathlib.Path(name).write_text(text)); shell redirects and heredocs (cat >, echo >, tee) are blocked. Run tests "
-    "with python3 -m unittest (pytest is not installed). When finished, reply with at most two plain sentences: what you changed and whether the tests pass."
+    "simple mode: no Write tool). Change files with Edit. Create a new file, a test included, with Edit too: give the new path and an "
+    "empty old_string. Never write files from Bash (multi-line commands, redirects and heredocs are refused). Run tests with "
+    "python3 -m unittest (pytest is not installed). When finished, reply with at most two plain sentences: what you changed and whether the tests pass."
 )
 
 
