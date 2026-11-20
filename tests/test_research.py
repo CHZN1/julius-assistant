@@ -243,6 +243,29 @@ class Agent(unittest.TestCase):
         self.assertIn("couldn't confirm", r["summary"])
         self.assertNotIn("moon", r["summary"])
 
+    def test_summary_with_no_findings_after_reading_is_sent_back_once(self):
+        # live 2026-11-19: four pages read, a good summary, findings=[]: the card said "couldn't confirm"
+        brain, api = make(
+            resp([use("a", "research_open", url="https://example.com/a")], "tool_use"),
+            finish("c", "The Sharks play at SAP Center.", []),
+            finish(
+                "d",
+                "The Sharks play at SAP Center.",
+                [
+                    {
+                        "claim": "Sharks play at SAP Center",
+                        "url": "https://example.com/a",
+                        "quote": "The San Jose Sharks play at SAP Center.",
+                    }
+                ],
+            ),
+        )
+        r = agent(brain).run("q")
+        self.assertEqual(len(api.calls), 3)
+        self.assertIn("findings is empty", str(api.calls[2]))
+        self.assertTrue(r["findings"][0]["verified"])
+        self.assertIn("SAP Center", r["summary"])
+
     def test_cited_but_unopened_page_is_fetched_before_citing(self):
         brain, api = make(
             resp([use("a", "research_search", query="q")], "tool_use"),
@@ -382,7 +405,7 @@ class Agent(unittest.TestCase):
         brain, api = make(
             resp([use("a", "research_open", url="https://example.com/e")], "tool_use"),
             resp([use("b", "research_open", url="http://meta/latest")], "tool_use"),
-            finish("c", "ok", []),
+            finish("c", "ok", [], answered=False),
         )
         agent(brain, {"https://example.com/e": (200, {"content-type": "text/html"}, evil)}).run("q")
         shown = api.calls[1]["messages"][-1]["content"][0]["content"]
@@ -425,7 +448,7 @@ class Agent(unittest.TestCase):
                 [use(f"o{i}", "research_open", url=f"https://example.com/{i}") for i in range(4)],
                 "tool_use",
             ),
-            finish("f", "ok", []),
+            finish("f", "ok", [], answered=False),
         )
         agent(brain, pages, max_pages=2).run("q")
         out = [x["content"] for x in api.calls[1]["messages"][-1]["content"]]
@@ -435,7 +458,7 @@ class Agent(unittest.TestCase):
     def test_other_tools_are_not_available(self):
         brain, api = make(
             resp([use("a", "write_file", path="/x"), use("b", "delegate", task="t")], "tool_use"),
-            finish("f", "ok", []),
+            finish("f", "ok", [], answered=False),
             finish("f2", "ok", []),
         )
         agent(brain).run("q")

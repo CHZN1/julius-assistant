@@ -552,9 +552,17 @@ class ResearchAgent:
             if url and url not in self.pages and len(self.pages) < self.max_pages:
                 self._open({"url": url})
         kept, _ = self._verify(findings)
-        if kept or self.retried or (not findings and self.pages):
-            return ""
+        if kept or self.retried or (not findings and args.get("answered") is False):
+            return ""  # cited findings, a second try, or a plain "could not verify it"
         self.retried = True
+        if (
+            not findings and self.pages
+        ):  # an answer in the summary with no findings: nothing on the card can be cited (live, 2026-11-19)
+            return (
+                "Not accepted: your summary makes claims but findings is empty, so none of them can be cited. Call research_finish again "
+                "with one finding per claim, each citing a page you opened (its url) with an exact quote from that page. If no page you "
+                "read states it, finish with answered=false and say plainly that you could not verify it."
+            )
         return (
             "Not accepted: none of your findings cite a page you opened, so nothing can be cited. Use research_search and "
             "research_open to read a page that states the answer, then call research_finish again citing it with an exact quote. "
