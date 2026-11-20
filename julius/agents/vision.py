@@ -370,8 +370,14 @@ def _whole(text: str, cap: int) -> str:
 
 
 def identify(brain: Any, jpeg: bytes, question: str, source: str) -> tuple[dict, float]:
-    """The item as {name, details, customized, confidence, search}, from one Sonnet look. {} when the model gave nothing usable."""
-    raw, usd = ask_model(brain, "sonnet", jpeg, question, source, system=IDENTIFY)
+    """The item as {name, details, customized, confidence, search, lens}, from one Sonnet look. {} when the model gave nothing usable.
+    With a SerpApi key, a Google Lens search of the picture goes first and its matching pages are the evidence for the model (lens: the matches)."""
+    from julius.agents import lens
+
+    found = lens.search(jpeg)
+    raw, usd = ask_model(
+        brain, "sonnet", jpeg, question + lens.evidence(found), source, system=IDENTIFY
+    )
     m = re.search(r"\{.*\}", raw or "", re.S)
     try:
         d = json.loads(m.group(0)) if m else {}
@@ -383,6 +389,7 @@ def identify(brain: Any, jpeg: bytes, question: str, source: str) -> tuple[dict,
     }
     if d["confidence"] not in ("high", "medium", "low"):
         d["confidence"] = "low"
+    d["lens"] = found
     return (d if d["name"] else {}), usd
 
 
@@ -406,7 +413,7 @@ def shop(
     custom = (
         f" It looks customized: {item['customized'].rstrip('.')}." if item["customized"] else ""
     )
-    said = f"{sure}that's the {item['name']}.{custom}"
+    said = f"{sure or 'That'}{'that' if sure else ''}'s the {item['name']}.{custom}"
     log.event(
         "vision_identify", source=req.source, confidence=item["confidence"], usd=round(usd, 6)
     )
@@ -418,7 +425,12 @@ def shop(
                 "question": req.question,
                 "answer": said
                 + (f" {item['details'].rstrip('.')}." if item["details"] else "")
-                + f" Confidence: {item['confidence']}.",
+                + f" Confidence: {item['confidence']}."
+                + (
+                    f" Checked against {len(item['lens'])} matching web page{'s' if len(item['lens']) != 1 else ''} with Google Lens."
+                    if item.get("lens")
+                    else ""
+                ),
                 "image": files.put_memory(jpeg, "jpg"),
                 "alt": f"{label}, {w} by {h}",
                 "model": brain.config["models"]["sonnet"],
@@ -439,6 +451,13 @@ def shop(
                 else ""
             )
             + f" Then find {stock} for sale: current prices and shops, new or used, with sources."
+            + (
+                " A reverse image search matched pages titled: "
+                + "; ".join(m["title"] for m in item["lens"][:5])
+                + "."
+                if item.get("lens")
+                else ""
+            )
         },
         brain=brain,
     )
