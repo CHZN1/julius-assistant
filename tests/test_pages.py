@@ -73,6 +73,58 @@ class Saving(unittest.TestCase):
         self.assertIn("Call me Ishmael. Some years ago.", body)
         self.assertIn("Transcribed word for word by Julius", body)
 
+    def test_a_summary_is_never_called_word_for_word(self):
+        # what the model did with a photo of a copyrighted textbook page: a summary in the text field
+        said = self.save(
+            '{"book": "", "chapter": "1C Subspaces", "page": "18", "text": "[I can\'t transcribe this page word for word because it is '
+            'copyrighted book material. Summary: it defines a subspace and gives three conditions for one.]"}'
+        )
+        self.assertEqual(
+            said,
+            f"I couldn't copy page 18 word for word, so I saved a summary of it in {Path(self.tmp.name).name}.",
+        )
+        body = next(Path(self.tmp.name).iterdir()).read_text()
+        self.assertIn("Summarised (not copied word for word)", body)
+        self.assertNotIn("Transcribed word for word", body)
+        self.assertFalse(pages.parse_page('{"text": "a b c d e f", "verbatim": false}')["verbatim"])
+        self.assertTrue(pages.parse_page(PAGE)["verbatim"])
+
+    def test_asking_for_notes_explains_the_page_in_plain_english(self):
+        for q in (
+            "Save this page as simple notes",
+            "simplify this page",
+            "explain this page",
+            "save a synopsis of this page",
+        ):
+            self.assertTrue(pages.is_save(q) and pages.wants_simple(q), q)
+        self.assertFalse(pages.wants_simple("save this page"))
+        self.assertFalse(pages.wants_simple("save this page for my research"))
+        asked = []
+        with (
+            mock.patch.object(pages, "TRANSCRIBE", "exact"),
+            mock.patch.object(pages, "SIMPLIFY", "simple"),
+        ):
+            said = pages.save_page(
+                None,
+                lambda *a, system=None, max_tokens=None: (asked.append(system), (PAGE, 0.0))[1],
+                b"j",
+                1,
+                1,
+                "camera",
+                "save this page as simple notes",
+                None,
+                None,
+                None,
+                {"notes_dir": self.tmp.name},
+            )
+        self.assertEqual(asked, ["simple"])
+        self.assertTrue(
+            said.startswith("Saved page 1 of Moby-Dick; Or, The Whale in plain English:"), said
+        )
+        body = next(Path(self.tmp.name).iterdir()).read_text()
+        self.assertIn("Explained in plain English", body)
+        self.assertNotIn("word for word", body)
+
     def test_too_little_text_is_not_saved(self):
         said = self.save('{"text": "blur"}')
         self.assertIn("couldn't read enough", said)

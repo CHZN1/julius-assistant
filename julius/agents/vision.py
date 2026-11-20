@@ -315,13 +315,19 @@ def estimate_usd(tier: str, width: int, height: int) -> float:
 
 
 def ask_model(
-    brain: Any, tier: str, jpeg: bytes, question: str, source: str, system: str | None = None
+    brain: Any,
+    tier: str,
+    jpeg: bytes,
+    question: str,
+    source: str,
+    system: str | None = None,
+    max_tokens: int | None = None,
 ) -> tuple[str, float]:
     """One vision call. -> (answer text, actual cost). Priced from the response's real usage and recorded in the ledger."""
     from julius.brain import cloud as jc
 
     cfg = dict(jc.TIERS[tier])
-    cfg["max_tokens"] = 400 if tier == "haiku" else 800
+    cfg["max_tokens"] = max_tokens or (400 if tier == "haiku" else 800)
     where = {
         "camera": "a camera picture",
         "window": "a screenshot of a window",
