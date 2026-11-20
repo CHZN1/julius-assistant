@@ -97,6 +97,12 @@ SKIP_DIRS = {
     ".tox",
 }
 MAX_FILES, MAX_BYTES = 3000, 100 * 1024 * 1024
+# What the diff (card and line counts) leaves out: caches the agent's own test runs create, and compiled files. Same set the snapshot skips.
+DIFF_EXCLUDE = [f":(exclude,glob)**/{d}/**" for d in sorted(SKIP_DIRS - {".git", ".DS_Store"})] + [
+    ":(exclude,glob)**/*.pyc",
+    ":(exclude,glob)**/*.pyo",
+    ":(exclude,glob)**/.DS_Store",
+]
 DENIED_READ = [
     "~/dev",
     "~/Documents",
@@ -489,7 +495,7 @@ def diff_stat(task: Task) -> tuple[int, int]:
     """(insertions, deletions) of the work folder against the baseline commit; new files count when staged."""
     try:
         _git(task.work, "add", "-A")
-        out = _git(task.work, "diff", "--cached", "--numstat", "HEAD").stdout
+        out = _git(task.work, "diff", "--cached", "--numstat", "HEAD", "--", ".", *DIFF_EXCLUDE).stdout
     except subprocess.CalledProcessError:
         return 0, 0
     ins = dele = 0
@@ -501,16 +507,16 @@ def diff_stat(task: Task) -> tuple[int, int]:
 
 
 def diff_lines(task: Task, limit: int = 160) -> list[str]:
-    """The unified diff of the work folder against the baseline (new files included), for the panel's code card. [] when git cannot say."""
+    """The unified diff of the work folder against the baseline (new files included; caches, compiled and binary files left out), for the panel's code card. [] when git cannot say."""
     try:
         _git(task.work, "add", "-A")
-        out = _git(task.work, "diff", "--cached", "--no-color", "-U2", "HEAD").stdout
+        out = _git(task.work, "diff", "--cached", "--no-color", "-U2", "HEAD", "--", ".", *DIFF_EXCLUDE).stdout
     except subprocess.CalledProcessError:
         return []
-    keep = [
+    keep = [  # git headers, and binary files (no readable lines to show), are left out
         ln
         for ln in out.splitlines()
-        if not ln.startswith(("diff --git", "index ", "new file mode", "deleted file mode", "--- "))
+        if not ln.startswith(("diff --git", "index ", "new file mode", "deleted file mode", "--- ", "Binary files "))
     ]
     return keep[:limit]
 

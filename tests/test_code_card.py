@@ -31,6 +31,23 @@ class CodeCardTests(unittest.TestCase):
         self.assertIn("+++ b/rename_exports.py", lines)
         self.assertFalse([ln for ln in lines if ln.startswith(("diff --git", "index "))])
 
+    def test_diff_leaves_out_caches_and_binary_files(self):
+        (self.work / "a.py").write_text("x = 2\n")
+        cache = self.work / "tests" / "__pycache__"
+        cache.mkdir(parents=True)
+        (cache / "test_a.cpython-312.pyc").write_bytes(b"\x00\x01binary\x00")
+        (self.work / "stray.pyc").write_bytes(b"\x00\x02")
+        (self.work / ".pytest_cache").mkdir()
+        (self.work / ".pytest_cache" / "README.md").write_text("cache\n")
+        (self.work / "logo.png").write_bytes(b"\x89PNG\r\n\x1a\n\x00\x00")
+        task = types.SimpleNamespace(work=self.work)
+        lines = ca.diff_lines(task)
+        self.assertIn("+x = 2", lines)
+        joined = "\n".join(lines)
+        for unwanted in ("__pycache__", ".pyc", ".pytest_cache", "Binary files"):
+            self.assertNotIn(unwanted, joined)
+        self.assertEqual(ca.diff_stat(task), (1, 1))
+
     def test_the_card_is_valid_and_cut(self):
         hub = pn.PanelHub(ev.EventHub())
         pid = hub.code(
