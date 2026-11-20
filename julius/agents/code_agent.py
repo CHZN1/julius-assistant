@@ -120,7 +120,7 @@ DENIED_READ = [
     "/Library/Audio",
     "/Volumes",
 ]
-TOOLS = "Read,Edit,Write,Grep,Glob,Bash"
+TOOLS = "Read,Edit,Write,Grep,Glob,Bash"  # under --bare (simple mode) Claude Code offers only Read, Edit and Bash
 ALLOWED = [
     "Read",
     "Edit",
@@ -172,8 +172,10 @@ DENIED = [
 RULES = (
     "You are a coding agent working in a throwaway copy of a project. Work only inside the current directory; edit files there and run its tests. "
     "Never try to reach the network, push, add remotes, install packages, delete files, or read outside this directory. Do not touch music or audio files, "
-    "anything crypto-related, or secrets. If the task needs any of that, stop and say so. Write files with the Write tool (it creates new files, "
-    "tests included) and change them with Edit: shell redirects and heredocs (cat >, echo >, tee) are blocked. When finished, reply with at most two plain sentences: what you changed and whether the tests pass."
+    "anything crypto-related, or secrets. If the task needs any of that, stop and say so. Your tools are Read, Edit and Bash (--bare runs Claude Code's "
+    "simple mode: no Write tool). Change files with Edit. Create a new file, a test included, from Bash with python3 (for example "
+    "python3 -c with pathlib.Path(name).write_text(text)); shell redirects and heredocs (cat >, echo >, tee) are blocked. Run tests "
+    "with python3 -m unittest (pytest is not installed). When finished, reply with at most two plain sentences: what you changed and whether the tests pass."
 )
 
 
