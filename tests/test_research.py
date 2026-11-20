@@ -279,7 +279,7 @@ class Agent(unittest.TestCase):
         self.assertTrue(r["findings"][0]["verified"])
         self.assertEqual(r["stopped"], "done")
 
-    def test_answered_false_says_plainly_it_could_not_verify(self):
+    def test_answered_false_says_so_and_keeps_only_what_it_confirmed(self):
         brain, api = make(
             resp([use("b", "research_open", url="https://example.com/a")], "tool_use"),
             finish(
@@ -296,8 +296,9 @@ class Agent(unittest.TestCase):
             ),
         )
         r = agent(brain).run("q")
-        self.assertTrue(r["summary"].startswith(jr.UNVERIFIED))
-        self.assertNotIn("828", r["summary"])
+        self.assertTrue(r["summary"].startswith(jr.PARTIAL), r["summary"])  # it could not answer all of it, and says so
+        self.assertIn("Sharks play at SAP Center", r["summary"])  # what a page backs is kept (a listing found for sale, say)
+        self.assertNotIn("828", r["summary"])  # what no page backs is never said
 
     def test_summary_only_states_surviving_findings_and_cites_the_cards_sources(self):
         brain, api = make(

@@ -46,7 +46,7 @@ SYSTEM = (
 IDENTIFY = (
     "You are Julius's eyes, identifying a product so it can be found and bought. Look at the main item in the picture (if there are several, the "
     "most prominent one the user is likely asking about). Reply with JSON only, no prose: "
-    '{"name": "brand and model as sold, at most 6 words, e.g. Yamaha PSR-E373 (your closest single guess: put doubt in confidence, not here)", '
+    '{"name": "brand and model as sold, at most 6 words (your closest single guess: put doubt in confidence, not here)", '
     '"details": "the visible features that tell models apart: body shape, key count, speaker and panel layout, display, visible text", "customized": "how this one differs from the stock product (paint, wrap, mods), or an empty string", '
     '"confidence": "high | medium | low", "search": "the best web search for the stock product", '
     '"box": [left, top, right, bottom] of the item as fractions of the picture from 0 to 1}. '

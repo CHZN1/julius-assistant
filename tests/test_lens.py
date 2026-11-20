@@ -129,6 +129,43 @@ class Lens(unittest.TestCase):
         self.assertNotIn("Key Visual Details", text)
         self.assertNotIn("Are you looking", text)
 
+    def test_a_linked_model_name_is_put_back_in_the_sentence(self):
+        # how SerpApi returns Google's "(such as a CTK-900 or CTK-691)" when CTK-900 is a product link
+        lost = {
+            "ai_overview": {
+                "text_blocks": [
+                    {
+                        "type": "paragraph",
+                        "snippet": "This appears to be a pink keyboard resembling a Casio CTK model (such as a Go to product viewer dialog for this item. or CTK-691).",
+                        "snippet_links": [
+                            {
+                                "text": "CTK-900 Go to product viewer dialog for this item.",
+                                "link": "https://www.google.com/search?ibp=oshop",
+                            }
+                        ],
+                    }
+                ]
+            }
+        }
+        self.assertIn("(such as a CTK-900 or CTK-691)", lens.overview_text(lost))
+        inline = {
+            "ai_overview": {
+                "text_blocks": [
+                    {
+                        "type": "paragraph",
+                        "snippet": "Modified from an older keyboard (such as a Casio CTK Go to product viewer dialog for this item. or Yamaha PSR model).",
+                        "snippet_links": [
+                            {
+                                "text": "Casio CTK Go to product viewer dialog for this item.",
+                                "link": "https://www.google.com/x",
+                            }
+                        ],
+                    }
+                ]
+            }
+        }
+        self.assertIn("(such as a Casio CTK or Yamaha PSR model)", lens.overview_text(inline))
+
     def test_social_media_is_dropped_and_repeats_are_merged(self):
         found = lens.matches(LENS_REPLY)
         self.assertEqual(

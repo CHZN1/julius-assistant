@@ -40,6 +40,7 @@ USER_AGENT = "Julius-research/1.0 (read-only; personal assistant)"
 TEXT_TYPES = ("text/html", "text/plain", "application/xhtml+xml", "application/xml", "text/xml")
 
 UNVERIFIED = "I couldn't verify that from the pages I read."
+PARTIAL = "I couldn't answer all of that, but here's what I confirmed:"
 
 SYSTEM = """You are a research sub-agent for a voice assistant. Answer the question using the web.
 Tools: research_search (find pages), research_open (read one page), research_finish (deliver the answer). Nothing else exists.
@@ -589,8 +590,11 @@ class ResearchAgent:
         )
         if not findings:
             summary = "I couldn't confirm that from a source I could read."
-        elif not answered:
-            summary = UNVERIFIED
+        elif (
+            not answered
+        ):  # it could not answer all of it: say what it did confirm rather than drop it
+            kept = [f for f in findings if f["verified"]]
+            summary = f"{PARTIAL} {_summary_from(kept)}" if kept else UNVERIFIED
         elif dropped or not _supported(model_summary, findings):
             # The spoken answer may only state what survived verification: rebuild it from the kept claims.
             summary = _summary_from(findings)
