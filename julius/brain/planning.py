@@ -176,6 +176,11 @@ class Planner:
         )
         if len(rows) > 100:
             message += "\nShowing the first 100; more items exist."
+        if tz:  # so "tomorrow" needs no second call: the model asked for the date before answering
+            from zoneinfo import ZoneInfo
+
+            today = datetime.fromtimestamp(self.clock(), ZoneInfo(tz)).strftime("%A %b %-d")
+            message = f"Today is {today}.\n" + message
         return output(True, "listed", message, items=items, truncated=len(rows) > 100)
 
     def finish(

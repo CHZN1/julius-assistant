@@ -123,3 +123,6 @@ class ClockTimeWithoutDayTests(unittest.TestCase):
         msg = self.planner.list(tz="America/Los_Angeles")["message"]
         self.assertIn("5:00 PM PST", msg)
         self.assertNotIn("+00:00", msg)
+        self.assertTrue(
+            msg.startswith("Today is "), msg
+        )  # "tomorrow" needs no second call for the date
