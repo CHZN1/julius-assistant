@@ -80,8 +80,10 @@ SCHEMAS = [
     {
         "name": "research_finish",
         "description": "Deliver the final answer. Ends the task.",
+        "strict": True,  # the API enforces findings and answered (Haiku sent a summary alone, live 2026-11-19)
         "input_schema": {
             "type": "object",
+            "additionalProperties": False,
             "properties": {
                 "summary": {
                     "type": "string",
@@ -102,7 +104,8 @@ SCHEMAS = [
                                 "description": "Short exact quote from that page",
                             },
                         },
-                        "required": ["claim", "url"],
+                        "required": ["claim", "url", "quote"],
+                        "additionalProperties": False,
                     },
                 },
                 "answered": {
