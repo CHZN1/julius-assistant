@@ -495,7 +495,9 @@ def diff_stat(task: Task) -> tuple[int, int]:
     """(insertions, deletions) of the work folder against the baseline commit; new files count when staged."""
     try:
         _git(task.work, "add", "-A")
-        out = _git(task.work, "diff", "--cached", "--numstat", "HEAD", "--", ".", *DIFF_EXCLUDE).stdout
+        out = _git(
+            task.work, "diff", "--cached", "--numstat", "HEAD", "--", ".", *DIFF_EXCLUDE
+        ).stdout
     except subprocess.CalledProcessError:
         return 0, 0
     ins = dele = 0
@@ -510,13 +512,17 @@ def diff_lines(task: Task, limit: int = 160) -> list[str]:
     """The unified diff of the work folder against the baseline (new files included; caches, compiled and binary files left out), for the panel's code card. [] when git cannot say."""
     try:
         _git(task.work, "add", "-A")
-        out = _git(task.work, "diff", "--cached", "--no-color", "-U2", "HEAD", "--", ".", *DIFF_EXCLUDE).stdout
+        out = _git(
+            task.work, "diff", "--cached", "--no-color", "-U2", "HEAD", "--", ".", *DIFF_EXCLUDE
+        ).stdout
     except subprocess.CalledProcessError:
         return []
     keep = [  # git headers, and binary files (no readable lines to show), are left out
         ln
         for ln in out.splitlines()
-        if not ln.startswith(("diff --git", "index ", "new file mode", "deleted file mode", "--- ", "Binary files "))
+        if not ln.startswith(
+            ("diff --git", "index ", "new file mode", "deleted file mode", "--- ", "Binary files ")
+        )
     ]
     return keep[:limit]
 
