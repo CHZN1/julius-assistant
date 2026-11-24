@@ -4,7 +4,13 @@ Thanks for helping. Bug reports, ideas and pull requests are all welcome. Small,
 
 ## Set up
 
-Follow the install steps in the [README](README.md). You need the main environment (`.venv`), but not the voice environment or the models, to run the unit tests. Then turn on the repository's pre-commit hook, which refuses committed symlinks:
+Follow the install steps in the [README](README.md). You need the main environment (`.venv`), but not the voice environment or the models, to run the unit tests. Add the two packages only the tests and lint use:
+
+```bash
+.venv/bin/pip install reportlab ruff
+```
+
+Then turn on the repository's pre-commit hook, which refuses committed symlinks:
 
 ```bash
 git config core.hooksPath .githooks
@@ -21,7 +27,7 @@ The offline unit tests need no network, no API key and no models. CI runs exactl
 Lint and format with ruff (CI fails on either):
 
 ```bash
-.venv/bin/pip install ruff && .venv/bin/ruff check . && .venv/bin/ruff format --check .
+.venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```
 
 ## Run the evals

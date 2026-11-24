@@ -574,7 +574,7 @@ def without_brain(pending):
     """Deterministic-only run: a missing shortcut is still a failure; brain cases are skipped."""
     rows, skipped = {}, set()
     for case in pending:
-        if case["expect"]["path"] == "shortcut" and "path_in" not in case["expect"]:
+        if case["expect"].get("path") == "shortcut" and "path_in" not in case["expect"]:
             rows[case["id"]] = {
                 "path": "fell_through_to_brain",
                 "tool": "",

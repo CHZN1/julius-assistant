@@ -1,10 +1,12 @@
 """Side-panel stage 4: the research emitter, 'open source N', 'save this card', 'close the panel' and their config."""
 
 import io
+import os
 import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from PIL import Image
 
@@ -275,7 +277,9 @@ class Commands(Base):
 
 class Settings(unittest.TestCase):
     def test_defaults_and_validation(self):
-        ui = config.load_config()["ui"]
+        # the shipped defaults, not this machine's julius.local.toml (a user's own ports must not fail the suite)
+        with mock.patch.dict(os.environ, {"JULIUS_LOCAL_CONFIG": "/nonexistent/julius.local.toml"}):
+            ui = config.load_config()["ui"]
         self.assertTrue(ui["panel"])
         self.assertEqual(ui["panel_port"], 8785)
         self.assertEqual(ui["saved_dir"], "~/Julius Saved")
