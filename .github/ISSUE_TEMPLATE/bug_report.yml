@@ -1,0 +1,60 @@
+name: Bug report
+description: Something in Julius doesn't work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please remove anything personal (names, paths, transcripts, keys) from what you paste.
+        Security problems (sandbox escape, prompt injection that causes an action, a way into the local ports): use **Report a vulnerability** on the Security tab instead of this form.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you said or typed, and what Julius did.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start Julius with `.venv/bin/python -m julius`
+        2. Type "..."
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `git rev-parse --short HEAD`
+    validations:
+      required: true
+  - type: input
+    id: mac
+    attributes:
+      label: Mac and macOS version
+      placeholder: "MacBook Air M2, 16 GB, macOS 15.4"
+    validations:
+      required: true
+  - type: dropdown
+    id: brain
+    attributes:
+      label: Brain
+      options:
+        - Cloud (Anthropic API key)
+        - Local (Ollama)
+        - Not sure
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log lines
+      description: The relevant lines from the terminal, or from `~/Library/Logs/Julius/julius.jsonl` if you run the service. Logs contain no transcripts or keys by default.
+      render: text

@@ -1,0 +1,41 @@
+name: Feature request or new tool
+description: Suggest something Julius should do, or propose a new tool.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before a pull request for a new tool, please read "Proposing a new tool" in CONTRIBUTING.md (routing cases and the shake test).
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you want to do
+      description: The problem or the moment where Julius should help.
+    validations:
+      required: true
+  - type: textarea
+    id: phrasings
+    attributes:
+      label: What people would say
+      description: Three or more ways someone might ask for it, out loud or typed.
+      placeholder: |
+        - "..."
+        - "..."
+        - "..."
+  - type: textarea
+    id: behaviour
+    attributes:
+      label: What Julius should do
+      description: Including what it shows, and whether it needs a yes before acting.
+    validations:
+      required: true
+  - type: textarea
+    id: never
+    attributes:
+      label: What it must never do
+      description: Limits and safety rules (for example never delete, never send without a yes, never read outside a folder).
+  - type: textarea
+    id: roadmap
+    attributes:
+      label: Related roadmap stage
+      description: If it fits a stage in docs/ROADMAP.md, say which.
