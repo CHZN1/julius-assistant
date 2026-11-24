@@ -1,6 +1,6 @@
 # Julius roadmap
 
-Updated November 9, 2026. Current priority order; older milestone documents (JULIUS_TEST_RESULTS.md, JULIUS_*.md) keep the historical measurements.
+Updated November 24, 2026 (the next nine stages are planned under "Next stages"). Current priority order; older milestone documents (JULIUS_TEST_RESULTS.md, JULIUS_*.md) keep the historical measurements.
 
 ## Status at a glance (2026-11-09)
 
@@ -14,6 +14,7 @@ Updated November 9, 2026. Current priority order; older milestone documents (JUL
 | F Voice polish and reliability | done (F1 to F3 built and live; Silero VAD skipped unless endpointing problems show; F4 soak ran 2026-11-08 to 11-09) |
 | H Senses (vision on demand, presence and gestures, ShazamKit, speaker profiles, whiteboard to text) | planned, nothing built |
 | G UI (orb app) | modes, typing, drops, installed app and login item built and in live testing; side-panel work (charts, images, vision, pixel art) waits for the user's go; image generation deferred (no provider) |
+| Next stages 1-9 (README and repo readiness, brand, bring your own model, Apple signing, security, platform layer and ports, reliability, feedback, hosted SaaS and pricing beta) | planned 2026-11-24, nothing built; see "Next stages" |
 
 Tests: 849 backend unit tests; free evals (routing, file 46/46, live data 14/14, memory); paid evals (planner, coding, research, live data).
 
@@ -149,9 +150,259 @@ Julius gets eyes, presence and more ears, always on-device where it can be and a
 5. **Whiteboard and handwritten notes to code, tasks or text**: a snapshot (confirmed per use) turned into a checklist, reminders, a code file proposal (staged through the coding agent, never written directly) or plain text.
 Open design points: camera and screen-recording permissions flow, the consent UI in the orb, retention (nothing stored by default), and how per-person memory is kept apart on disk.
 
+## Next stages (plan, 2026-11-24; nothing below is built)
+
+Nine stages, in order. Effort is in focused weeks for one developer working with the coding agent **[A]**. Anything marked **[A]** is an assumption, not a measurement.
+
+**Pricing:** Free tier: open source, bring your own key or local models. Hosted plan: planned, after a free beta.
+
+| # | Stage | Effort | Depends on |
+|---|---|---|---|
+| 1 | README and repository ready for visitors | 1 wk | nothing |
+| 2 | Brand: JULIUS wordmark | 1 wk once Roy's sketch exists | Roy's letter sketches |
+| 3 | Bring your own model | 3-4 wk | nothing |
+| 4 | Apple Developer Program: signing, notarization, ShazamKit | 1 wk plus Apple's waiting time | nothing; needed before any download is offered |
+| 5 | Security | 3-4 wk, plus an outside pentest | the threat model starts now; the pentest needs 9 |
+| 6 | Platform layer, then Windows and Linux ports | 2 wk layer, then 4-6 wk per OS | 3 (local models make the ports usable without an API key) |
+| 7 | Reliability: load, soak, release evals | 2 wk, then ongoing | 9 for load tests; evals exist |
+| 8 | Feedback in the app | 1-2 wk | the orb app; 9 for the server half |
+| 9 | Hosted SaaS and pricing beta | 6-8 wk, plus legal review | 4, 5 (threat model and pentest), a free beta before any charge |
+
+### Stage 1: README and repository ready for visitors
+
+**Goals.** Someone who arrives from the demo video understands Julius in a minute, can install it on a Mac by following the README alone, and can find a first thing to contribute.
+
+**Work.** The demo at the top of the README; a one-paragraph pitch; a feature list that matches the video; macOS install steps (requirements, API key setup, permissions); the bring-your-own-models note; links to this roadmap and the licence; a CI badge; a note that the orb (UI) app is not open source yet. `CONTRIBUTING.md` (tests, evals, code style, how to propose a tool), issue templates (bug report, feature request), and 3-5 `good first issue` items taken from this roadmap.
+
+**Acceptance tests.** A fresh clone on a Mac, following only the README, installs and runs Julius in text mode, and the unit tests pass. Every link in the README resolves. The badge shows the real status of the latest run on `main`.
+
+### Stage 2: Brand, the JULIUS wordmark
+
+**Goals.** A custom JULIUS wordmark drawn from Roy's own letters, used everywhere the name appears.
+
+**Work.**
+1. Roy sketches the six letters on paper, with several tries of any letter he is unsure of.
+2. Julius digitizes them: a photo or scan goes through the art helpers (threshold, clean-up), then a trace to vector (potrace or similar).
+3. The outlines are hand-fixed: consistent stroke weight, the baseline and x-height aligned, the spacing kerned.
+4. Outputs:
+   - an SVG master in `brand/` (one colour, plus a gold version on dark);
+   - the app icon updated in julius-orb (the `.icns` set from 16 to 1024 px);
+   - the favicon;
+   - social profile pictures (square, 400 and 800 px);
+   - banners: GitHub social preview 1280×640, YouTube 2560×1440 within the safe area, LinkedIn 1584×396, X 1500×500;
+   - a one-page usage sheet with clear space, minimum size and colours.
+
+**Acceptance tests.**
+- The SVG master opens cleanly in a browser and in Inkscape, and has no stray points (node count checked).
+- The wordmark reads at 16 px and on a phone at banner size.
+- Every export matches its platform's size.
+- The app icon passes the Stage 4 signing build.
+- Roy approves the final letters.
+
+### Stage 3: Bring your own model
+
+**Goals.** Every model tier can be swapped through one documented provider interface: the voice front end (`[models] haiku`), the planner (`[models] sonnet`), the research sub-agent, and the coding agent (`[code] model`, currently `claude -p`). Supported providers: Anthropic, any OpenAI-compatible endpoint (which covers LM Studio, llama.cpp `llama-server`, vLLM, OpenRouter and Ollama's `/v1`), and Ollama native. The offline fallback (`llama3.2:3b` through `OLLAMA_FALLBACK` in `julius/brain/backend.py`, plus `[brain] mode = "local"` with `qwen3:4b-instruct`) is the starting point: it already speaks the Ollama tool-call format.
+
+**Work.**
+- A `Provider` protocol in `julius/brain/providers/`. It takes `chat(messages, tools, stream, max_tokens)` and returns normalized events: text deltas, tool calls, usage and stop reason. It also declares capabilities: tool calling, vision, prompt caching, context size, and a price table for the cost ledger (local models cost $0).
+- `CloudBrain` becomes the `anthropic` adapter; its `convert_tools` and `convert_messages` move behind the protocol. New adapters: `openai_compat` and `ollama`.
+- Per-tier config replaces the two hard-coded keys. Each tier gets its own `[models.front_end]`, `[models.planner]`, `[models.research]` and `[models.coding]` block with `provider`, `model`, `base_url` and `api_key_env`; old configs keep working.
+- Coding tier. `claude -p` stays the default. A non-Anthropic coding model needs Julius's own edit/test loop (Read/Edit/Bash in the same sandbox and egress allowlist) so the safety rules do not depend on one vendor's CLI.
+- Docs: `docs/PROVIDERS.md` covers setting up each provider, a capability matrix, the known weak spots of small local models (tool-call reliability, long prompts), and the tier mix each one is measured to work for.
+
+**Acceptance tests.**
+- `python evals/run_all.py --provider <name> --tier <tier>` runs the routing, file, live-data, memory, planner and research evals against any configured provider and writes the same dated CSVs.
+- Each eval report gains a provider column, and a provider passes a tier only at the floors below.
+
+| Floor | Value |
+|---|---|
+| Routing | ≥ 95% (the cloud baseline is 97.5-98.3%) |
+| File agent | 100% (no unsafe action) |
+| Tool-call JSON validity | ≥ 99% |
+| Memory eval | 6/6 |
+
+- A full turn works with no Anthropic key at all: the front end and planner on LM Studio or Ollama, recorded in the eval CSVs.
+- The cost ledger records a provider and model on every row, and local rows record $0.
+- Unit tests feed the same recorded tool-call conversations through every adapter and get identical normalized events.
+
+### Stage 4: Apple Developer Program ($99 a year)
+
+**Goals.** Anyone can download and open Julius on a Mac without the "cannot be opened" or "unidentified developer" warning, and the program's services that need membership become available. This has to happen before the app is given to anyone.
+
+| What it unlocks | What it needs |
+|---|---|
+| **Developer ID signing**, so Gatekeeper accepts a downloaded app | Membership; a Developer ID Application certificate in the keychain; the orb app built with the hardened runtime and a secure timestamp, without the `get-task-allow` entitlement; the bundled helpers (`hotkeyd`, `visiond`, the Python runtime) signed one by one, inside out |
+| **Notarization**, Apple's automated malware check, stapled to the app | `xcrun notarytool submit --wait` with an app-specific password or an App Store Connect API key, then `xcrun stapler staple`; it has to be redone for every release, so it belongs in the release script |
+| **Developer ID installer** (a signed `.pkg`), optional | A Developer ID Installer certificate; useful if the Python backend is installed outside the app bundle |
+| **ShazamKit song ID** ("what's playing?") | An App ID with the ShazamKit App Service enabled in Certificates, Identifiers & Profiles, and the entitlement in the provisioning profile. The acceptance test is already saved (every tier, a clean recording and through the mic, no guessing); AcoustID stays skipped. Forum reports show macOS-specific problems (the entitlement rejected at upload, error 202 under the App Sandbox), so budget time for this and test the non-sandboxed Developer ID build first **[A]** |
+| **WeatherKit**, optional | Membership plus the WeatherKit capability; Apple's documentation lists it among the capabilities that Developer ID apps cannot use, so check that first; otherwise keep the current weather source |
+| **Mac App Store**, not planned | The App Sandbox, which conflicts with the file agent, the coding agent's sandbox and global hotkeys; Developer ID distribution is the plan |
+| **TestFlight for macOS**, optional | App Store Connect and a sandboxed build; skip unless a Store build happens |
+
+**Acceptance tests.**
+- On a clean Mac (a new user account, the quarantine flag kept by downloading through Safari), the app downloaded from the release page opens with no Gatekeeper warning.
+- `spctl --assess --type execute -vv` reports "source=Notarized Developer ID".
+- `codesign --verify --deep --strict` passes on every nested binary.
+- `stapler validate` passes.
+- The release script fails if notarization fails.
+- ShazamKit passes the saved acceptance test (every tier, clean and through the mic).
+
+### Stage 5: Security
+
+**Goals.** A written threat model, and tests that prove the defences hold, before any paid launch.
+
+**Work and acceptance tests.**
+- **Threat model** (`docs/THREAT_MODEL.md`). The assets are:
+  - files on the Mac;
+  - the API key and device tokens;
+  - memory;
+  - the camera, mic and screen;
+  - money, through model spend and Stripe.
+
+  It covers the entry points (the voice, typed input, the orb's local ports, web pages the research agent reads, files dropped or read, images and the screen sent to vision, the coding agent's project copies, the hosted proxy and webhooks) and the trust boundaries. It is reviewed whenever a new tool or entry point is added.
+- **Prompt-injection suite** (`evals/injection_eval.py`). Hostile instructions are hidden in:
+  - web pages fetched by research;
+  - files the file agent reads;
+  - text in images and on the screen sent to vision;
+  - memory facts;
+  - a project the coding agent works on.
+
+  Pass: 0 unconfirmed side effects across the whole suite (no file moved, no message, no network call outside the allowlist, no memory written without the user saying so), and every injected instruction is either ignored or reported back to the user as text. It runs in the release evals.
+- **Coding-agent sandbox escape tests.** Attempts to:
+  - write outside the project copy;
+  - read `~/.ssh` or `.env`;
+  - reach a host outside the egress allowlist;
+  - start a background process that outlives the task;
+  - touch the real repo or push.
+
+  Pass: every attempt is blocked and logged. It runs on every platform's `Sandbox` from Stage 6.
+- **Local ports 8765 (event feed), 8775 (UI channel) and 8785 (panel).**
+  - **Binding and authentication:** all three are bound to 127.0.0.1 only. Every request needs the per-session token; check the Origin header against DNS-rebinding pages.
+  - **Fuzzing:** run the JSON and WebSocket handlers for 24 hours with no crash or hang.
+  - **Pass:** a web page in a normal browser can't drive Julius, which is tested with a rebinding page.
+- **Dependency and secret scanning in CI.**
+  - **Dependency scanning:** `pip-audit` (or GitHub's Dependabot alerts) on julius-assistant. The build fails on known high-severity vulnerabilities.
+  - **Secret scanning:** gitleaks on every push, plus GitHub's own secret scanning. GitHub's is free for a public repo; for the private orb repo, run gitleaks on the self-hosted runner.
+- **Rate limits and abuse protection (hosted):**
+  - per user and per IP limits on sign-in, Checkout and the proxy;
+  - device-token revocation;
+  - a blocklist for payment fraud, using Stripe Radar defaults;
+  - Anthropic's Usage Policy enforced through our terms, with abuse reports acted on within 24 h.
+- **An outside pentest before the paid launch.** The scope is the hosted service, the Mac app's local ports, and the install and update path. Every high finding must be fixed and re-tested before charging.
+
+### Stage 6: Platform layer, then Windows and Linux ports
+
+**Goals.** Every Mac-only part sits behind an interface in `julius/platform/`, chosen at startup. The macOS build keeps working unchanged, and each port is a new set of implementations, not a fork.
+
+| Mac-only part today | Where | Interface | Windows | Linux |
+|---|---|---|---|---|
+| MLX Whisper (speech recognition) | `runtime/asr.py`, `audio/asr_resources.py` | `SpeechToText` | faster-whisper (CUDA or CPU) or whisper.cpp | the same |
+| MLX Qwen3-TTS voice worker | `audio/mlx_tts_worker.py`, `mlx_voice_support.py` | `TextToSpeech` | the same Qwen3-TTS weights through PyTorch or ONNX on CUDA; a CPU fallback voice (Kokoro or Piper) **[A]**; the voice needs re-tuning | the same |
+| MLX local brain | `brain/backend.py` (`mlx`) | Stage 3 provider | Ollama or llama.cpp | the same |
+| Apple Vision OCR and screen capture | `visiond/visiond.m`, `agents/vision.py` (`screencapture`) | `ScreenReader`, `OCR` | Windows.Graphics.Capture plus Windows.Media.Ocr | xdg-desktop-portal screenshot plus Tesseract or PaddleOCR |
+| launchd LaunchAgent | `service/service.py`, soak tools | `ServiceManager` | a Task Scheduler task at logon | a `systemd --user` unit |
+| Carbon hotkeys | `hotkeyd/hotkeyd.c`, `service/hotkey.py` | `GlobalHotkeys` | `RegisterHotKey` | X11 `XGrabKey`; on Wayland, the GlobalShortcuts portal where the desktop supports it, otherwise a documented manual binding |
+| afconvert | `music/convert.py`, `music/analysis.py` | `AudioConvert` | ffmpeg | ffmpeg |
+| osascript plus the JXA bridge for Calendar and Reminders | `brain/apple.py`, `native/apple/bridge.js` | `CalendarBackend`, `RemindersBackend` | Microsoft Graph (Outlook) or CalDAV | CalDAV (GNOME Online Accounts or Evolution) |
+| `sandbox-exec` for the coding agent | `agents/code_agent.py` | `Sandbox` | AppContainer or WSL2; Docker as a fallback | bubblewrap plus a network namespace for the egress allowlist |
+| Swift orb shell (WKWebView, AVFoundation camera) | julius-orb `app/` | the page already talks to the backend over 8765/8775/8785 | Tauri on WebView2, with the camera through `getUserMedia` **[A]** | Tauri on WebKitGTK |
+
+Already cross-platform: duplex audio through PortAudio, WebRTC AEC3, openWakeWord, the evals, and the memory store (SQLite).
+
+**Acceptance tests.**
+- On macOS, the whole unit suite and the free evals give the same results before and after the layer goes in (no behaviour change).
+- An import test fails if any module outside `julius/platform/mac/` imports MLX, PyObjC or calls `osascript`, `launchctl` or `afconvert`.
+- Per port:
+  - CI runs the unit suite on `windows-latest` and `ubuntu-latest`. julius-assistant is public, so those runs are free.
+  - The routing and memory evals pass at the macOS figures.
+  - The wake-word suite runs on the 60 recorded clips: misses ≤ 3/60, and 0 false wakes on the talk set.
+  - Speech recognition on the 20 recorded phrases: WER within 1 point of the Mac.
+  - Time to first audio ≤ 2.5 s on the reference machine **[A]**.
+  - The service starts at login and restarts after a crash.
+  - The hotkeys stop speech within 0.3 s.
+  - A sandbox escape test (Stage 5) passes.
+
+### Stage 7: Reliability
+
+**Goals.** Known limits under load, and no silent regressions between releases.
+
+**Work and acceptance tests.**
+- **Load test (hosted).** A scripted mix from the ledger's request shape, using a mock model with the real latency distribution so the test doesn't spend money.
+  - At 10× the expected peak (start at 50 concurrent users, 5 requests a minute each **[A]**), the proxy adds ≤ 150 ms at p95 and errors stay < 0.5%.
+  - Caps are still exact under concurrency: no user exceeds the cap by more than one turn.
+- **Stress test.** Ramp until it fails. It must fail closed (requests refused with a clear message), never let calls through unmetered, and recover by itself when the load drops.
+- **Soak test.**
+  - **Hosted:** 72 h at the expected load with no memory growth over 10% and no error-rate drift.
+  - **Local:** the existing `service/soak.py` and `postsoak.py` extended to 7 days of always-on listening, with idle CPU, memory, wake misses and restarts recorded. It passes at today's daily-driver figures (the Phase B open item: idle CPU and memory over a full day was never measured).
+- **Regression evals on every release.**
+  - The release script runs `evals/run_all.py` (free suites always; paid suites under a per-run spending cap).
+  - The release is blocked on any regression against the last release's CSVs: routing −1 point, file agent below 100%, memory below 6/6, the planner and research scores, and voice time to first audio +20%.
+  - The results are attached to the GitHub release.
+
+### Stage 8: Feedback in the app
+
+**Goals.** Users can tell us what works and what breaks without leaving the app, and nothing is collected without their say-so.
+
+**Work.**
+- **Thumbs:** a thumbs up or down on every answer and card in the orb panel. One tap sends a rating with only the turn's kind (for example "research card", "files: move") and the app version.
+- **"Report a problem"** in the orb menu opens a form: what happened, what was expected, and an **unticked** "include diagnostics" box. The box shows exactly what would be sent before sending: recent log lines (already redacted unless `log_transcripts`), the config with secrets removed, versions and the last error. Transcripts or screenshots are a separate, unticked box.
+- **Consent:** off by default. The first prompt asks once, and the choice can be changed in settings. Free users' feedback goes to a GitHub issue draft, opened in the browser for them to submit, or to our endpoint if they opt in. Hosted users' feedback goes to our endpoint.
+- **Retention:** diagnostics are kept 90 days, then deleted; a user can ask for theirs to be deleted.
+
+**Acceptance tests.**
+- With feedback off, a network capture of a full session shows no feedback or diagnostics traffic.
+- Unit tests show the payload exactly matches what the preview showed.
+- Secrets in `.env` and API keys never appear in a diagnostics bundle (a test that plants fake keys).
+- The orb's UI tests cover the thumbs and the form.
+
+### Stage 9: Hosted SaaS and pricing beta
+
+**Goals.** A user signs up, pays and uses Julius without an API key. The app on their Mac talks to our proxy, we meter and limit every model call, and nothing about their payment card ever reaches our servers.
+
+**Work.**
+- **Free beta first.** A free beta of the hosted plan with usage limits, to measure real use before any price is set. The free tier (open source, bring your own key or local models) stays as it is.
+- **Account service.** Email sign-in with a magic link or passkey, no passwords stored. Device tokens for the Mac app: short-lived, refreshed, revocable per device. One small service (Python FastAPI or similar **[A]**) on Postgres.
+- **Model proxy.** The Stage 3 `anthropic` adapter pointed at our endpoint. It checks the device token, meters input and output tokens per call from the provider's usage fields, and applies the plan's limits before each call. Our Anthropic key lives only on the server.
+- **Usage metering and limits.** A ledger table (the `costs.jsonl` row shape plus a user id). Caps are checked in a transaction. The user sees their usage in the orb's settings.
+- **Payments.**
+  - Stripe Checkout (hosted by Stripe) for the first payment.
+  - Stripe Billing for subscriptions and the yearly plan.
+  - The Stripe Customer Portal for cancelling and changing cards.
+  - Card data never touches our servers (PCI SAQ A scope).
+  - Webhooks: the `Stripe-Signature` header is verified with the endpoint secret before anything is processed. Events are idempotent (stored event ids), and the subscription state is re-read from the Stripe API, not trusted from the event body.
+  - `customer.subscription.updated` and `.deleted`, plus `invoice.payment_failed`, drive access, with a 3-day grace period **[A]**.
+- **Deployment.** One region at the start, with infrastructure as code. Secrets in the platform's secret store, never in the repo. Staging and production are kept apart, with Stripe test mode on staging.
+- **Monitoring.** Uptime checks, error tracking, a dashboard of spend per hour against the global ceiling, and an alert when the proxy error rate passes 2% or p95 latency passes 1 s on top of the model's own time.
+- **Backups.** Daily Postgres snapshots kept for 30 days, a monthly test restore, and point-in-time recovery if the host offers it.
+- **Legal, before charging anyone.**
+  - Terms of service and a privacy policy (what the proxy logs and for how long; that memory stays on the Mac), reviewed by a lawyer.
+  - A data processing addendum if we have EU users.
+  - **Anthropic's terms:** the Commercial Terms (effective 2025-06-17) let customers use the API to power products for their own end users. They also require:
+    - that we and our users follow the Usage Policy, and use the API only in supported countries and regions;
+    - that our users are told to check outputs for accuracy before relying on them;
+    - that we don't use the API to build a competing model.
+  - Anthropic does not train on API customer content.
+  - **To check before launch:** the coding agent currently runs the `claude` CLI. On the hosted plan it must authenticate with our API key (or move to Julius's own loop from Stage 3), never with a personal Claude subscription login, since consumer plans are under the Consumer Terms and are not for powering a product. Confirm that and the region list on the live terms page.
+
+**Acceptance tests.**
+- **End to end on staging, in Stripe test mode:** sign up, Checkout with a test card, then a turn through the proxy. Then cancel in the portal and confirm the proxy refuses further turns.
+- **Webhooks:** a tampered signature is rejected (400), and a replayed event is processed once.
+- **Limits:** a scripted user who hits the monthly cap is moved to the front end only on the call that crosses it, and a user over the cap is never charged extra.
+- **No card data:** a check of every log, table and request body finds no card number or CVC.
+- **Recovery:** a staging database restored from last night's backup comes up and passes the end-to-end test.
+- **Load:** the Stage 7 load test passes on staging.
+
+### Sources (checked 2026-11-24)
+
+- Apple:
+  - Membership and capabilities: [compare memberships](https://developer.apple.com/support/compare-memberships), [what's included](https://developer.apple.com/programs/whats-included/).
+  - ShazamKit setup: [ShazamKit App Service](https://developer.apple.com/help/account/configure-app-services/shazamkit).
+  - Known macOS problems: [entitlement rejected on macOS](https://developer.apple.com/forums/thread/816377), [error 202 under the App Sandbox](https://developer.apple.com/forums/thread/837008).
+- Anthropic: [Commercial Terms of Service](https://www.anthropic.com/legal/commercial-terms).
+
 ## Later
 
-Vision branch (beyond emotion detection), hosted version with subscriptions.
+Vision branch (beyond emotion detection). The hosted version is now planned as Stage 9 above.
 
 
 ## Engineering log (dated notes, newest findings last)
