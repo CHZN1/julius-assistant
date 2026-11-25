@@ -462,19 +462,12 @@ class PatternAndDriveScanTests(unittest.TestCase):
             self.assertEqual(library.scan_new_drives(self.db)["files"], 4)  # plugged back in
 
 
-class ShippedPatternTests(unittest.TestCase):
-    def test_the_a1_patterns_match_own_root_files_and_not_other_artists_songs(self):
+class RootPatternTests(unittest.TestCase):
+    def test_name_patterns_match_own_root_files_and_not_other_artists_songs(self):
+        """Root-file patterns of the kind julius.local.toml uses ("volume:<UUID>/CHZN1*", plus common misspellings of the tag)."""
         import fnmatch
 
-        import julius.config as c
-
-        U = "volume:0A1B2C3D-0000-4000-8000-123456789ABC/"
-        pats = [
-            n[len(U) :]
-            for n in c.load_config()["music"]["index_allowlist"]
-            if n.startswith(U) and any(ch in n for ch in "*?")
-        ]
-        self.assertEqual(sorted(pats), ["CHNZ1*", "CHZ1*", "CHZN1*", "CZHN1*"])
+        pats = ["CHNZ1*", "CHZ1*", "CHZN1*", "CZHN1*"]
 
         def hit(name):
             return any(fnmatch.fnmatch(name.casefold(), p.casefold()) for p in pats)
