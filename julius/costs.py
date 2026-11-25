@@ -154,8 +154,10 @@ class CostTracker:
             self._turn_costs[tier] = self._turn_costs.get(tier, 0.0) + usd
             return row
 
-    def record_usd(self, tier: str, usd: float, note: str = "") -> dict[str, str | float | int]:
-        """Log a cost already priced elsewhere (the coding agent reports its own dollars)."""
+    def record_usd(
+        self, tier: str, usd: float, note: str = "", provider: str = "anthropic"
+    ) -> dict[str, str | float | int]:
+        """Log a cost already priced elsewhere (the coding agent, `claude -p`, reports its own dollars)."""
         with self._lock:
             self._roll()
             row = {
@@ -163,6 +165,7 @@ class CostTracker:
                 "date": self._day,
                 "turn": self.turn,
                 "tier": tier,
+                "provider": provider,
                 "model": note,
                 "input": 0,
                 "output": 0,

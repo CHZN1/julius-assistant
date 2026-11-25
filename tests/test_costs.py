@@ -60,6 +60,39 @@ class TrackerTests(unittest.TestCase):
     def tracker(self, cap=1.0):
         return jc.CostTracker(self.path, cap, clock=lambda: self.now[0])
 
+    def test_every_new_row_records_its_provider(self):
+        import json
+
+        t = self.tracker()
+        t.record("haiku", usage(i=10))
+        t.record_usd("code", 0.25, note="code t1")
+        rows = [json.loads(x) for x in self.path.read_text().splitlines()]
+        self.assertEqual([r["provider"] for r in rows], ["anthropic", "anthropic"])
+        self.assertEqual(t.record_usd("code", 0.0, provider="ollama")["provider"], "ollama")
+
+    def test_an_old_row_without_a_provider_still_loads_and_counts(self):
+        import json
+
+        day = datetime.fromtimestamp(self.now[0]).strftime("%Y-%m-%d")
+        old = {
+            "ts": self.now[0],
+            "date": day,
+            "turn": 1,
+            "tier": "haiku",
+            "model": "claude-haiku-5-5",
+            "input": 1,
+            "output": 1,
+            "cache_write": 0,
+            "cache_read": 0,
+            "usd": 0.5,
+            "note": "",
+        }
+        self.path.write_text(json.dumps(old) + "\n")
+        t = self.tracker()
+        self.assertAlmostEqual(t.today_total(), 0.5)
+        t.record("haiku", usage(i=100_000))
+        self.assertAlmostEqual(t.today_total(), 0.51)
+
     def test_turn_costs_split_by_tier_and_daily_total_accumulates(self):
         t = self.tracker()
         t.begin_turn()
