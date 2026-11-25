@@ -7,7 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from julius import config, log
+from julius import config, identity, log
 from julius.music import analysis, policy
 
 _drop_source: Callable[[], Any] | None = None
@@ -181,7 +181,7 @@ def _drive_notes() -> str:
     out = []
     if blocked:
         out.append(
-            f"{len(blocked)} entries on {library.volume_label(blocked[0])} could not be read because macOS is blocking Julius from that drive: allow it under System Settings, Privacy & Security, Files & Folders (Removable Volumes), or add Julius's Python under Full Disk Access."
+            f"{len(blocked)} entries on {library.volume_label(blocked[0])} could not be read because macOS is blocking {identity.name()} from that drive: allow it under System Settings, Privacy & Security, Files & Folders (Removable Volumes), or add {identity.name()}'s Python under Full Disk Access."
         )
     if away:
         out.append(

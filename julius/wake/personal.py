@@ -25,18 +25,22 @@ from typing import Any
 import numpy as np
 from numpy import ndarray
 
+from julius import identity
 from julius.paths import REPO_ROOT
 
 SR = 16000
 ROOT = REPO_ROOT
-STARTER = ROOT / "julius" / "wake" / "models" / "julius_starter.onnx"
-STARTER_HEAD = ROOT / "julius" / "wake" / "models" / "julius_starter_head.pt"
+_STEM = identity.current().model_stem  # the wake word's own model files ("julius" by default)
+STARTER = ROOT / "julius" / "wake" / "models" / f"{_STEM}_starter.onnx"
+STARTER_HEAD = ROOT / "julius" / "wake" / "models" / f"{_STEM}_starter_head.pt"
 MAX_POS, MAX_NEG, MAX_SECONDS = 400, 200, 3.0
 MIN_VALIDATION = 5
 
 
 def home() -> Path:
-    return Path(os.environ.get("JULIUS_WAKE_PERSONAL") or Path.home() / ".julius" / "wake_personal")
+    # clips of one wake word never train another: a renamed wake word learns in its own folder
+    folder = "wake_personal" if _STEM == "julius" else f"wake_personal_{_STEM}"
+    return Path(os.environ.get("JULIUS_WAKE_PERSONAL") or Path.home() / ".julius" / folder)
 
 
 class Store:
@@ -508,7 +512,7 @@ def setup(
     store = store or Store()
     done = 0
     say(
-        f'Quick setup: say "Julius" (or "Hey Julius") naturally, up to {count} times. Enter = record, s = skip the rest. You can skip this entirely; Julius also learns from normal use.'
+        f'Quick setup: say "{identity.wake_word()}" (or "Hey {identity.wake_word()}") naturally, up to {count} times. Enter = record, s = skip the rest. You can skip this entirely; {identity.name()} also learns from normal use.'
     )
     for i in range(count):
         if ask(f"  [{i + 1}/{count}] Enter to record, s to skip: ").strip().lower().startswith("s"):

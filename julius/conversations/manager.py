@@ -14,7 +14,7 @@ import threading
 import time
 from collections.abc import Callable
 
-from julius import log
+from julius import identity, log
 from julius.conversations.store import INBOX, ConversationStore
 
 HISTORY_MESSAGES = 8
@@ -25,13 +25,13 @@ RESUME_HOURS = 12
 CAPS = {"project": 5, "conversation": 3}
 NOTE_CHARS = 1600  # about 400 tokens
 
-SUMMARY_SYSTEM = (
-    "You keep a running summary of a conversation between Roy and his voice assistant Julius, so Julius can pick it up later. "
+SUMMARY_SYSTEM = identity.fill(
+    "You keep a running summary of a conversation between Roy and his voice assistant {name}, so {name} can pick it up later. "
     "Write 3 to 5 short plain sentences: what was asked, what was decided or made, and anything left open. No preamble, no lists."
 )
 TITLE_SYSTEM = "Give a short title (2 to 5 words, no quotes, no final full stop) for a conversation that starts with these messages. Plain words only."
-RECAP_SYSTEM = (
-    "In 2 or 3 short spoken sentences, say what this earlier conversation between Roy and Julius was about, addressed to Roy ('we talked about...'). "
+RECAP_SYSTEM = identity.fill(
+    "In 2 or 3 short spoken sentences, say what this earlier conversation between Roy and {name} was about, addressed to Roy ('we talked about...'). "
     "Say only what the messages show; never guess at anything missing or unanswered. No lists."
 )
 CUT_OFF = ("Response stopped by user.", "[interrupted by the user]")
@@ -76,7 +76,7 @@ def haiku(system: str, text: str, max_tokens: int = 250) -> str:
 
 def _transcript(rows: list[dict], chars: int = 6000) -> str:
     lines = [
-        f"{'Roy' if r['role'] == 'user' else 'Julius'}: {r['text']}"
+        f"{'Roy' if r['role'] == 'user' else identity.name()}: {r['text']}"
         for r in rows
         if r["role"] in ("user", "assistant")
     ]
@@ -262,8 +262,9 @@ class Conversations:
             s = self.store.summary(c["id"])
             if s:
                 lines.append("Earlier in this conversation (summary): " + s["text"])
-        return "SESSION STATE (this conversation, from Julius's records):\n" + "\n".join(
-            "- " + x for x in lines
+        return (
+            f"SESSION STATE (this conversation, from {identity.name()}'s records):\n"
+            + "\n".join("- " + x for x in lines)
         )
 
     def recall_items(self, text: str) -> list[dict]:

@@ -15,6 +15,9 @@ from julius.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
 DEFAULTS = {
+    "identity": {
+        "name": "Julius"
+    },  # the assistant's name, display name and wake word: see julius/identity.py
     "brain": {"mode": "cloud"},
     "models": {"haiku": "claude-haiku-5-5", "sonnet": "claude-sonnet-5-5"},
     "spend": {"daily_cap_usd": 5.0, "offline_at_multiple": 2.0},
@@ -173,6 +176,9 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
         raise ValueError("ui.panel_max_mb must be a whole number of megabytes, 1 to 5000")
     if not (isinstance(ui["saved_dir"], str) and ui["saved_dir"].strip()):
         raise ValueError("ui.saved_dir must be a folder path, for example ~/Julius Saved")
+    from julius import identity
+
+    identity.from_config(config)  # a bad [identity] name fails here, at start-up
     code = config["code"]
     if not (0 < code["default_cap_usd"] <= code["max_cap_usd"]):
         raise ValueError("code.default_cap_usd must be positive and not above code.max_cap_usd")
@@ -192,7 +198,7 @@ def describe_key() -> str:
     return "set" if key else "missing"
 
 
-WAKE_CONTRAST = "Julius. Hey Julius. Julia. Julian. Julie. Jules."
+WAKE_CONTRAST = "Julius. Hey Julius. Julia. Julian. Julie. Jules."  # the default name's; see identity.Identity.wake_contrast
 
 
 def asr_initial_prompt(
@@ -205,16 +211,22 @@ def asr_initial_prompt(
     wake=True: for the utterance that may contain the wake word. It opens with the wake word next to its sound-alikes and leaves
     the bare name out of the vocabulary list, because a vocabulary hint that lists "Julius" alone makes Whisper hear Julia and
     Julian as Julius (a false wake). Only the wake check uses it (evals/wake_hint_study.py)."""
-    asr = (config or load_config())["asr"]
+    from julius import identity
+
+    cfg = config or load_config()
+    ident = identity.from_config(cfg)
+    asr = cfg["asr"]
     if not asr.get("vocabulary_hint", True):
         return None
     words = (
-        list(asr.get("vocabulary", []))
+        [
+            ident.wake_word if w == identity.DEFAULT_NAME else w for w in asr.get("vocabulary", [])
+        ]  # the default vocabulary names the assistant: it follows [identity] wake_word
         + list((config or load_config()).get("profile", {}).get("vocabulary", []))
         + list(asr.get("nhl_teams", []))
         + list(asr.get("nfl_teams", []))
     )
     if not wake:
         return ", ".join(dict.fromkeys(words)) + "." if words else None
-    words = [w for w in words if w.strip().lower() != "julius"]
-    return WAKE_CONTRAST + " " + ", ".join(dict.fromkeys(words)) + "." if words else None
+    words = [w for w in words if w.strip().lower() != ident.wake_word.lower()]
+    return ident.wake_contrast + " " + ", ".join(dict.fromkeys(words)) + "." if words else None

@@ -16,6 +16,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+from julius import identity
+
 
 def output(ok: bool, code: str, message: str, **data) -> dict[str, Any]:
     return dict(ok=ok, code=code, message=message, data=data)
@@ -141,7 +143,7 @@ class Planner:
             )
         when = " at " + datetime.fromtimestamp(due, UTC).isoformat() if due is not None else ""
         caveat = (
-            " Julius must be running to announce it; missed reminders are delivered when it resumes."
+            f" {identity.name()} must be running to announce it; missed reminders are delivered when it resumes."
             if kind == "reminder"
             else ""
         )

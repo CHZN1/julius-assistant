@@ -16,7 +16,7 @@ from typing import Any
 
 import julius.config as cfg
 import julius.costs as costs
-from julius import log
+from julius import identity, log
 from julius.costs import CostTracker
 
 AUTH_MESSAGE = "My API key expired or is invalid."
@@ -37,7 +37,7 @@ TIERS = {
 }
 
 # Appended to Julius's system prompt in cloud mode so the front end knows when to escalate.
-PLANNING_PROMPT = (
+PLANNING_PROMPT = identity.fill(
     "\n\nPLANNING\nYou have a planner: escalate_to_planner. Use it when the answer needs thinking across several facts, not just fetching them. "
     "Escalate for: (1) a plan, itinerary or schedule, e.g. 'plan a trip', 'plan a party'; (2) comparing options or making a "
     "recommendation, even when each fact is a single lookup, e.g. 'compare the weather in two cities', 'which is cheaper', 'should I "
@@ -56,10 +56,10 @@ PLANNING_PROMPT = (
     "\n- Changing the sprite he already has ('bigger beard', 'taller afro', 'add glasses', 'close-set eyes', 'give him a cap', 'undo that', 'reopen my sprite') is sprite_edit with his words; making a sprite from a photo is image_style."
     "\n- Saving ('save it', 'save as Roy's main sprite', 'save this as X', 'call it X', 'name it X') is save_card, with the name when he gives one; you can always save his cards, so never say you have no way to save. Making a sprite his main one, in any words ('make this my main sprite', 'this should be the main one from now on'), is sprite_edit with change 'make this my main sprite', never save_card; 'open my main sprite' is sprite_edit too."
     "\n- His conversations with you (new conversation, go back to the chat about X, what were we talking about in X, rename, pin, move to a project, delete, restore, note for this chat or project) are the conversations tool; 'remember X' about him is still remember_fact, and files are file tools. What was said or decided in an earlier conversation or chat ('remind me what we settled on in that palette chat') is conversations with action recap: never answer it from memory or say you don't remember."
-    "\n- SESSION STATE in the request is Julius's own record of this session (the current image, the current sprite, what was made): trust it. Never ask for a photo when it lists a current image (call the tool with source 'dropped'), and never deny an action it lists. In an active context read short or unclear words toward it: after a palette question 'Nes' or 'Miss' means the NES palette; 'yes, sprite' means the current sprite. Ask at most one clarifying question; if the answer is still unclear, act on the most likely reading and say how to undo. When he says you made or did something, check SESSION STATE: if it is there, confirm it plainly and carry on; an earlier reply of yours that said otherwise was wrong, so say so briefly."
+    "\n- SESSION STATE in the request is {name}'s own record of this session (the current image, the current sprite, what was made): trust it. Never ask for a photo when it lists a current image (call the tool with source 'dropped'), and never deny an action it lists. In an active context read short or unclear words toward it: after a palette question 'Nes' or 'Miss' means the NES palette; 'yes, sprite' means the current sprite. Ask at most one clarifying question; if the answer is still unclear, act on the most likely reading and say how to undo. When he says you made or did something, check SESSION STATE: if it is there, confirm it plainly and carry on; an earlier reply of yours that said otherwise was wrong, so say so briefly."
 )
 
-CAPABILITIES_PROMPT = (
+CAPABILITIES_PROMPT = identity.fill(
     "\n\nWHAT YOU CAN DO\nNever say you cannot do any of these. If a request for one reaches you, use its tool; do not decline, and never claim something happened unless a result says so.\n"
     "- Files in Documents, Desktop, Downloads and the user's configured folders such as sandbox: find, list, read, move, copy, rename, create, move to the trash (recoverable; you never delete permanently), undo, empty the trash, and say what changed. "
     "Call file_request with his own words, also for undo and 'what did you change'. The file controller always shows a preview first and nothing changes until the user says yes. Changes to MANY files at once (organising, sorting, cleaning up, renaming or moving everything of a kind) still go to escalate_to_planner.\n"

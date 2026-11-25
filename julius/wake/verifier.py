@@ -18,6 +18,7 @@ from typing import Any
 import numpy as np
 import soundfile as sf
 
+from julius import identity
 from julius.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
@@ -63,7 +64,9 @@ def train(
 
     rng = np.random.default_rng(seed)
     model_path = (
-        Path(model) if model else ROOT / "julius" / "wake" / "models" / "julius_starter.onnx"
+        Path(model)
+        if model
+        else ROOT / "julius" / "wake" / "models" / f"{identity.current().model_stem}_starter.onnx"
     )
     m = Model(wakeword_models=[str(model_path)], inference_framework="onnx")
     name = list(m.models)[0]

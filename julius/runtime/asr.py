@@ -13,7 +13,7 @@ import soundfile as sf
 from numpy import ndarray
 
 import julius.memory.sessions as jm
-from julius import log
+from julius import identity, log
 from julius.audio.asr_resources import recognition_resources
 from julius.audio.listening import has_voice_activity, has_wake
 from julius.audio.speech_text import fix_transcript
@@ -151,7 +151,7 @@ def wake_verify(s: Session, clip: Any) -> tuple[bool, str, float]:
     text, _lang, no_speech = transcribe_input(s, clip, wake=True)
     if text and s.self_echo.is_echo(text):
         s.rec_event("drop", reason="wake_echo", text=text)
-        log.console("  [wake ignored: that was Julius's own voice]", flush=True)
+        log.console(f"  [wake ignored: that was {identity.name()}'s own voice]", flush=True)
         return False, text, time.perf_counter() - started
     heard = bool(text) and no_speech <= NO_SPEECH_LIMIT and has_wake(text)
     return heard, text, time.perf_counter() - started

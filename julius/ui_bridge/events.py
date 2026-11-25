@@ -1,7 +1,7 @@
 """UI event feed: a read-only WebSocket on 127.0.0.1 that broadcasts what Julius is doing, for a future UI. No UI yet; `julius_events_client.py` prints the events.
 
 Messages (JSON text frames, server -> client only; anything a client sends is ignored apart from ping/close):
-  {"type":"hello","state":"idle","level":0.0,"transcript":[...last lines...],"t":...}     on connect
+  {"type":"hello","state":"idle","level":0.0,"transcript":[...last lines...],"t":...,"identity":{"name","display_name","wake_word"}}  on connect
   {"type":"state","state":"idle|listening|thinking|speaking|asleep|quiet","prev":"...","t":...}  on every change
   {"type":"level","level":0.0-1.0,"t":...}        Julius's own voice as it leaves the speakers (RMS x4, clipped), about 30 times a second while he is speaking, then one 0
   {"type":"transcript","who":"you|julius","text":"...","turn":N,"t":...}   a line the user said, or a sentence Julius is saying
@@ -25,6 +25,8 @@ from collections.abc import Callable
 from typing import Any
 
 from numpy import ndarray
+
+from julius import identity
 
 GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 HOST = "127.0.0.1"
@@ -68,6 +70,11 @@ def origin_ok(origin: Any) -> Any:
         return True  # non-browser clients (the test client) send none
     rest = origin.split("://", 1)[-1]
     return origin.split("://", 1)[0] in ("http", "https") and _local_host(rest.split("/")[0])
+
+
+def _identity() -> dict[str, str]:
+    ident = identity.current()
+    return {"name": ident.name, "display_name": ident.display_name, "wake_word": ident.wake_word}
 
 
 class EventHub:
@@ -143,6 +150,7 @@ class EventHub:
             "level": round(self.level, 3),
             "transcript": list(self.transcript),
             "t": round(self.clock(), 3),
+            "identity": _identity(),  # the name a UI shows (title, speaker label, wake hint): [identity] in julius.toml
         }
         if self.panel is not None:
             msg["panel"] = self.panel.snapshot()

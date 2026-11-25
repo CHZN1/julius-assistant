@@ -14,7 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from julius import log
+from julius import identity, log
 
 NOTES_DIR = "~/Documents/Julius Notes"
 FOLLOW_UP_S = 1800
@@ -166,7 +166,7 @@ def write_note(folder: Path, page: dict, source: str, when: datetime) -> Path:
         if page.get("verbatim", True)
         else "Summarised (not copied word for word)"
     )
-    head = f"# {title_of(page)}\n\n_{how} by Julius from a {source} photo on {when.strftime('%B %-d, %Y at %-I:%M %p')}._\n\n"
+    head = f"# {title_of(page)}\n\n_{how} by {identity.name()} from a {source} photo on {when.strftime('%B %-d, %Y at %-I:%M %p')}._\n\n"
     path.write_text(head + page["text"] + "\n", encoding="utf-8")
     return path
 
@@ -288,7 +288,7 @@ def rewrite(brain: Any, form: str, panel: Any, turn: Any) -> str:
     label = {"bullet notes": "notes", "summary": "summary", "plain": "plain English"}[form]
     path = free_path(src.parent, f"{src.stem} ({label})")
     path.write_text(
-        f"# {LAST_PAGE['title']} ({label})\n\n_Rewritten by Julius from the {made_from} in {src.name}._\n\n{body}\n",
+        f"# {LAST_PAGE['title']} ({label})\n\n_Rewritten by {identity.name()} from the {made_from} in {src.name}._\n\n{body}\n",
         encoding="utf-8",
     )
     log.event("page_rewritten", form=form, usd=round(costs.cost_of("sonnet", r.usage), 6))

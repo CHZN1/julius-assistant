@@ -19,11 +19,13 @@ import torch
 import torch.nn as nn
 from scipy import signal
 
+from julius import identity
 from julius.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
 DATA = ROOT / "wake" / "data"
 OUT = ROOT / "julius" / "wake" / "models"
+STEM = identity.current().model_stem  # "julius" by default: julius.onnx, julius_head.pt
 SR, WIN, DIM = 16000, 16, 96
 HOLDOUT_VOICES = ("bf_emma", "af_sky", "bm_george")
 
@@ -236,15 +238,15 @@ def main() -> None:
     torch.onnx.export(
         model,
         torch.zeros(1, WIN, DIM),
-        OUT / f"julius{tag}.onnx",
+        OUT / f"{STEM}{tag}.onnx",
         input_names=["input"],
         output_names=["output"],
         dynamic_axes={"input": {0: "batch"}, "output": {0: "batch"}},
         opset_version=17,
         dynamo=False,
     )
-    torch.save(model.state_dict(), OUT / f"julius_head{tag}.pt")
-    print("wrote", OUT / f"julius{tag}.onnx")
+    torch.save(model.state_dict(), OUT / f"{STEM}_head{tag}.pt")
+    print("wrote", OUT / f"{STEM}{tag}.onnx")
 
 
 if __name__ == "__main__":

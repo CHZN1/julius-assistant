@@ -2,7 +2,7 @@
 
 import time
 
-from julius import log, state
+from julius import identity, log, state
 from julius.audio.listening import quiet_command
 from julius.runtime.session import Session
 
@@ -63,7 +63,7 @@ def sleep_line(s: Session, text: str) -> str:
     """What he says when told to stop listening."""
     if wants_quiet(s, text):
         return f"Going quiet. Press {hotkey_name(s.quiet_hotkey)} to wake me."
-    return "Alright. Say Julius when you need me."
+    return f"Alright. Say {identity.wake_word()} when you need me."
 
 
 def enter_quiet(s: Session) -> None:

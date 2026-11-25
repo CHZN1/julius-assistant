@@ -11,6 +11,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from julius import identity
 from julius.memory.store import SECRET, SENSITIVE, MemoryStore
 
 NOT_A_FACT = r"(?:to|when|how|what|where|why|who|if|whether|me|us|him|her|them|it|that you|the time|the way)\b"
@@ -133,13 +134,13 @@ FIRST_PERSON = re.compile(
     r"\b(?:i'?m|i am|i'?ve|i have|call me|i (?!want\b|need\b|think\b|wonder\b|guess\b|mean\b|meant\b|just\b|will\b|would\b|can\b|could\b|should\b|might\b|may\b|got\b|had\b|saw\b|ate\b|went\b|was\b|did\b|do\b|don'?t know\b|know\b|see\b|hear\b|said\b)\w+|my (?:\w+ ){0,2}(?:is|are|was|name|birthday|wife|husband|partner|girlfriend|boyfriend|sister|brother|mom|mother|dad|father|kid|kids|son|daughter|dog|cat|car|job|boss|team|favorite))\b",
     re.I,
 )
-EXTRACT_PROMPT = """From the user's message, extract lasting facts the user states about themselves or their life: who they are, where they live or work, family, pets, preferences, habits, languages, hobbies, handedness, allergies and dietary restrictions, routines, goals.
-Only a fact the user stated directly, that will still be true in a month. NOT: questions, requests, plans for today, moods, hypotheticals, jokes, quotes, things about other topics, anything about Julius, anything the assistant said.
+EXTRACT_PROMPT = identity.fill("""From the user's message, extract lasting facts the user states about themselves or their life: who they are, where they live or work, family, pets, preferences, habits, languages, hobbies, handedness, allergies and dietary restrictions, routines, goals.
+Only a fact the user stated directly, that will still be true in a month. NOT: questions, requests, plans for today, moods, hypotheticals, jokes, quotes, things about other topics, anything about {name}, anything the assistant said.
 Never record passwords, keys, account or card numbers, or money or legal details, or medical diagnoses, conditions, medications and treatment. Allergies and diet are fine.
 Write each fact as one short sentence starting with "the user". Empty is the right answer most of the time.
 Return ONLY JSON: {"facts": []}
 
-USER MESSAGE: """
+USER MESSAGE: """)
 
 
 PERSONAL_REQUEST = re.compile(

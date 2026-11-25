@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-from julius import log
+from julius import identity, log
 from julius.ui_bridge import panel as pn
 from julius.ui_bridge import panelfiles as pf
 
@@ -486,7 +486,7 @@ def save_vision_card(
         folder.mkdir()
         (folder / f"look.{ext}").write_bytes(data)
         (folder / "card.md").write_text(
-            f"# {card.get('title', 'What Julius saw')}\n\n"
+            f"# {card.get('title', f'What {identity.display_name()} saw')}\n\n"
             f"*{card.get('source', 'image')}, {time.strftime('%Y-%m-%d %H:%M', time.localtime(now()))}.*\n\n"
             f"**Asked:** {card.get('question', '')}\n\n{card.get('answer', '')}\n\n"
             f"![look](look.{ext})\n",

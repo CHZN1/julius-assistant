@@ -8,6 +8,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from julius import identity
+
 CLOUD_DEFAULTS = {
     "JULIUS_BACKEND": "cloud",
     "JULIUS_MODEL": "claude-haiku-5-5",
@@ -86,7 +88,7 @@ def setup(ask: Callable[[str], str] = input, say: Callable[[str], Any] = print) 
     if path.is_file() and "[profile]" in path.read_text():
         say(f"{path} already has a [profile] section; edit it there.")
         return None
-    name = ask("What should Julius call you? (blank to skip) ").strip()
+    name = ask(f"What should {identity.name()} call you? (blank to skip) ").strip()
     city = ask("Home city for weather, e.g. Reno, Nevada (blank to skip) ").strip()
     words = ask("Names Whisper should recognise, comma separated (blank to skip) ")
     vocabulary = [w.strip() for w in words.split(",") if w.strip()]

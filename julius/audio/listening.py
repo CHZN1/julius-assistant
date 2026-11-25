@@ -5,6 +5,8 @@ import re
 
 from numpy import ndarray
 
+from julius import identity
+
 
 class CaptureClock:
     """Detect breaks in captured audio, independent of when it is consumed."""
@@ -25,7 +27,21 @@ class CaptureClock:
         )
 
 
-WAKE_PREFIX = re.compile(r"^\s*(?:(?:hey|okay|ok)[\s,]+)?(?:julius|juliet)\b[\s,.:!?-]*", re.I)
+def _wake_alternatives(ident: identity.Identity | None = None) -> str:
+    """The wake word and its sound-alikes as a regex alternation ("julius|juliet" by default)."""
+    return "|".join(re.escape(w.lower()) for w in (ident or identity.current()).wake_words)
+
+
+def wake_patterns(ident: identity.Identity | None = None) -> tuple[re.Pattern, re.Pattern]:
+    """(WAKE_PREFIX, WAKE_GLUED) for an identity: the module constants are these for the configured one."""
+    alt = _wake_alternatives(ident)
+    return (
+        re.compile(rf"^\s*(?:(?:hey|okay|ok)[\s,]+)?(?:{alt})\b[\s,.:!?-]*", re.I),
+        re.compile(rf"^\s*(?i:{alt})(?=[A-Z][a-z])"),
+    )
+
+
+WAKE_PREFIX = wake_patterns()[0]
 
 
 def has_wake(text: str) -> bool:
@@ -72,9 +88,9 @@ def normalize_request(text: str, keep_and: bool = False) -> str:
     return core + punct
 
 
-WAKE_GLUED = re.compile(
-    r"^\s*(?i:julius|juliet)(?=[A-Z][a-z])"
-)  # Whisper sometimes writes "Julius trash report.txt" as "JuliusTrashReport.txt"
+WAKE_GLUED = wake_patterns()[
+    1
+]  # Whisper sometimes writes "Julius trash report.txt" as "JuliusTrashReport.txt"
 
 
 def strip_leading_wake(text: str) -> str:
@@ -168,7 +184,7 @@ _LEAD_COURTESY = re.compile(
     r"^(?:thanks|thank you|okay|ok|alright|all right|great|cool|nice|good|perfect|right|well|and|so|um|uh)\s+"
 )
 _TAIL_COURTESY = re.compile(
-    r"\s+(?:now|please|julius|for now|for today|for tonight|thanks|thank you)$"
+    rf"\s+(?:now|please|{re.escape(identity.wake_word().lower())}|for now|for today|for tonight|thanks|thank you)$"
 )
 
 

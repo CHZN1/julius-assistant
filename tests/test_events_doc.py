@@ -30,7 +30,7 @@ class FeedDocMatchesCode(unittest.TestCase):
 
     def test_a_real_hello_has_the_documented_fields(self):
         h = ev.EventHub().hello()
-        self.assertEqual(set(h), {"type", "state", "level", "transcript", "t"})
+        self.assertEqual(set(h), {"type", "state", "level", "transcript", "t", "identity"})
         hub = ev.EventHub()
         seen = []
         hub._send = seen.append

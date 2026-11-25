@@ -9,7 +9,7 @@ import numpy as np
 import sounddevice as sd
 from numpy import ndarray
 
-from julius import log
+from julius import identity, log
 from julius.audio.duplex import replace_with_raw
 from julius.runtime.controls import stop_now
 from julius.runtime.session import CHUNK, SAMPLE_RATE, Session
@@ -33,11 +33,14 @@ def microphone_stream(s: Session) -> Any:
 def talked_over(s: Session, duplex: bool = False) -> None:
     """the user started speaking while Julius was talking: cut the speech now and listen to him."""
     if s.cancellation.busy.is_set():
-        log.console("  [you spoke over Julius: stopping]", flush=True)
+        log.console(f"  [you spoke over {identity.name()}: stopping]", flush=True)
         s.rec_event("talk_over")
         stop_now(s, "voice")
     else:
-        log.console("  [you started speaking right after Julius finished: listening]", flush=True)
+        log.console(
+            f"  [you started speaking right after {identity.name()} finished: listening]",
+            flush=True,
+        )
     s.microphone_gate.force_open()
     s.talkover_pending = (
         True  # the main loop must not clear what the user said while the turn was cancelled

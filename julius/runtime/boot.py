@@ -14,7 +14,7 @@ import julius.agents.files as jf
 import julius.brain.tools as jt
 import julius.config as config
 import julius.memory.sessions as jm
-from julius import log, profile, state
+from julius import identity, log, profile, state
 from julius.agents.code_session import CodeSession
 from julius.agents.file_session import FileSession
 from julius.agents.utility_session import UtilitySession
@@ -88,7 +88,7 @@ def setup_basics(s: Session) -> None:
     if profile.needs_setup():
         log.console(
             "  [first run: no name or home city set. Run `python -m julius.profile setup`, "
-            "or just tell Julius your city when you ask for the weather]",
+            f"or just tell {identity.name()} your city when you ask for the weather]",
             flush=True,
         )
 
@@ -141,7 +141,7 @@ def setup_duplex(s: Session) -> None:
         atexit.register(s.duplex.stop)
         s.rec_event("duplex", on=True, rate=s.duplex.rate)
         log.console(
-            "  [duplex audio on: echo cancelled, mic gate off, speaking over Julius stops him "
+            f"  [duplex audio on: echo cancelled, mic gate off, speaking over {identity.name()} stops him "
             f"(falls back to the gate after {s.duplex_monitor.fail_seconds:.0f} s of leaking echo)]",
             flush=True,
         )

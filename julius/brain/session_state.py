@@ -12,6 +12,8 @@ import time
 from collections import deque
 from collections.abc import Callable
 
+from julius import identity
+
 MAX_ACTIONS = 12
 _actions: deque = deque(maxlen=MAX_ACTIONS)
 _counts: dict[str, int] = {}
@@ -64,7 +66,7 @@ def block(last_reply: str = "") -> str:
         )
         lines.insert(
             0,
-            f"Julius made {count('sprite')} sprite{'s' if count('sprite') != 1 else ''} this session ({detail}). If he says so, confirm it.",
+            f"{identity.name()} made {count('sprite')} sprite{'s' if count('sprite') != 1 else ''} this session ({detail}). If he says so, confirm it.",
         )
     if _actions:
         lines.append(
@@ -87,7 +89,7 @@ def block(last_reply: str = "") -> str:
     if not lines:
         return ""
     return (
-        "SESSION STATE (true, from Julius's own records; never deny or contradict it, and never ask for something listed here):\n"
+        "SESSION STATE (true, from {identity.name()}'s own records; never deny or contradict it, and never ask for something listed here):\n"
         + "\n".join("- " + x for x in lines)
     )
 
@@ -120,4 +122,4 @@ def reminder(last_reply: str = "") -> str:
         )
     if not bits:
         return ""
-    return "[Julius's own record, true: " + "; ".join(bits) + ".]"
+    return f"[{identity.name()}'s own record, true: " + "; ".join(bits) + ".]"

@@ -1,6 +1,6 @@
 """Top-level run: boot, calibrate, listen, and report the validation exit code."""
 
-from julius import log
+from julius import identity, log
 from julius.brain.backend import LLM, LLM_BACKEND
 from julius.runtime import asr, boot, capture, inputs
 from julius.runtime.listen import Listener
@@ -20,7 +20,7 @@ def main() -> int:
     capture.calibrate(s)
     asr.setup_wake(s)
     log.console(
-        f'\njulius ready · {LLM_BACKEND}:{LLM} · say "Julius" to wake or just type · Ctrl+C to quit\n'
+        f'\njulius ready · {LLM_BACKEND}:{LLM} · say "{identity.wake_word()}" to wake or just type · Ctrl+C to quit\n'
     )
     Listener(s).run()
     return exit_code(s)

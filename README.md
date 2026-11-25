@@ -101,6 +101,14 @@ The stop and wake hotkeys (Ctrl+Option+S and Ctrl+Option+J) need no permission.
 - **Product search from a photo:** put a [SerpApi](https://serpapi.com) key in `.env` as `SERPAPI_KEY`. Without it, nothing is sent to SerpApi.
 - **Local only:** install Ollama, run `ollama pull qwen3:4b-instruct-2507-q4_K_M`, and set `[brain] mode = "local"` in `julius.toml`.
 
+**Give it another name:** set `name` under `[identity]` in `julius.toml` (or in your own `julius.local.toml`), then restart. The new name is used in:
+- the prompts and the spoken replies;
+- the cards and the console lines;
+- the wake check;
+- the orb's title and speaker label.
+
+The trained wake-word model only knows "Julius". Until you train one for the new word (`python -m julius.wake.build_dataset`, then `python -m julius.wake.train_head`), Julius falls back to the Whisper wake, which already listens for the new name but uses more CPU. Folder names such as `~/Julius Saved` and `~/Library/Logs/Julius` stay as they are, so renaming never moves your data. Details are in [julius/identity.py](julius/identity.py).
+
 More detail on each feature is in [`docs/`](docs/). For example: the side panel and looking at things ([PANEL.md](docs/PANEL.md)), music ([MUSIC.md](docs/MUSIC.md)), the file agent ([File_Agent.md](docs/File_Agent.md)), and voice modes ([Voice_Modes.md](docs/Voice_Modes.md)).
 
 ## Architecture

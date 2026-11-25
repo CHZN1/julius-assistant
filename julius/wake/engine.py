@@ -15,6 +15,7 @@ from typing import Any
 
 import numpy as np
 
+from julius import identity
 from julius.paths import REPO_ROOT
 
 FRAME = 1280
@@ -129,6 +130,23 @@ class WakeEngine:
             fh.write(json.dumps(row) + "\n")
 
 
+def _starter_model(root: Path, ident: identity.Identity | None = None) -> Path:
+    """The shipped starter model for the configured wake word (julius_starter.onnx by default). A renamed wake word has none until
+    it is trained, and from_config then falls back to the Whisper wake, which already listens for the new word."""
+    ident = ident or identity.current()
+    return Path(root) / "julius" / "wake" / "models" / f"{ident.model_stem}_starter.onnx"
+
+
+def missing_model_line(model: Path, ident: identity.Identity | None = None) -> str:
+    ident = ident or identity.current()
+    if ident.model_stem == "julius":
+        return f"  [wake: {model.name} missing, using the Whisper wake]"
+    return (
+        f"  [wake: no trained model for {ident.wake_word!r} yet ({model.name}), using the Whisper wake. To train one: "
+        "python -m julius.wake.build_dataset, then python -m julius.wake.train_head (see julius/identity.py)]"
+    )
+
+
 def choose_model(wake: Any, root: Any | None = None, personal_dir: Any | None = None) -> Any:
     """(path, threshold, learns). An explicit [wake] model wins (your own private detector: threshold_low, no passive learning). Otherwise your personal model from
     passive learning if there is one, else the shipped starter model; both use starter_threshold, very low because the Whisper stage keeps false wakes at zero."""
@@ -142,11 +160,7 @@ def choose_model(wake: Any, root: Any | None = None, personal_dir: Any | None = 
     personal = importlib.import_module("julius.wake.personal").Store(personal_dir).model
     thr = float(wake.get("starter_threshold", 0.0005))
     return (
-        (
-            personal
-            if personal.exists()
-            else root / "julius" / "wake" / "models" / "julius_starter.onnx"
-        ),
+        (personal if personal.exists() else _starter_model(root)),
         thr,
         bool(wake.get("learn", True)),
     )
@@ -166,7 +180,7 @@ def from_config(
         return None
     model, threshold, learns = choose_model(wake)
     if not model.exists():
-        say(f"  [wake: {model.name} missing, using the Whisper wake]")
+        say(missing_model_line(model))
         return None
     try:
         from julius.wake.stream import WakeStream

@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from typing import Any
 
 """Text for the synthetic wake-word dataset. Positives never use Julius's own voice (it is a hard negative, see build_dataset.py)."""
@@ -252,3 +253,24 @@ _JEALOUS = [
 def soundalike_sentences() -> Any:
     out = [t.format(n=n) for n in _NAMES for t in _TEMPLATES] + _JEALOUS
     return out
+
+
+def for_wake(word: str) -> SimpleNamespace:
+    """The dataset phrases for another wake word (identity.wake_word): the name swapped in every positive and every own-voice
+    negative. The sound-alikes are the default name's (Julia, Julian, Juliet...); for another word they are empty, so list that
+    word's own sound-alikes in SOUNDALIKES before training (see julius/identity.py)."""
+    default = word == "Julius"
+    swap = (
+        (lambda xs: list(xs)) if default else (lambda xs: [x.replace("Julius", word) for x in xs])
+    )
+    return SimpleNamespace(
+        BARE=swap(BARE),
+        PREFIXES=swap(PREFIXES),
+        REQUESTS=list(REQUESTS),
+        SOUNDALIKES=list(SOUNDALIKES) if default else [],
+        SOUNDALIKE_SENTENCES=list(SOUNDALIKE_SENTENCES) if default else [],
+        GENERAL=list(GENERAL),
+        JULIUS_OWN=swap(JULIUS_OWN),
+        JULIUS_OWN_EVAL=swap(JULIUS_OWN_EVAL),
+        soundalike_sentences=soundalike_sentences if default else (lambda: []),
+    )

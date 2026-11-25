@@ -19,8 +19,13 @@ import numpy as np
 import soundfile as sf
 from scipy import signal
 
+from julius import identity
 from julius.paths import REPO_ROOT
-from julius.wake import phrases as P
+from julius.wake import phrases
+
+P = phrases.for_wake(
+    identity.wake_word()
+)  # the default name's phrases unchanged; another wake word swapped in
 
 ROOT = REPO_ROOT
 

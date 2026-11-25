@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from julius import identity
 from julius.agents.result import AgentResult
 from julius.brain.conversions import local_datetime
 from julius.brain.planning import output
@@ -83,7 +84,7 @@ class UtilitySession:
                 due,
                 zone or self.timezone_name,
                 self.planner.clock(),
-                "Announced while Julius is running",
+                f"Announced while {identity.name()} is running",
             )
         return out
 
@@ -273,9 +274,9 @@ class UtilitySession:
             "zone": zone,
         }
         destination = (
-            "Julius and the configured Apple calendar"
+            f"{identity.name()} and the configured Apple calendar"
             if self.provider is not None and self.provider.config.get("event")
-            else "Julius only; Apple Calendar is not configured"
+            else f"{identity.name()} only; Apple Calendar is not configured"
         )
         return output(
             True,

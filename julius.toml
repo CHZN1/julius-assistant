@@ -1,5 +1,11 @@
 # Julius runtime configuration. Secrets never go here: put ANTHROPIC_API_KEY in .env (gitignored).
 
+[identity]                  # the assistant's name, in one place (julius/identity.py)
+name = "Julius"             # what it calls itself: prompts, spoken replies, cards, console lines
+# display_name = "Julius"   # what a UI shows (the orb's title and speaker label); defaults to name
+# wake_word = "Julius"      # what wakes it; defaults to name. A new wake word needs its own trained model for [wake] engine = "cascade"
+                            # (until then it falls back to the Whisper wake). Data folders keep their names: renaming moves nothing.
+
 [brain]
 mode = "cloud"              # "cloud" (Haiku front end + Sonnet planner) or "local" (Ollama only)
 max_tool_rounds = 3        # tool rounds Haiku may chain in one turn ("look up X, then chart it")

@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from julius import identity
 from julius.paths import REPO_ROOT
 
 STOP = set(
@@ -320,7 +321,7 @@ class MemoryStore:
 
     def export_markdown(self, path: Path) -> None:
         lines = [
-            "# What Julius remembers",
+            f"# What {identity.name()} remembers",
             "",
             'Generated from memory.sqlite3. Say "forget ..." to remove something.',
             "",

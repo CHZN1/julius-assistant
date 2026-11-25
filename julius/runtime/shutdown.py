@@ -6,12 +6,12 @@ import subprocess
 import sys
 
 import julius.memory.sessions as jm
-from julius import log
+from julius import identity, log
 from julius.brain.backend import LLM_BACKEND, close_backend, llm_chat
 from julius.paths import REPO_ROOT
 from julius.runtime.session import Session
 
-EXTRACTION_PROMPT = """Extract ONLY what the user explicitly stated about himself or explicitly
+EXTRACTION_PROMPT = identity.fill("""Extract ONLY what the user explicitly stated about himself or explicitly
 committed to doing. Be extremely conservative. Most conversations yield nothing.
 
 ALREADY KNOWN — never repeat or rephrase these:
@@ -21,7 +21,7 @@ PROJECTS:
 {projects}
 
 NEVER record any of the following:
-- anything about Julius failing, struggling, or not working
+- anything about {name} failing, struggling, or not working
 - anything about the user's mood, frustration, or tone
 - any task that did not succeed
 - any project invented from a question rather than stated by the user
@@ -39,13 +39,14 @@ Return ONLY JSON:
   "projects": []}}
 
 CONVERSATION:
-{conversation}"""
+{conversation}""")
 
 
 def extraction_prompt(turns: list[dict]) -> str:
     """The prompt that asks the model what, if anything, is worth remembering."""
     conversation = "\n".join(
-        f"{'the user' if h['role'] == 'user' else 'Julius'}: {h['content']}" for h in turns[-40:]
+        f"{'the user' if h['role'] == 'user' else identity.name()}: {h['content']}"
+        for h in turns[-40:]
     )
     known = "\n".join(f"- {f['text']}" for f in jm._load("facts.json")["facts"])
     projects = "\n".join(f"- {p['name']}" for p in jm._load("projects.json")["projects"])

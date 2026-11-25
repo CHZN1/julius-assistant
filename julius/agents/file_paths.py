@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from julius import identity
 from julius.agents.file_common import (
     FileProblem,
 )
@@ -51,7 +52,7 @@ class PathsMixin:
             name = found[0].name if found else Path(path).parent.name
             raise FileProblem(
                 "read_only",
-                f"{name} is read-only for Julius, so I will not change anything there. You can change this in the [files.folders] section of julius.toml.",
+                f"{name} is read-only for {identity.name()}, so I will not change anything there. You can change this in the [files.folders] section of julius.toml.",
             )
 
     def _extra_folder(self, p: Path) -> Path:
@@ -96,13 +97,13 @@ class PathsMixin:
         ):
             raise FileProblem(
                 "outside_scope",
-                "That path is outside the folders Julius is allowed to use.",
+                f"That path is outside the folders {identity.name()} is allowed to use.",
                 allowed=[str(a) for a in self.allowed],
             )
         if resolved.is_relative_to(self.state_dir):
             raise FileProblem(
                 "protected_path",
-                "Julius file history is protected. Use the file-plan history interface to inspect it.",
+                f"{identity.name()} file history is protected. Use the file-plan history interface to inspect it.",
             )
         if not new and not resolved.exists():
             raise FileProblem("not_found", f"I could not find {raw}.")

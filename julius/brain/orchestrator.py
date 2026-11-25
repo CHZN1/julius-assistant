@@ -9,6 +9,7 @@ the human FileSession and runs only after the user says yes. There is no coding 
 from typing import Any
 
 import julius.brain.cloud as jc
+from julius import identity
 
 MAX_RESULT_CHARS = 6000
 SPOKEN_LIMIT = 500
@@ -32,7 +33,7 @@ SUBAGENT_TOOLS = (
     "find_files",
 )
 
-PLANNER_SYSTEM = """You are the planner behind Julius, a voice assistant. Julius's quick model hands you tasks that need several steps.
+PLANNER_SYSTEM = identity.fill("""You are the planner behind {name}, a voice assistant. {name}'s quick model hands you tasks that need several steps.
 Your final reply is spoken aloud: at most two short sentences, plain words, no lists, no markdown, no URLs.
 
 Work like this:
@@ -53,7 +54,7 @@ Work like this:
 - Research: research_task runs a read-only web research sub-agent for questions that need current or sourced facts from the web beyond a
   quick search (comparisons, "find out about", "look up and summarise"). Give it one precise question. It returns a short answer with its
   cited findings; speak only what it confirmed, say plainly if it could not confirm, and do not repeat URLs.
-- Never invent results. If a tool failed or found nothing, say that plainly."""
+- Never invent results. If a tool failed or found nothing, say that plainly.""")
 
 SUBAGENT_FOOTER = (
     "\n\nYou are a sub-agent. Use only your tools, stop as soon as the task is answered, and reply with the facts "

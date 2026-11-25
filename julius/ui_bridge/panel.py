@@ -15,6 +15,8 @@ from collections.abc import Callable
 from typing import Any
 from urllib.parse import urlsplit
 
+from julius import identity
+
 HISTORY = 20
 MAX_BYTES = 48_000
 MAX_SOURCES = 12
@@ -883,7 +885,9 @@ class PanelHub:
         """A vision card: one look (camera, window, screen or dropped image) and Julius's answer. `image` is a panel file reference to an in-memory picture."""
         source = str(card.get("source") or "")
         body = {
-            "title": clean(card.get("title") or "What Julius saw", CAPS["title"]),
+            "title": clean(
+                card.get("title") or f"What {identity.display_name()} saw", CAPS["title"]
+            ),
             "source": source if source in VISION_SOURCES else "image",
             "question": clean(card.get("question"), CAPS["question"]),
             "answer": clean_text(card.get("answer"), CAPS["summary"]),
