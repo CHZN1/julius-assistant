@@ -83,9 +83,32 @@ class Decoding(unittest.TestCase):
             ],
         )
 
-    def test_missing_converters_raise_a_speakable_error(self):
+    def test_afconvert_at_its_system_path_is_used_when_path_finds_no_converter(self):
+        exists = Path.exists
         with (
             mock.patch.object(analysis.shutil, "which", return_value=None),
+            mock.patch.object(
+                Path,
+                "exists",
+                autospec=True,
+                side_effect=lambda path: path == Path("/usr/bin/afconvert") or exists(path),
+            ),
+            mock.patch.object(analysis.subprocess, "run", side_effect=self.decode) as run,
+        ):
+            analysis.load(self.source)
+
+        self.assertEqual(run.call_args.args[0][0], "/usr/bin/afconvert")
+
+    def test_missing_converters_raise_a_speakable_error(self):
+        exists = Path.exists
+        with (
+            mock.patch.object(analysis.shutil, "which", return_value=None),
+            mock.patch.object(
+                Path,
+                "exists",
+                autospec=True,
+                side_effect=lambda path: path != Path("/usr/bin/afconvert") and exists(path),
+            ),
             mock.patch.object(analysis.subprocess, "run", side_effect=self.decode) as run,
             self.assertRaisesRegex(analysis.AudioProblem, "install ffmpeg"),
         ):
