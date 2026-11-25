@@ -29,7 +29,7 @@ from julius.brain.backend import LLM_BACKEND, _offline_chat, prepare_backend
 from julius.brain.intents import LiveIntentRouter
 from julius.brain.vision_mode import create_vision
 from julius.memory import commands, store
-from julius.runtime import capture, controls
+from julius.runtime import capture, controls, test_run
 from julius.runtime.prompt import build_system
 from julius.runtime.session import Session
 
@@ -63,6 +63,8 @@ def asr_model_for(name: str) -> str:
 
 def setup_basics(s: Session) -> None:
     """Cancellation, microphone gate, self-echo filter, recording and the memory folder."""
+    if s.scripted and (test_root := test_run.isolate()):
+        log.console(f"  [test run: memory, conversations and costs go to {test_root}]", flush=True)
     s.cancellation = Cancellation()
     s.microphone_gate = MicrophoneGate()
     s.self_echo = SelfEcho()

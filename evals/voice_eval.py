@@ -323,6 +323,11 @@ def main(argv=None):
     ap.add_argument("--takes", default="")
     ap.add_argument("--all-takes", action="store_true")
     ap.add_argument("--mode", default="gate", choices=["gate", "none", "aec"])
+    ap.add_argument(
+        "--write-baseline",
+        action="store_true",
+        help="replay: record the newest takes as voice_data/replay_baseline_<mode>.json",
+    )
     a = ap.parse_args(argv)
     return score_main(a) if a.cmd == "score" else replay_main(a)
 

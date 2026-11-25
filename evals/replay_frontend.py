@@ -6,6 +6,12 @@ What it does for each take:
   2. mode `gate`: the microphone is dropped while Julius plays and for 0.75 s after (today's behaviour). `none`: no gate. `aec`: echo cancellation, out.wav as the reference.
   3. The result is cut into utterances the way the live loop does (1024-sample blocks, energy threshold, 0.6 s of silence ends one) and each is transcribed with the live ASR model.
   4. Each utterance is classed: the user's (matches what the script told him to say in that stretch), Julius hearing himself (matches what Julius said), or neither.
+Deterministic: the same recordings, decode settings and seed give the same transcripts on every run.
+  - Recordings: the takes listed in voice_data/replay_baseline_<mode>.json (the recordings are local, so the baseline lives with them), not "the newest take".
+  - Decoding: the live model and settings, with mx.random.seed(SEED) before every utterance, so Whisper's temperature fallback (which samples when greedy decoding
+    fails its checks) samples the same way each time. Before the seed, one s07 turn came back either clean or as a 40-word hallucination (WER 0.27 to 0.47).
+  - Hint: the vocabulary hint stored in the baseline, not your julius.local.toml, so editing your profile never moves the score.
+  - Regression: mean WER above the baseline's by more than TOLERANCE, or a turn that was exact and no longer is. `--write-baseline` records a new baseline.
 Scores: the user's words recovered (1 - WER per turn against the script, over the utterances starting in that turn's window), utterances split off, self-heard utterances
 (Julius answering himself is the cost of letting audio in during playback), and unexplained utterances."""
 
@@ -30,6 +36,10 @@ SILENCE_LEN, MIN_SPEECH = 0.6, 0.4
 SETTLE = 0.75
 PHYS = 0.45  # seconds from a chunk being written to the device until its sound reaches the microphone (device latency 0.4 s + air)
 ASR = "mlx-community/whisper-small.en-mlx"
+SEED = 1301  # the same seed as the other Whisper evals (wake_eval, wake_regression, bargein_eval)
+TOLERANCE = (
+    0.01  # mean WER may move this much before it counts as a regression (it should not move at all)
+)
 
 
 def read_wav(path):
@@ -112,13 +122,25 @@ def front_end(mic, out, mode, duplex=False):
 _asr_ready = False
 
 
-def transcribe(audio):
-    global _asr_ready
-    import mlx_whisper
-
+def default_prompt():
+    """The hint from julius.toml alone (no julius.local.toml profile words): what a new baseline records."""
     from julius import config
 
-    prompt = config.asr_initial_prompt()
+    return config.asr_initial_prompt(
+        {"asr": config.DEFAULTS["asr"] | config.load_config().get("asr", {}), "profile": {}}
+    )
+
+
+PROMPT = None  # set by main from the baseline
+
+
+def transcribe(audio):
+    global _asr_ready
+    import mlx.core as mx
+    import mlx_whisper
+
+    prompt = PROMPT if PROMPT is not None else default_prompt()
+    mx.random.seed(SEED)
     r = mlx_whisper.transcribe(
         audio.astype(np.float32),
         path_or_hf_repo=ASR,
@@ -237,8 +259,68 @@ def summarize(rows):
     }
 
 
+def baseline_path(mode, root=None):
+    return Path(root or ve.DATA) / f"replay_baseline_{mode}.json"
+
+
+def load_baseline(mode, root=None):
+    path = baseline_path(mode, root)
+    return json.loads(path.read_text()) if path.exists() else None
+
+
+def baseline_takes(base, root=None):
+    """{scenario: [take folders]} from the baseline's list; KeyError-free: a missing take is reported, not skipped silently."""
+    root = Path(root or ve.DATA)
+    out, missing = {}, []
+    for rel in base["takes"]:
+        t = root / rel
+        if not (t / "rec" / "events.jsonl").exists():
+            missing.append(rel)
+            continue
+        out.setdefault(t.name.split("__take")[0], []).append(t)
+    return out, missing
+
+
+def compare(rows, base, tolerance=TOLERANCE):
+    """Against the stored baseline: (regressed, reasons, changed turns)."""
+    s = summarize(rows)
+    old = {(r["scenario"], r["turn"]): r for r in base["rows"]}
+    changed, broke = [], []
+    for r in rows:
+        b = old.get((r["scenario"], r["turn"]))
+        if b is None or b["heard"] != r["heard"]:
+            changed.append(f"{r['scenario']}#{r['turn'] + 1}")
+        if b is not None and b["wer"] == 0 and (r["wer"] or 0) > 0:
+            broke.append(f"{r['scenario']}#{r['turn'] + 1}")
+    why = []
+    if s["mean_wer"] is not None and s["mean_wer"] - base["mean_wer"] > tolerance:
+        why.append(f"WER {base['mean_wer']} -> {s['mean_wer']}")
+    if broke:
+        why.append("no longer exact: " + ",".join(broke[:8]))
+    return bool(why), why, changed
+
+
 def main(a):
-    takes = ve.find_takes(ve.DATA, [x for x in a.takes.split(",") if x] or None, a.all_takes)
+    global PROMPT
+    base = (
+        None
+        if (a.takes or a.all_takes or getattr(a, "write_baseline", False))
+        else load_baseline(a.mode)
+    )
+    if base:
+        takes, missing = baseline_takes(base)
+        if missing:
+            print("baseline recordings missing: " + ", ".join(missing))
+            return 1
+        if base.get("asr") != ASR or base.get("seed") != SEED:
+            print(
+                "the baseline was recorded with other decode settings; record a new one with --write-baseline"
+            )
+            return 1
+        PROMPT = base["initial_prompt"]
+    else:
+        takes = ve.find_takes(ve.DATA, [x for x in a.takes.split(",") if x] or None, a.all_takes)
+        PROMPT = default_prompt()
     if not takes:
         print("no recordings")
         return 1
@@ -257,6 +339,41 @@ def main(a):
     print(
         f"\nfront-end replay, mode {a.mode}: {s['turns']} turns, mean WER {s['mean_wer']}, exact {s['exact']}/{s['graded']}, split or lost {s['split_or_lost']}, self-heard utterances {s['self_heard']}, silent turns answered {s['silent_turns_answered']}  ({time.time() - t_start:.0f}s)"
     )
+    verdict = {}
+    if base:
+        regressed, why, changed = compare(rows, base)
+        verdict = {
+            "baseline_mean_wer": base["mean_wer"],
+            "baseline_regression": regressed,
+            "baseline_why": "; ".join(why),
+            "changed_turns": changed,
+        }
+        print(
+            f"vs baseline ({base['date']}): mean WER {base['mean_wer']} -> {s['mean_wer']}, {len(changed)} turns heard differently"
+            + (f"  REGRESSED: {'; '.join(why)}" if regressed else "  ok")
+        )
+    elif not getattr(a, "write_baseline", False):
+        print(
+            f"no baseline yet: python evals/voice_eval.py replay --mode {a.mode} --write-baseline"
+        )
+    if getattr(a, "write_baseline", False):
+        rels = [str(t.relative_to(ve.DATA)) for ts in takes.values() for t in ts]
+        baseline_path(a.mode).write_text(
+            json.dumps(
+                {
+                    "mode": a.mode,
+                    "date": time.strftime("%Y-%m-%d %H:%M"),
+                    "asr": ASR,
+                    "seed": SEED,
+                    "initial_prompt": PROMPT,
+                    "takes": rels,
+                    **s,
+                    "rows": rows,
+                },
+                indent=1,
+            )
+        )
+        print(f"baseline written: {baseline_path(a.mode)} ({len(rels)} takes)")
     ve.RESULTS.mkdir(exist_ok=True)
     (ve.RESULTS / f"voicereplay_{a.mode}_{time.strftime('%Y%m%d_%H%M%S')}.summary.json").write_text(
         json.dumps(
@@ -265,6 +382,7 @@ def main(a):
                 "mode": a.mode,
                 "date": time.strftime("%Y-%m-%d %H:%M"),
                 **s,
+                **verdict,
                 "rows": rows,
             },
             indent=1,

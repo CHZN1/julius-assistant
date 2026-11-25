@@ -25,6 +25,13 @@ def main(argv: list[str] | None = None) -> int:
         # What he heard and said is logged only while [service] log_transcripts is on.
         log.install(config.transcripts_logging_cached)
     apply_cloud_defaults()  # before the backend module reads its environment at import
+    from julius import log
+    from julius.runtime import test_run
+
+    if (
+        root := test_run.isolate()
+    ):  # scripted test turns: never the real memory, conversations or costs
+        log.console(f"  [test run: memory, conversations and costs go to {root}]", flush=True)
     from julius.runtime.app import main as run
 
     return run()

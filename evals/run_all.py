@@ -67,7 +67,10 @@ def suite(name, script, args, prefix, key, label, tolerance, paid):
     broke = (new.get("regressions_vs_previous") or {}).get("newly_failing") or []
     if broke:
         why.append("now failing: " + ",".join(broke[:8]))
-    if old and old.get(key) is not None and value is not None:
+    if "baseline_regression" in new:  # judged against a stored baseline, not the previous run
+        if new["baseline_regression"]:
+            why.append(new.get("baseline_why") or f"{label} above baseline")
+    elif old and old.get(key) is not None and value is not None:
         drop = (old[key] - value) if key != "mean_wer" else (value - old[key]) * 100
         if drop > tolerance:
             why.append(f"{label} {old[key]} -> {value}")

@@ -26,12 +26,12 @@ CAPS = {"project": 5, "conversation": 3}
 NOTE_CHARS = 1600  # about 400 tokens
 
 SUMMARY_SYSTEM = identity.fill(
-    "You keep a running summary of a conversation between Roy and his voice assistant {name}, so {name} can pick it up later. "
+    "You keep a running summary of a conversation between the user and their voice assistant {name}, so {name} can pick it up later. "
     "Write 3 to 5 short plain sentences: what was asked, what was decided or made, and anything left open. No preamble, no lists."
 )
 TITLE_SYSTEM = "Give a short title (2 to 5 words, no quotes, no final full stop) for a conversation that starts with these messages. Plain words only."
 RECAP_SYSTEM = identity.fill(
-    "In 2 or 3 short spoken sentences, say what this earlier conversation between Roy and {name} was about, addressed to Roy ('we talked about...'). "
+    "In 2 or 3 short spoken sentences, say what this earlier conversation between the user and {name} was about, addressed to the user ('we talked about...'). "
     "Say only what the messages show; never guess at anything missing or unanswered. No lists."
 )
 CUT_OFF = ("Response stopped by user.", "[interrupted by the user]")
@@ -74,14 +74,30 @@ def haiku(system: str, text: str, max_tokens: int = 250) -> str:
     return "".join(b.text for b in r.content if getattr(b, "type", "") == "text").strip()
 
 
+def _speaker() -> str:
+    """The user's line label in a transcript: the [profile] name, or "User" when none is set."""
+    from julius import profile
+
+    name = profile.user_name()
+    return "User" if name == "the user" else name
+
+
 def _transcript(rows: list[dict], chars: int = 6000) -> str:
+    who = _speaker()
     lines = [
-        f"{'Roy' if r['role'] == 'user' else identity.name()}: {r['text']}"
+        f"{who if r['role'] == 'user' else identity.name()}: {r['text']}"
         for r in rows
         if r["role"] in ("user", "assistant")
     ]
     out = "\n".join(lines)
     return out[-chars:]
+
+
+def _with_profile(system: str) -> str:
+    """A prompt written about "the user", with the [profile] name in place when one is set."""
+    from julius import profile
+
+    return profile.apply(system)
 
 
 def when(t: float, now: float | None = None) -> str:
@@ -244,7 +260,7 @@ class Conversations:
         text = (
             "Summary so far: " + old["text"] + "\n\nNew messages:\n" if old else "Messages:\n"
         ) + _transcript(new)
-        out = self.llm(SUMMARY_SYSTEM, text, 250)
+        out = self.llm(_with_profile(SUMMARY_SYSTEM), text, 250)
         if out:
             self.store.set_summary(cid, out, rows[-1]["id"])
         return out
@@ -445,7 +461,7 @@ class Conversations:
             return ""
         if self.llm is not None:
             try:
-                out = self.llm(RECAP_SYSTEM, _transcript(rows, 4000), 160)
+                out = self.llm(_with_profile(RECAP_SYSTEM), _transcript(rows, 4000), 160)
                 if out:
                     return out
             except Exception as exc:
