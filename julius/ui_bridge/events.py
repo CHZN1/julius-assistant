@@ -8,6 +8,9 @@ Messages (JSON text frames, server -> client only; anything a client sends is ig
   {"type":"panel.research|panel.update|panel.clear",...}   side-panel data (see ui_bridge/panel.py and docs/EVENT_FEED.md)
 
 Safety: binds 127.0.0.1 only (the host is not configurable); a request whose Host or Origin is not localhost/127.0.0.1 is refused (DNS rebinding, other web pages);
+the per-install UI token (~/.julius/ui_token, the same one the UI channel on 8775 uses) is required, so another program on the Mac can't read the transcript:
+send it as `Authorization: Bearer <token>`, or, from a browser page that can't set headers, as the subprotocol `julius.token.<token>` (offer `julius.v1` too; that
+is the one echoed back); a missing or wrong token gets 401;
 clients cannot send commands; frames from clients larger than 64 kB close the connection; a client that falls 300 messages behind is dropped; at most 8 clients.
 No third-party packages: the WebSocket framing (RFC 6455) is implemented here."""
 
@@ -15,6 +18,7 @@ import base64
 import collections
 import contextlib
 import hashlib
+import hmac
 import json
 import queue
 import socket
@@ -174,10 +178,32 @@ class EventHub:
             return len(self._clients)
 
 
+PROTOCOL = "julius.v1"
+TOKEN_PROTOCOL = "julius.token."
+_REQUIRED = object()
+
+
+def token_ok(hdr: dict[str, str], token: str) -> str | None:
+    """The subprotocol to echo ("" for none) when the request carries the token, else None."""
+    auth = hdr.get("authorization", "")
+    offered = [p.strip() for p in hdr.get("sec-websocket-protocol", "").split(",") if p.strip()]
+    echo = PROTOCOL if PROTOCOL in offered else ""
+    if auth.startswith("Bearer ") and hmac.compare_digest(
+        auth[7:].strip().encode(), token.encode()
+    ):
+        return echo
+    for p in offered:
+        if p.startswith(TOKEN_PROTOCOL) and hmac.compare_digest(
+            p[len(TOKEN_PROTOCOL) :].encode(), token.encode()
+        ):
+            return echo or p
+    return None
+
+
 class _Client(threading.Thread):
-    def __init__(self, sock: Any, hub: Any) -> None:
+    def __init__(self, sock: Any, hub: Any, token: str | None = None) -> None:
         super().__init__(daemon=True)
-        self.sock, self.hub = sock, hub
+        self.sock, self.hub, self.token = sock, hub, token
         self.q = queue.Queue(maxsize=300)
         self.alive = True
 
@@ -258,6 +284,12 @@ class _Client(threading.Thread):
                     b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
                 )
                 return
+            echo = "" if self.token is None else token_ok(hdr, self.token)
+            if echo is None:
+                self.sock.sendall(
+                    b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                )
+                return
             if not self.hub.add(self):
                 self.sock.sendall(
                     b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
@@ -267,6 +299,7 @@ class _Client(threading.Thread):
                 (
                     "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: "
                     + accept_key(hdr["sec-websocket-key"])
+                    + (f"\r\nSec-WebSocket-Protocol: {echo}" if echo else "")
                     + "\r\n\r\n"
                 ).encode()
             )
@@ -295,7 +328,15 @@ class EventServer:
         state_fn: Callable | None = None,
         level_fn: Callable | None = None,
         hz: int = 30,
+        token: Any = _REQUIRED,
     ) -> None:
+        """token: the UI token every client must send, or None for an unauthenticated server (tests and throwaway
+        scripts only; it must be passed explicitly, so a real feed can't end up open by accident)."""
+        if token is _REQUIRED:
+            raise TypeError(
+                "EventServer needs token=<the UI token>, or token=None for an unauthenticated test server"
+            )
+        self.token = token
         self.hub, self.port, self.state_fn, self.level_fn, self.hz = (
             hub,
             port,
@@ -323,7 +364,7 @@ class EventServer:
                 conn, _ = self._sock.accept()
             except OSError:
                 return
-            _Client(conn, self.hub).start()
+            _Client(conn, self.hub, self.token).start()
 
     def _sample(self) -> None:
         period = 1.0 / self.hz
@@ -372,7 +413,15 @@ def start_from_config(
         return None, None
     hub = EventHub()
     try:
-        server = EventServer(hub, int((cfg or {}).get("port", 8765)), state_fn, level_fn).start()
+        from julius.ui_bridge import uichannel
+
+        server = EventServer(
+            hub,
+            int((cfg or {}).get("port", 8765)),
+            state_fn,
+            level_fn,
+            token=uichannel.ensure_token(),
+        ).start()
     except OSError:
         return None, None
     return hub, server

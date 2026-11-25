@@ -17,10 +17,21 @@ def wait(pred, t=3.0):
     return False
 
 
+TOKEN = "test-token-abcdefghijklmnopqrstuvwxyz"
+AUTH = f"Authorization: Bearer {TOKEN}\r\n"
+KEY = "Upgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n"
+
+
+def tests_root():
+    import tests
+
+    return tests.ROOT
+
+
 class Feed(unittest.TestCase):
     def setUp(self):
         self.hub = ev.EventHub()
-        self.server = ev.EventServer(self.hub, port=0).start()
+        self.server = ev.EventServer(self.hub, port=0, token=TOKEN).start()
         self.socks = []
 
     def tearDown(self):
@@ -29,7 +40,7 @@ class Feed(unittest.TestCase):
         self.server.stop()
 
     def client(self):
-        s, rest = cl.connect(self.server.port)
+        s, rest = cl.connect(self.server.port, token=TOKEN)
         self.socks.append(s)
         g = cl.events(s, rest)
         return s, g
@@ -97,6 +108,7 @@ class Feed(unittest.TestCase):
                     "GET / HTTP/1.1\r\n"
                     + host
                     + hdrs
+                    + AUTH
                     + "Upgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
                 ).encode()
             )
@@ -105,9 +117,60 @@ class Feed(unittest.TestCase):
         s = socket.create_connection(("127.0.0.1", self.server.port))
         self.socks.append(s)
         s.sendall(
-            b"GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nOrigin: http://localhost:3000\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
+            (
+                "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nOrigin: http://localhost:3000\r\n"
+                + AUTH
+                + KEY
+                + "\r\n"
+            ).encode()
         )
         self.assertIn(b" 101 ", s.recv(300).split(b"\r\n")[0])
+
+    def handshake(self, extra):
+        s = socket.create_connection(("127.0.0.1", self.server.port))
+        self.socks.append(s)
+        s.sendall(("GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n" + extra + KEY + "\r\n").encode())
+        return s.recv(400).decode("latin-1")
+
+    def test_another_program_without_the_token_cannot_read_the_feed(self):
+        for extra in (
+            "",  # no token
+            "Authorization: Bearer wrong-token-wrong-token\r\n",
+            f"Authorization: Bearer {TOKEN[:-1]}\r\n",  # almost right
+            "Sec-WebSocket-Protocol: julius.v1, julius.token.wrong\r\n",
+            f"Authorization: Basic {TOKEN}\r\n",
+        ):
+            with self.subTest(extra=extra):
+                self.assertIn(" 401 ", self.handshake(extra).split("\r\n")[0])
+        self.assertEqual(self.hub.clients, 0)
+        with self.assertRaisesRegex(ConnectionError, "401"):
+            cl.connect(self.server.port, token="")
+
+    def test_the_token_works_as_a_header_or_a_browser_subprotocol(self):
+        self.assertIn(" 101 ", self.handshake(AUTH).split("\r\n")[0])
+        reply = self.handshake(f"Sec-WebSocket-Protocol: julius.v1, julius.token.{TOKEN}\r\n")
+        self.assertIn(" 101 ", reply.split("\r\n")[0])
+        self.assertIn(
+            "Sec-WebSocket-Protocol: julius.v1\r\n", reply
+        )  # the token itself is not echoed
+        self.assertNotIn(TOKEN, reply)
+
+    def test_a_real_feed_cannot_be_started_without_a_token(self):
+        with self.assertRaisesRegex(TypeError, "needs token"):
+            ev.EventServer(self.hub, port=0)
+        hub, srv = ev.start_from_config({"enabled": True, "port": 0})
+        try:
+            self.assertIsNotNone(srv.token)
+            from julius.ui_bridge import uichannel
+
+            self.assertEqual(
+                srv.token, uichannel.ensure_token()
+            )  # the same token as the UI channel
+            self.assertTrue(
+                str(uichannel.HOME).startswith(tests_root())
+            )  # a throwaway one in tests
+        finally:
+            srv.stop()
 
     def test_plain_http_is_refused(self):
         s = socket.create_connection(("127.0.0.1", self.server.port))
@@ -140,10 +203,15 @@ class Feed(unittest.TestCase):
     def test_state_and_level_follow_the_sampler(self):
         st = {"s": "idle", "l": 0.0}
         srv = ev.EventServer(
-            self.hub, port=0, state_fn=lambda: st["s"], level_fn=lambda: st["l"], hz=100
+            self.hub,
+            port=0,
+            state_fn=lambda: st["s"],
+            level_fn=lambda: st["l"],
+            hz=100,
+            token=TOKEN,
         ).start()
         try:
-            s, rest = cl.connect(srv.port)
+            s, rest = cl.connect(srv.port, token=TOKEN)
             self.socks.append(s)
             g = cl.events(s, rest)
             next(g)

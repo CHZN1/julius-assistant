@@ -355,12 +355,12 @@ class Tiers(unittest.TestCase):
     def test_the_environment_overrides_a_tier_for_evals(self):
         env = {
             "JULIUS_TIER_FRONT_END": "ollama:qwen3:4b-instruct-2507-q4_K_M",
-            "JULIUS_TIER_FRONT_END_BASE_URL": "http://box:11434",
+            "JULIUS_TIER_FRONT_END_BASE_URL": "http://127.0.0.1:11435",
         }
         tm = providers.resolve("front_end", OLD, env=env)
         self.assertEqual(
             (tm.provider, tm.model, tm.base_url),
-            ("ollama", "qwen3:4b-instruct-2507-q4_K_M", "http://box:11434"),
+            ("ollama", "qwen3:4b-instruct-2507-q4_K_M", "http://127.0.0.1:11435"),
         )
 
     def test_bad_configs_are_refused_at_start(self):
@@ -627,6 +627,108 @@ class LocalLimits(unittest.TestCase):
         self.assertEqual(
             (spoken, brain.failures, brain.offline_until), (jc.FAILED_TURN_MESSAGE, 0, 0.0)
         )
+
+
+class Endpoints(unittest.TestCase):
+    """Plain http:// is for this Mac only; anything else needs https, or an explicit allow_insecure = true that is warned
+    about at every start. A non-local Ollama without https gets its own warning: Ollama has no authentication."""
+
+    def tm(self, provider, url, **extra):
+        return providers.resolve(
+            "front_end",
+            {
+                "models": {
+                    "front_end": {"provider": provider, "model": "m", "base_url": url, **extra}
+                }
+            },
+            env={},
+        )
+
+    def test_http_is_only_for_this_mac(self):
+        for url in ("http://localhost:11434", "http://127.0.0.1:1234/v1", "http://[::1]:8080/v1"):
+            with self.subTest(url):
+                self.assertEqual(self.tm("ollama", url).base_url, url)
+        for url in (
+            "http://gpu-box.local:11434",
+            "http://192.168.1.20:11434",
+            "http://example.com/v1",
+        ):
+            with (
+                self.subTest(url),
+                self.assertRaisesRegex(ValueError, "unencrypted.*allow_insecure"),
+            ):
+                self.tm("openai_compat", url)
+        self.assertEqual(
+            self.tm("openai_compat", "https://example.com/v1").base_url, "https://example.com/v1"
+        )
+
+    def test_the_environment_cannot_sneak_in_a_remote_http_endpoint(self):
+        env = {
+            "JULIUS_TIER_FRONT_END": "ollama:m",
+            "JULIUS_TIER_FRONT_END_BASE_URL": "http://10.0.0.5:11434",
+        }
+        with self.assertRaisesRegex(ValueError, "unencrypted"):
+            providers.resolve("front_end", OLD, env=env)
+
+    def test_allow_insecure_is_per_tier_and_always_warned(self):
+        tm = self.tm("openai_compat", "http://gpu-box.local:8000/v1", allow_insecure=True)
+        self.assertTrue(tm.allow_insecure)
+        conf = {
+            **OLD,
+            "models": {
+                **OLD["models"],
+                "planner": {
+                    "provider": "vllm",
+                    "model": "m",
+                    "base_url": "http://gpu-box.local:8000/v1",
+                    "allow_insecure": True,
+                },
+            },
+        }
+        warnings = providers.endpoint_warnings(conf)
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("planner sends prompts, memory notes and any key unencrypted", warnings[0])
+        with self.assertRaisesRegex(
+            ValueError, "unencrypted"
+        ):  # "yes" as a string is not an explicit true
+            self.tm("openai_compat", "http://gpu-box.local:8000/v1", allow_insecure="yes")
+
+    def test_a_remote_ollama_without_https_is_warned_about(self):
+        conf = {
+            **OLD,
+            "models": {
+                **OLD["models"],
+                "front_end": {
+                    "provider": "ollama",
+                    "model": "m",
+                    "base_url": "http://gpu-box.local:11434",
+                    "allow_insecure": True,
+                },
+            },
+        }
+        warnings = providers.endpoint_warnings(conf)
+        self.assertTrue(any("Ollama has no authentication" in w for w in warnings))
+        self.assertTrue(any("unencrypted" in w for w in warnings))
+        https = {
+            **OLD,
+            "models": {
+                **OLD["models"],
+                "front_end": {
+                    "provider": "ollama",
+                    "model": "m",
+                    "base_url": "https://ollama.example.com",
+                },
+            },
+        }
+        self.assertEqual(providers.endpoint_warnings(https), [])
+
+    def test_the_default_and_local_setups_have_no_warnings(self):
+        self.assertEqual(providers.endpoint_warnings(OLD), [])
+        local = {
+            **OLD,
+            "models": {**OLD["models"], "front_end": {"provider": "ollama", "model": "m"}},
+        }
+        self.assertEqual(providers.endpoint_warnings(local), [])
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 # UI write channel
 
-The event feed (`docs/EVENT_FEED.md`, port 8765) is read-only. Anything the orb app (or another local UI) wants to *tell* Julius goes through this separate channel.
+The event feed (`docs/EVENT_FEED.md`, port 8765) is read-only and uses the same token as this channel. Anything the orb app (or another local UI) wants to *tell* Julius goes through this separate channel.
 
 HTTP on `127.0.0.1:8775` (`[ui] port`), JSON in and out. Turn it off with `[ui] enabled = false`. If the port is taken Julius still starts, without the channel.
 

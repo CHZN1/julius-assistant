@@ -1,6 +1,6 @@
 """Tiny test client for the UI event feed: prints every event Julius broadcasts.
 
-python -m julius.ui_bridge.events_client            connect to ws://127.0.0.1:8765 and print events (Ctrl+C to stop)
+python -m julius.ui_bridge.events_client            connect to ws://127.0.0.1:8765 with your UI token and print events (Ctrl+C to stop)
 python -m julius.ui_bridge.events_client 8766       another port
 python -m julius.ui_bridge.events_client --levels   also print every level event (otherwise a level bar is drawn on one line)"""
 
@@ -13,11 +13,19 @@ import sys
 from typing import Any
 
 
-def connect(port: int = 8765, host: str = "127.0.0.1") -> tuple[socket.socket, bytes]:
+def connect(
+    port: int = 8765, host: str = "127.0.0.1", token: str | None = None
+) -> tuple[socket.socket, bytes]:
+    """Open the feed. `token` defaults to the per-install UI token (~/.julius/ui_token); pass "" to send none."""
+    if token is None:
+        from julius.ui_bridge import uichannel
+
+        token = uichannel.ensure_token()
     s = socket.create_connection((host, port), timeout=5)
     key = base64.b64encode(os.urandom(16)).decode()
+    auth = f"Authorization: Bearer {token}\r\n" if token else ""
     s.sendall(
-        f"GET / HTTP/1.1\r\nHost: {host}:{port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n".encode()
+        f"GET / HTTP/1.1\r\nHost: {host}:{port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n{auth}\r\n".encode()
     )
     buf = b""
     while b"\r\n\r\n" not in buf:

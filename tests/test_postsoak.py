@@ -13,7 +13,9 @@ import julius.ui_bridge.events as ev
 class PostSoak(unittest.TestCase):
     def test_feed_check_passes_against_a_live_feed_and_fails_without(self):
         hub = ev.EventHub()
-        srv = ev.EventServer(hub, port=0).start()
+        from julius.ui_bridge import uichannel
+
+        srv = ev.EventServer(hub, port=0, token=uichannel.ensure_token()).start()
         hub.set_state("asleep")
         try:
             ok, detail = ps.feed_check(srv.port, timeout=5)

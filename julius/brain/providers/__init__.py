@@ -92,6 +92,7 @@ class TierModel:
     price_out: float = 0.0
     timeout: float = 0.0
     options: dict[str, Any] = field(default_factory=dict)
+    allow_insecure: bool = False  # [models.<tier>] allow_insecure = true: plain http:// to a non-localhost host, warned at start
 
     @property
     def is_anthropic(self) -> bool:
@@ -157,6 +158,12 @@ def resolve(
         raise ValueError(f"[models.{tier}] provider openai_compat needs a base_url")
     if base_url and not base_url.startswith(("http://", "https://")):
         raise ValueError(f"[models.{tier}] base_url must start with http:// or https://")
+    allow_insecure = block.get("allow_insecure") is True
+    if base_url.startswith("http://") and not is_localhost_url(base_url) and not allow_insecure:
+        raise ValueError(
+            f"[models.{tier}] base_url {base_url} is plain http:// to another machine: prompts, memory notes and any key "
+            "would travel unencrypted. Use https://, or set allow_insecure = true for this tier if you accept that."
+        )
     return TierModel(
         tier=tier,
         provider=provider,
@@ -168,7 +175,44 @@ def resolve(
         price_out=float(block.get("price_out") or 0.0),
         timeout=float(block.get("timeout") or 0.0),
         options=dict(block.get("options") or {}),
+        allow_insecure=allow_insecure,
     )
+
+
+LOCALHOST = ("localhost", "127.0.0.1", "::1")
+
+
+def is_localhost_url(url: str) -> bool:
+    """True only for this Mac itself (a .local name is still the network)."""
+    from urllib.parse import urlparse
+
+    return (urlparse(url).hostname or "").lower() in LOCALHOST
+
+
+def endpoint_warnings(config: dict[str, Any]) -> list[str]:
+    """Start-up warnings for endpoints that leave this Mac without TLS (allowed only with allow_insecure = true), and for an
+    Ollama server that isn't on this Mac and isn't behind https (Ollama itself has no authentication)."""
+    out = []
+    for tier in TIERS:
+        try:
+            tm = resolve(tier, config)
+        except ValueError:
+            continue  # load_config already refused it
+        url = tm.base_url
+        if not url or is_localhost_url(url):
+            continue
+        if url.startswith("http://"):
+            out.append(
+                f"WARNING: {tier} sends prompts, memory notes and any key unencrypted to {url} (allow_insecure = true)."
+            )
+        if (tm.adapter == "ollama" or tm.provider == "ollama_v1") and not url.startswith(
+            "https://"
+        ):
+            out.append(
+                f"WARNING: {tier} uses an Ollama server at {url}. Ollama has no authentication: anyone who can reach that "
+                "port can use it. Keep Ollama bound to localhost, or put it behind https with authentication."
+            )
+    return out
 
 
 def configured(config: dict[str, Any]) -> dict[str, TierModel]:

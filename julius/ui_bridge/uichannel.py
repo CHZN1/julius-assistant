@@ -51,7 +51,9 @@ MAX_TEXT = 2000
 MAX_PATHS = 50
 MAX_PATH_LEN = 4096
 RATE_N, RATE_S = 20, 10.0
-HOME = Path.home() / ".julius"
+HOME = (
+    Path(os.environ.get("JULIUS_STATE_DIR") or Path.home() / ".julius").expanduser()
+)  # the token and audit log live with the rest of the state (tests point it at a throwaway folder)
 
 
 class TypedText(str):

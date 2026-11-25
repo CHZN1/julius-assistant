@@ -19,7 +19,7 @@ Julius is a voice assistant for your Mac that gets things done, not just answers
 
 The wake word, speech recognition, the voice and your memory all stay on your Mac. The thinking is done by Claude through your own API key, or by a local model. Most requests cost less than a cent.
 
-> **About the UI:** the orb and side panel in the video are a separate macOS app that is **not open source yet**. This repository is the assistant itself: voice, brain, agents, memory and tools. It runs in a terminal and exposes a read-only event feed ([docs/EVENT_FEED.md](docs/EVENT_FEED.md)) and an authenticated local write channel ([docs/UI_CHANNEL.md](docs/UI_CHANNEL.md)), so anything that speaks those protocols can be its UI.
+> **About the UI:** the orb and side panel in the video are a separate macOS app that is **not open source yet**. This repository is the assistant itself: voice, brain, agents, memory and tools. It runs in a terminal and exposes an authenticated, read-only event feed ([docs/EVENT_FEED.md](docs/EVENT_FEED.md)) and an authenticated local write channel ([docs/UI_CHANNEL.md](docs/UI_CHANNEL.md)), so anything that speaks those protocols can be its UI.
 
 ## Features (as in the video)
 
@@ -151,8 +151,9 @@ The code is laid out like this:
 - **The coding agent works in a sandbox,** on a copy of one project. Its only network route is a local proxy to api.anthropic.com, and it runs under a dollar and time cap. Merging back is a second preview and a second yes.
 - **The research agent is read-only:** GET requests only, no logins, no forms. Page text is treated as data, not instructions, and each task has a hard dollar cap.
 - **Local interfaces only.**
-  - The event feed (127.0.0.1:8765) is read-only.
+  - The event feed (127.0.0.1:8765) is read-only and needs the same token as the write channel, so other programs on your Mac can't read the transcript.
   - The write channel (127.0.0.1:8775) needs a token stored in `~/.julius/ui_token`, and every request is audited.
+- **Model endpoints you add are checked.** Plain `http://` is allowed only to this Mac; another machine needs `https://` unless you set `allow_insecure = true` for that tier, which Julius warns about at every start. Ollama (port 11434) has no authentication of its own, so keep it bound to localhost; Julius warns if a configured Ollama endpoint is on another machine without https. See [docs/PROVIDERS.md](docs/PROVIDERS.md).
 - **Your data stays on your Mac.** Memory, recordings, wake clips and logs are gitignored, and logs contain no transcripts or keys by default.
 
 ## Evaluation results

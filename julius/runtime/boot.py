@@ -305,6 +305,10 @@ def setup_cloud_brain(s: Session) -> None:
         f"offline model {s.cloud_brain.config['offline']['model']}]",
         flush=True,
     )
+    from julius.brain import providers
+
+    for warning in providers.endpoint_warnings(s.cloud_brain.config):
+        log.console(f"  [{warning}]", flush=True)
 
 
 def brain_line(conf: dict[str, Any]) -> str:

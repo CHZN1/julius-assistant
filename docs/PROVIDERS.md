@@ -37,7 +37,7 @@ In `julius.toml`, or in `julius.local.toml` to keep it to your machine. The two 
 [models.front_end]
 provider = "ollama"
 model = "llama3.3:70b"                   # any model your server already has
-# base_url = "http://gpu-box.local:11434" # each provider has a default (here, this Mac)
+# base_url = "https://gpu-box.example:11434" # each provider has a default (here, this Mac); another machine needs https
 # api_key_env = "MY_ENDPOINT_KEY"        # the NAME of the environment variable, never the key
 # price_in = 0.0                         # USD per million tokens, for the cost ledger (your own hardware costs $0)
 # price_out = 0.0
@@ -56,6 +56,18 @@ price_out = 0.0
 ```
 
 Tiers you don't list keep their default. A bad block (unknown provider, missing model, missing `base_url`, a URL that isn't http or https) stops Julius at start-up with a message naming the block. `JULIUS_TIER_<TIER>` (`provider:model`), `JULIUS_TIER_<TIER>_BASE_URL` and `JULIUS_TIER_<TIER>_OPTIONS` (JSON) override the file for one run, for example `JULIUS_TIER_FRONT_END="ollama:<your model>" python -m julius`. With no Anthropic tier left, no Anthropic key is needed: a full turn with the key unset was run on 2026-11-24.
+
+### Endpoints: plain http only on this Mac
+
+A `base_url` may use plain `http://` only for this Mac itself (`localhost`, `127.0.0.1`, `::1`). Anything else, a `.local` name or a LAN address included, must be `https://`: a model call carries the whole prompt, your memory notes, the transcript and tool results, plus any key. Julius refuses to start with a remote `http://` endpoint unless that tier's block says, explicitly:
+
+```toml
+allow_insecure = true   # you accept that this tier's traffic is unencrypted on your network
+```
+
+and then it prints a warning at every start naming the tier and the endpoint.
+
+**Ollama has no authentication.** Anyone who can reach its port (11434) can run models on it and see what it is asked. Keep it bound to localhost, which is Ollama's default (`OLLAMA_HOST=127.0.0.1`). To use an Ollama server on another machine, put it behind https with authentication (a reverse proxy). Julius warns at start-up whenever a configured Ollama endpoint is neither on this Mac nor https. The coding agent's sandbox can't reach it: its only network route is the egress proxy.
 
 ### Limits on models you serve yourself
 

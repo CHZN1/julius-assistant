@@ -6,6 +6,7 @@ Julius publishes what it is doing on a **read-only WebSocket on `127.0.0.1:8765`
 - Plain RFC 6455 WebSocket, text frames, JSON, server to client only. Bound to `127.0.0.1` (not configurable).
 - The handshake is refused (HTTP 403) unless `Host` is `127.0.0.1`, `localhost` or `[::1]` and any `Origin` is `http(s)://` with one of those hosts. Non-WebSocket requests get 426. Native clients send no Origin; a browser page served from another site cannot connect.
 - Clients cannot change anything: frames they send are ignored except ping (answered) and close. A frame over 64 kB closes the connection. At most 8 clients; a client 300 messages behind is dropped.
+- **A token is required** (since 2026-11-25), so another program on the Mac can't read what you say and what Julius replies. It is the same per-install token as the write channel, in `~/.julius/ui_token` (mode 0600, created on first start). Send it as `Authorization: Bearer <token>` (native clients, `events_client`), or, from a browser page that can't set headers, as the WebSocket subprotocol `julius.token.<token>` together with `julius.v1`; the server answers with `Sec-WebSocket-Protocol: julius.v1` and never echoes the token. A missing or wrong token gets HTTP 401. For development in a browser, open the page with `?token=<your token>`.
 - If the port is taken, Julius starts without the feed (it never fails to start over the UI).
 
 ## Messages
