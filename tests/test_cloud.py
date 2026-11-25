@@ -181,7 +181,8 @@ class RequestTests(unittest.TestCase):
                 or SimpleNamespace(message=SimpleNamespace(content="local", tool_calls=None))
             ),
         )
-        b.chat(MSGS, tools=jt.select_schemas("weather"))
+        b.chat(MSGS, tools=jt.select_schemas("weather"))  # the first failure only fails that turn
+        b.chat(MSGS, tools=jt.select_schemas("weather"))  # the second in a row goes offline
         self.assertEqual(seen, [["get_weather", "get_forecast"]])
 
     def test_the_last_tool_carries_the_cache_marker(self):
@@ -310,7 +311,9 @@ class FailureTests(unittest.TestCase):
         with m.patch.object(jc, "make_client", side_effect=jc.MissingKey()):
             self.assertEqual(b.chat(MSGS).message.content, jc.AUTH_MESSAGE)
 
-    def test_connection_error_uses_offline_model_and_stays_offline_for_the_retry_window(self):
+    def test_repeated_connection_errors_use_offline_model_and_stay_offline_for_the_retry_window(
+        self,
+    ):
         calls = []
         api = FakeMessages(error=conn_error())
         now = [0.0]
@@ -322,7 +325,9 @@ class FailureTests(unittest.TestCase):
             ),
         )
         b._clock = lambda: now[0]
-        self.assertEqual(b.chat(MSGS).message.content, "local")
+        first = b.chat(MSGS).message
+        self.assertEqual((first.content, first.failed, calls), (jc.FAILED_TURN_MESSAGE, True, []))
+        self.assertEqual(b.chat(MSGS).message.content, "local")  # the second failure in a row
         n = len(api.calls)
         b.chat(MSGS)
         self.assertEqual(len(api.calls), n)  # no API attempt while offline
@@ -336,6 +341,9 @@ class FailureTests(unittest.TestCase):
             offline=lambda m, t, s, o: iter(
                 [SimpleNamespace(message=SimpleNamespace(content="local reply"))]
             ),
+        )
+        self.assertEqual(
+            "".join(p.message.content for p in b.chat(MSGS, stream=True)), jc.FAILED_TURN_MESSAGE
         )
         self.assertEqual(
             "".join(p.message.content for p in b.chat(MSGS, stream=True)), "local reply"
@@ -353,6 +361,41 @@ class FailureTests(unittest.TestCase):
             offline=lambda *a: self.fail("no restart after partial speech"),
         )
         self.assertEqual("".join(p.message.content for p in b.chat(MSGS, stream=True)), "Partial. ")
+
+    def test_one_timeout_fails_only_that_turn_and_a_success_resets_the_count(self):
+        api = FakeMessages(
+            response=SimpleNamespace(content=[block("text", text="fine")], usage=usage()),
+            error=conn_error(),
+        )
+        b = brain(api, offline=lambda *a: self.fail("one failure must not go offline"))
+        self.assertEqual(b.chat(MSGS).message.content, jc.FAILED_TURN_MESSAGE)
+        self.assertEqual(b.offline_until, 0.0)
+        api.error = None
+        self.assertNotEqual(b.chat(MSGS).message.content, jc.FAILED_TURN_MESSAGE)
+        self.assertEqual(b.failures, 0)
+        api.error = conn_error()
+        self.assertEqual(b.chat(MSGS).message.content, jc.FAILED_TURN_MESSAGE)  # still online
+
+    def test_with_no_offline_model_it_says_so_instead_of_crashing(self):
+        b = brain(FakeMessages(error=conn_error()))
+        b.chat(MSGS)
+        out = b.chat(MSGS).message
+        self.assertEqual((out.content, out.failed), (jc.UNREACHABLE_MESSAGE, True))
+        streamed = "".join(p.message.content for p in b.chat(MSGS, stream=True))
+        self.assertEqual(streamed, jc.UNREACHABLE_MESSAGE)
+
+    def test_an_eval_brain_never_opens_the_offline_window(self):
+        api = FakeMessages(
+            response=SimpleNamespace(content=[block("text", text="fine")], usage=usage()),
+            error=conn_error(),
+        )
+        b = brain(api, offline=lambda *a: self.fail("an eval brain never goes offline"))
+        b.ignore_offline_window = True
+        for _ in range(5):
+            self.assertTrue(b.chat(MSGS).message.failed)
+        self.assertEqual((b.offline_until, len(api.calls)), (0.0, 5))  # every case still tried
+        api.error = None
+        self.assertFalse(getattr(b.chat(MSGS).message, "failed", False))
 
     def test_cap_then_double_cap_notices_are_each_given_once(self):
         b = brain(FakeMessages(), cap=0.01)

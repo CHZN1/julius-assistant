@@ -49,7 +49,14 @@ def replay(name, status=200, seen=None):
     def handler(request):
         if seen is not None:
             seen.append(json.loads(request.content))
-        return httpx.Response(status, content=(FIX / name).read_bytes() if name else b"{}")
+        kind = {".json": "application/json", ".sse": "text/event-stream"}.get(
+            Path(name).suffix, "application/x-ndjson"
+        )
+        return httpx.Response(
+            status,
+            content=(FIX / name).read_bytes() if name else b"{}",
+            headers={"content-type": kind},
+        )
 
     return httpx.MockTransport(handler)
 
@@ -516,8 +523,110 @@ class FrontEndWithoutAnthropic(unittest.TestCase):
                 or SimpleNamespace(message=SimpleNamespace(content="offline", tool_calls=None))
             ),
         )
-        out = brain.chat([{"role": "user", "content": "hi"}], None, stream=False)
+        hi = [{"role": "user", "content": "hi"}]
+        first = brain.chat(hi, None, stream=False)  # one failure fails only that turn
+        self.assertEqual((first.message.content, fell), (jc.FAILED_TURN_MESSAGE, []))
+        out = brain.chat(hi, None, stream=False)  # the second in a row goes to the offline model
         self.assertEqual((out.message.content, fell), ("offline", [1]))
+
+
+class LocalLimits(unittest.TestCase):
+    """A local model stuck repeating itself must not stall a turn (qwen3 4B on routing case r183: about one call in three
+    ran to its 1,024-token budget for a minute, sometimes ending in an HTTP 500 from Ollama)."""
+
+    def test_local_front_ends_get_an_output_cap_and_a_deadline(self):
+        fe = providers.resolve(
+            "front_end", {"models": {"front_end": {"provider": "ollama", "model": "m"}}}, env={}
+        )
+        pl = providers.resolve(
+            "planner", {"models": {"planner": {"provider": "lmstudio", "model": "m"}}}, env={}
+        )
+        hosted = providers.resolve(
+            "planner", {"models": {"planner": {"provider": "openrouter", "model": "m"}}}, env={}
+        )
+        mine = providers.resolve(
+            "front_end",
+            {
+                "models": {
+                    "front_end": {
+                        "provider": "ollama",
+                        "model": "m",
+                        "options": {"max_output_tokens": 300},
+                    }
+                }
+            },
+            env={},
+        )
+        self.assertEqual(providers.limits_for(fe), {"max_output_tokens": 512, "deadline_s": 90.0})
+        self.assertEqual(providers.limits_for(pl), {"deadline_s": 180.0})
+        self.assertEqual(providers.limits_for(hosted), {"deadline_s": 120.0})
+        self.assertEqual(providers.limits_for(mine)["max_output_tokens"], 300)
+
+    def test_the_cap_reaches_the_request(self):
+        self.assertEqual(
+            ollama.body(ASK, "m", True, {"max_output_tokens": 50})["options"]["num_predict"], 50
+        )
+        self.assertEqual(ollama.body(ASK, "m", True, {})["options"]["num_predict"], 200)
+        self.assertEqual(
+            openai_compat.body({**ASK, "max_tokens": 4096}, "m", True, cap=512)["max_tokens"], 512
+        )
+        self.assertNotIn(
+            "max_output_tokens", json.dumps(ollama.body(ASK, "m", True, {"max_output_tokens": 50}))
+        )
+
+    def test_a_reply_past_its_deadline_is_a_timeout(self):
+        now = [0.0]
+        deadline = base.Deadline(45.0, clock=lambda: now[0])
+
+        def slow_lines():
+            for line in (FIX / "ollama_text_stream.ndjson").read_text().splitlines():
+                now[0] += 10.0
+                yield line
+
+        with self.assertRaises(base.ProviderTimeout):
+            list(ollama.OllamaProvider("m")._from_lines(slow_lines(), deadline))
+        self.assertTrue(issubclass(base.ProviderTimeout, base.ProviderUnavailable))
+
+    def test_an_unparseable_tool_call_is_bad_output_not_an_outage(self):
+        def parse_error(request):
+            return httpx.Response(500, content=b'{"error":"error parsing tool call: raw=..."}')
+
+        with self.assertRaises(base.ProviderBadOutput):
+            list(ollama.OllamaProvider("m", transport=httpx.MockTransport(parse_error)).events(ASK))
+        mid = b'{"message":{"role":"assistant","content":"Hi"},"done":false}\n{"error":"error parsing tool call"}\n'
+        stream_error = httpx.MockTransport(lambda r: httpx.Response(200, content=mid))
+        with self.assertRaises(base.ProviderBadOutput):
+            list(ollama.OllamaProvider("m", transport=stream_error).events(ASK, stream=True))
+
+    def test_bad_output_fails_the_turn_without_counting_toward_offline(self):
+        providers.reset()
+        self.addCleanup(providers.reset)
+        conf = {
+            **OLD,
+            "models": {**OLD["models"], "front_end": {"provider": "ollama", "model": "m"}},
+            "offline": {"model": "x", "retry_seconds": 60, "failures_before_offline": 2},
+        }
+        t = httpx.MockTransport(
+            lambda r: httpx.Response(500, content=b'{"error":"error parsing tool call"}')
+        )
+        with mock.patch.object(providers, "TRANSPORT", t):
+            brain = jc.CloudBrain(
+                conf,
+                costs.CostTracker(Path(tempfile.mkdtemp()) / "c.jsonl", 5.0),
+                offline=lambda *a: self.fail("bad output never goes offline"),
+            )
+            for _ in range(3):
+                out = brain.chat([{"role": "user", "content": "hi"}], None)
+                self.assertEqual(
+                    (out.message.content, out.message.failed), (jc.FAILED_TURN_MESSAGE, True)
+                )
+            spoken = "".join(
+                p.message.content
+                for p in brain.chat([{"role": "user", "content": "hi"}], None, stream=True)
+            )
+        self.assertEqual(
+            (spoken, brain.failures, brain.offline_until), (jc.FAILED_TURN_MESSAGE, 0, 0.0)
+        )
 
 
 if __name__ == "__main__":

@@ -328,6 +328,9 @@ def chain_turn(case, brain, system, rounds=3):
             if jt.calculation_required(case["text"]):
                 options["force_name"] = "calculate"
         r = brain.chat(msgs, tools=jt.select_schemas(case["text"]), options=options)
+        if getattr(r.message, "failed", False):  # the model did not answer: the chain ends here
+            final = "[model did not answer]"
+            break
         calls = r.message.tool_calls or []
         if not calls:
             final = r.message.content or ""
@@ -469,6 +472,17 @@ def brain_turn(case, brain, tracker, system):
             "force_tool": jt.weekday_question(case["text"]),
         }
         r = brain.chat(msgs, tools=jt.select_schemas(case["text"]), options=options)
+        if getattr(
+            r.message, "failed", False
+        ):  # the model timed out or was unreachable: a failure, not a direct answer
+            return {
+                "path": "error",
+                "tool": "",
+                "args": "",
+                "detail": "model did not answer: " + (r.message.content or ""),
+                "seconds": time.perf_counter() - t0,
+                "usd": 0.0,
+            }
         calls = r.message.tool_calls or []
         if any(k in case["expect"] for k in ("chain", "chain_all", "answer_contains")) or any(
             "chain_all" in alt for alt in case["expect"].get("any_of", [])
@@ -541,6 +555,7 @@ def run_brain(pending, runs, workers):
     import julius.brain.cloud as jc
 
     brain, tracker, system = jc.get_brain(), jc.get_tracker(), system_prompt()
+    brain.ignore_offline_window = True  # one slow case fails only itself, never the cases after it
     jobs = [(c, k) for c in pending for k in range(runs)]
     by_case = {}
     with ThreadPoolExecutor(workers) as ex:

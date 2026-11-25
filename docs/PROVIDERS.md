@@ -1,6 +1,10 @@
 # Bring your own model
 
-Every model Julius uses goes through one provider interface (`julius/brain/providers/`), so each tier can run on Anthropic, on a local model, or on any OpenAI-compatible endpoint. With no `[models.<tier>]` blocks nothing changes: Anthropic, with `[models] haiku` and `sonnet`, exactly as before.
+Every model Julius uses goes through one provider interface (`julius/brain/providers/`), so each tier can run on Anthropic, on a model you serve yourself, or on any OpenAI-compatible endpoint. With no `[models.<tier>]` blocks nothing changes: Anthropic, with `[models] haiku` and `sonnet`, exactly as before.
+
+**Who this is for.** People who already run a large model (roughly 70B-class) on their own hardware, or who use a strong hosted open model. Small models that fit on a laptop are below the floors (see Measured): they route the wrong way too often, and they state live figures without fetching them. Nothing here needs you to download a model.
+
+**Tested adapters:** Anthropic (the official SDK), OpenAI-compatible chat completions (`openai_compat` and its presets), and Ollama native (`/api/chat`). Each one is covered by the same recorded tool-call conversations in `tests/test_providers.py`, and the OpenAI-compatible and Ollama adapters were also run live against an Ollama server.
 
 ## Tiers
 
@@ -27,43 +31,45 @@ Every model Julius uses goes through one provider interface (`julius/brain/provi
 
 ## Configure a tier
 
-In `julius.toml`, or in `julius.local.toml` to keep it to your machine:
+In `julius.toml`, or in `julius.local.toml` to keep it to your machine. For example, the front end on a large model you serve with Ollama:
 
 ```toml
 [models.front_end]
 provider = "ollama"
-model = "qwen3:4b-instruct-2507-q4_K_M"
-# base_url = "http://localhost:11434"    # each provider has a default
+model = "llama3.3:70b"                   # any model your server already has
+# base_url = "http://gpu-box.local:11434" # each provider has a default (here, this Mac)
 # api_key_env = "MY_ENDPOINT_KEY"        # the NAME of the environment variable, never the key
-# price_in = 0.0                         # USD per million tokens, for the cost ledger (local models cost $0)
+# price_in = 0.0                         # USD per million tokens, for the cost ledger (your own hardware costs $0)
 # price_out = 0.0
 # timeout = 120                          # seconds
 # options = { num_ctx = 16384 }          # Ollama options, or extra chat-completions fields
 ```
 
-Tiers you don't list keep their default. A bad block (unknown provider, missing model, missing `base_url`, a URL that isn't http or https) stops Julius at start-up with a message naming the block.
-
-### Working example: the front end on Ollama
-
-```bash
-ollama pull qwen3:4b-instruct-2507-q4_K_M
-```
-
-Add to `julius.local.toml`:
+Or a hosted open model through OpenRouter (the key is read from `OPENROUTER_API_KEY`):
 
 ```toml
-[models.front_end]
-provider = "ollama"
-model = "qwen3:4b-instruct-2507-q4_K_M"
+[models.planner]
+provider = "openrouter"
+model = "meta-llama/llama-3.3-70b-instruct"
+price_in = 0.0       # set these to the provider's current USD per million tokens, for the cost ledger
+price_out = 0.0
 ```
 
-Then start Julius as usual. Every turn now runs on your Mac; the planner and research still use Anthropic unless you move them too. To try it without editing a file:
+Tiers you don't list keep their default. A bad block (unknown provider, missing model, missing `base_url`, a URL that isn't http or https) stops Julius at start-up with a message naming the block. `JULIUS_TIER_<TIER>` (`provider:model`), `JULIUS_TIER_<TIER>_BASE_URL` and `JULIUS_TIER_<TIER>_OPTIONS` (JSON) override the file for one run, for example `JULIUS_TIER_FRONT_END="ollama:llama3.3:70b" python -m julius`. With no Anthropic tier left, no Anthropic key is needed: a full turn with the key unset was run on 2026-11-24.
 
-```bash
-JULIUS_TIER_FRONT_END="ollama:qwen3:4b-instruct-2507-q4_K_M" python -m julius
-```
+### Limits on models you serve yourself
 
-`JULIUS_TIER_<TIER>` (`provider:model`), `JULIUS_TIER_<TIER>_BASE_URL` and `JULIUS_TIER_<TIER>_OPTIONS` (JSON) override the file for one run. With no Anthropic tier left, no Anthropic key is needed.
+A model on your own server (Ollama, or an OpenAI-compatible server on localhost or `.local`) can get stuck repeating itself. Julius caps such tiers so one bad reply can't stall a conversation:
+
+| Tier | Output cap | Deadline |
+|---|---|---|
+| `front_end` | 512 tokens | 90 s (the first turn after a model loads is the slow one) |
+| other tiers | the request's own | 180 s |
+| hosted endpoints | the request's own | 120 s |
+
+Set `options = { max_output_tokens = ..., deadline_s = ... }` to change them. A reply past its deadline fails that turn ("Sorry, my model didn't answer that time"); so does output the server can't parse (Ollama's HTTP 500 for a malformed tool call), which never counts as the server being down. The front end goes to the offline model only after `[offline] failures_before_offline` failures in a row (default 2).
+
+Two more guards apply to every non-Anthropic front end. A closing instruction tells the model its system text is private, and any reply sentence that repeats eight or more words of the system prompt is dropped (`julius/brain/leak.py`): a small model asked its name once read out its persona paragraph.
 
 ## What each provider can do
 
@@ -81,10 +87,10 @@ Every cost-ledger row (`julius_memory/costs.jsonl`) records the `provider` and `
 ## Measuring a provider
 
 ```bash
-python evals/run_all.py --provider ollama --model qwen3:4b-instruct-2507-q4_K_M --tier front_end --workers 1
+python evals/run_all.py --provider ollama --model llama3.3:70b --tier front_end --workers 1
 ```
 
-This runs the routing, file-agent, live-data, memory, planner and research evals with that tier replaced (`--skip planner,research` leaves out the two that measure other tiers). Every eval CSV and summary gains a `provider` column, and the run writes `evals/results/providers_<date>.csv`. Use `--workers 1` for a local model: one request at a time keeps its prompt cache warm (about 3 s a turn instead of 11 s on an M4).
+This runs the routing, file-agent, live-data, memory, planner and research evals with that tier replaced (`--skip planner,research` leaves out the two that measure other tiers). Every eval CSV and summary gains a `provider` column, and the run writes `evals/results/providers_<date>.csv`. Use `--workers 1` for a model on a single local server: one request at a time keeps its prompt cache warm.
 
 A provider passes a tier only at these floors:
 
@@ -94,21 +100,30 @@ A provider passes a tier only at these floors:
 | File agent | 100% (no unsafe action) |
 | Tool-call JSON validity | ≥ 99% |
 | Memory eval | 6/6 sections |
-| Live data | every figure comes from a tool call made in that turn |
+| Live data | 100%: every figure comes from a tool call made in that turn |
+| Planner, research (when those tiers are replaced) | 100% |
+
+A suite with no score, or one that didn't run, fails: nothing passes by omission.
 
 ### Measured
 
 | Date | Tier | Provider and model | Routing | Tool JSON | File | Live data | Memory | Verdict |
 |---|---|---|---|---|---|---|---|---|
-| 2026-11-24 | front_end | anthropic `claude-haiku-5-5` | 100% (267, ×3) | n/a | 100% | | | passes |
-| 2026-11-24 | front_end | ollama `qwen3:4b-instruct-2507-q4_K_M` (M4, 16 GB) | see below | | | | | |
+| 2026-11-24 | front_end | anthropic `claude-haiku-5-5` | 100% (267 cases, ×3) | n/a (parsed by the API) | 100% | not run | free sections 100% | passes the floors measured |
+| 2026-11-24 | front_end | ollama `qwen3:4b-instruct-2507-q4_K_M` (M4, 16 GB) | 87.9% (189 of the 215 cases that ran, ×3)¹ | 100% of 350 | 100% | 64.3% | 6/6 | **below the floors** |
 
-## Known weak spots of small local models
+¹ The other 52 cases were lost to a timeout cascade that is now fixed: one stuck reply took the front end offline and every later case failed instantly. A clean re-run was stopped after an hour on 2026-11-25 because local runs of this length aren't the point of the feature.
 
+**Small models are below the floors; use a large model (roughly 70B-class) on your own hardware or a strong hosted open model.** No model is recommended for download here, and none has yet been measured above the floors other than Anthropic's.
+
+## Why small models fall short
+
+Measured on qwen3 4B; expect the same kinds of misses, less often, from mid-size models.
+
+- **Routing.** It rarely escalates to the planner (plans, comparisons, briefings) and picks near-miss tools for art, saving and sample searches.
+- **Live data.** Ollama can't force a tool call, and a small model often states a score, price or time without fetching it, which breaks Julius's rule that live facts come from a tool call made in that turn.
+- **Repetition.** On one routing case it looped in its tool-call arguments on about one call in three, until it filled its output budget. The limits above stop this costing more than one turn.
 - **Long prompts.** Julius's system prompt and tool list are about 13k tokens. Ollama's own default context is much smaller and silently cuts the prompt, so the adapter asks for 16,384 (`DEFAULT_CONTEXT` in `julius/brain/providers/ollama.py`); raise it with `options = { num_ctx = ... }` if you add tools.
-- **Forced tools.** Ollama can't force a tool call, so live-data questions rely on the prompt saying "answer by calling a tool". Check the live-data eval before trusting a model with scores, prices and times.
-- **Tool-call reliability.** Small models sometimes answer in prose where a tool was needed, or pick a near-miss tool. The routing eval's misses show which categories.
-- **Speed.** The first turn after loading pays for the whole prompt (about 11 s for a 4B model on an M4); later turns reuse the cached prefix.
 
 ## Coding tier: plan (not built)
 

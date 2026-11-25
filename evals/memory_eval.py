@@ -347,6 +347,7 @@ def llm_factory():
     from julius.brain import cloud
 
     brain = cloud.get_brain()
+    brain.ignore_offline_window = True  # an eval: one slow call fails only itself
 
     def llm(prompt):
         r = brain.chat(

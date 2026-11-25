@@ -17,7 +17,7 @@ sonnet = "claude-sonnet-5-5"  # planner/orchestrator: reached through escalate_t
 # Bring your own model (docs/PROVIDERS.md): give any tier its own provider. Tiers you don't list keep the two lines above.
 # [models.front_end]          # also: planner, research, vision
 # provider = "ollama"         # anthropic | ollama | ollama_v1 | lmstudio | llamacpp | vllm | openrouter | openai_compat
-# model = "qwen3:4b-instruct-2507-q4_K_M"
+# model = "llama3.3:70b"      # a large model you already serve; small ones are below the floors (docs/PROVIDERS.md)
 
 [spend]
 daily_cap_usd = 5.00        # total across tiers; once reached Julius says so and stays on Haiku only (no planner)
@@ -61,6 +61,7 @@ volume_labels = {}
 [offline]
 model = "llama3.2:3b"       # loaded only while the API is unreachable
 retry_seconds = 60          # how long to stay offline before trying the API again
+failures_before_offline = 2 # failed or timed-out turns in a row before going offline (one slow turn only fails that turn)
 
 [voice]
 keep_loaded = true          # with the brain in the cloud the TTS voice is never unloaded between turns

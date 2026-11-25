@@ -198,7 +198,9 @@ FLOORS = {  # bring your own model: a provider passes a tier only at these (docs
     "routing": ("ok_pct", 95.0),
     "file": ("ok_pct", 100.0),
     "memory": ("ok_pct", 100.0),
-    "livedata": ("ok_pct", 100.0),
+    "livedata": ("ok_pct", 100.0),  # every figure from a tool call made in that turn
+    "planner": ("ok_pct", 100.0),  # no protected or recent file in a staged plan
+    "research": ("ok_pct", 100.0),  # accurate and sourced, or says it could not confirm
     "routing_json": ("tool_json_valid_pct", 99.0),
 }
 
@@ -258,25 +260,33 @@ def provider_suites(a, skip):
     return plan
 
 
-def apply_floors(row, prefix):
-    """Judge a --provider row by the floors instead of by the previous run."""
-    _, new = latest_summary(prefix)
-    new = new or {}
+def apply_floors(row, prefix, summary=None):
+    """Judge a --provider row by the floors instead of by the previous run. A suite with no floor, or whose summary has no
+    score, fails: nothing passes by omission."""
+    new = summary if summary is not None else (latest_summary(prefix)[1] or {})
     why = []
-    for name, (key, floor) in FLOORS.items():
-        if name.split("_")[0] != prefix or new.get(key) is None:
+    floors = [(k, f) for name, (k, f) in FLOORS.items() if name.split("_")[0] == prefix]
+    if not floors:
+        why.append(f"no floor defined for {prefix}")
+    for key, floor in floors:
+        if new.get(key) is None:
+            if (
+                key == FLOORS.get(prefix, (None,))[0]
+            ):  # the headline score is required; extras may be absent
+                why.append(f"no {key} in the results")
             continue
         if new[key] < floor:
             why.append(f"{key} {new[key]} < {floor}")
+    if row["score"] == "DID NOT RUN":
+        why.append("did not run")
     if prefix == "routing" and new.get("tool_json_valid_pct") is not None:
         row["detail"] = (
             row["detail"]
             + f"; tool-call JSON valid {new['tool_json_valid_pct']}% of {new.get('tool_calls_counted')}"
         ).strip("; ")
     row["provider"] = new.get("provider", "")
-    row["floor_ok"] = not why and row["score"] != "DID NOT RUN"
-    if why:
-        row["why"] = "; ".join(why)
+    row["floor_ok"] = not why
+    row["why"] = "; ".join(why)
     row["regressed"] = not row["floor_ok"]
     return row
 

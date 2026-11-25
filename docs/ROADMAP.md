@@ -14,7 +14,7 @@ Updated November 24, 2026 (the next nine stages are planned under "Next stages")
 | F Voice polish and reliability | done (F1 to F3 built and live; Silero VAD skipped unless endpointing problems show; F4 soak ran 2026-11-08 to 11-09) |
 | H Senses (vision on demand, presence and gestures, ShazamKit, speaker profiles, whiteboard to text) | planned, nothing built |
 | G UI (orb app) | modes, typing, drops, installed app and login item built and in live testing; side-panel work (charts, images, vision, pixel art) waits for the user's go; image generation deferred (no provider) |
-| Next stages 1-9 (README and repo readiness, brand, bring your own model, Apple signing, security, platform layer and ports, reliability, feedback, hosted SaaS and pricing beta) | planned 2026-11-24, nothing built; see "Next stages" |
+| Next stages 1-9 (README and repo readiness, brand, bring your own model, Apple signing, security, platform layer and ports, reliability, feedback, hosted SaaS and pricing beta) | planned 2026-11-24; stage 3 (bring your own model) built 2026-11-25 except the coding tier's own loop; brand on hold; see "Next stages" |
 
 Tests: 849 backend unit tests; free evals (routing, file 46/46, live data 14/14, memory); paid evals (planner, coding, research, live data).
 
@@ -160,7 +160,7 @@ Nine stages, in order. Effort is in focused weeks for one developer working with
 |---|---|---|---|
 | 1 | README and repository ready for visitors | 1 wk | nothing |
 | 2 | Brand: JULIUS wordmark | 1 wk once the maintainer's sketch exists | the maintainer's letter sketches |
-| 3 | Bring your own model | 3-4 wk | nothing |
+| 3 | Bring your own model | built 2026-11-25 (coding tier's own loop: planned, about 1.5 wk) | nothing |
 | 4 | Apple Developer Program: signing, notarization, ShazamKit | 1 wk plus Apple's waiting time | nothing; needed before any download is offered |
 | 5 | Security | 3-4 wk, plus an outside pentest | the threat model starts now; the pentest needs 9 |
 | 6 | Platform layer, then Windows and Linux ports | 2 wk layer, then 4-6 wk per OS | 3 (local models make the ports usable without an API key) |
@@ -200,6 +200,8 @@ Nine stages, in order. Effort is in focused weeks for one developer working with
 - The maintainer approves the final letters.
 
 ### Stage 3: Bring your own model
+
+**Status (2026-11-25): built**, apart from the coding tier's own edit/test loop (planned in `docs/PROVIDERS.md`, about 1.5 weeks, so not built yet; `claude -p` stays). Adapters for Anthropic, OpenAI-compatible endpoints and Ollama native; per-tier `[models.<tier>]` config with old configs unchanged; provider and model on every cost-ledger row; `run_all.py --provider` with the floors below. The default Anthropic setup showed no regressions (routing 267/267 ×3, shake 46/46). A small local model (qwen3 4B) is below the floors; the feature is meant for large self-hosted or hosted open models. Measured rows: `docs/PROVIDERS.md`.
 
 **Goals.** Every model tier can be swapped through one documented provider interface: the voice front end (`[models] haiku`), the planner (`[models] sonnet`), the research sub-agent, and the coding agent (`[code] model`, currently `claude -p`). Supported providers: Anthropic, any OpenAI-compatible endpoint (which covers LM Studio, llama.cpp `llama-server`, vLLM, OpenRouter and Ollama's `/v1`), and Ollama native. The offline fallback (`llama3.2:3b` through `OLLAMA_FALLBACK` in `julius/brain/backend.py`, plus `[brain] mode = "local"` with `qwen3:4b-instruct`) is the starting point: it already speaks the Ollama tool-call format.
 

@@ -71,6 +71,35 @@ class ProviderUnavailable(ProviderError):
     pass
 
 
+class ProviderTimeout(ProviderUnavailable):
+    """The reply ran past its deadline (a slow server, or a local model stuck repeating itself)."""
+
+
+class ProviderBadOutput(ProviderError):
+    """The server answered but the model's output was unusable (a tool call it could not parse). Fails only that turn:
+    the server is up, so it never counts toward going offline."""
+
+
+def capped(requested: Any, cap: int | None) -> int:
+    """max_tokens for the request, never above the tier's output cap."""
+    n = int(requested or 1024)
+    return min(n, int(cap)) if cap else n
+
+
+class Deadline:
+    """A wall-clock limit for one reply, checked as each chunk arrives (the HTTP read timeout covers silent gaps)."""
+
+    def __init__(self, seconds: float | None, clock: Any = None) -> None:
+        import time
+
+        self.seconds, self._clock = seconds, clock or time.monotonic
+        self.start = self._clock()
+
+    def check(self) -> None:
+        if self.seconds and self._clock() - self.start > self.seconds:
+            raise ProviderTimeout(f"no complete reply within {self.seconds:.0f} s")
+
+
 class Provider(Protocol):
     name: str
     capabilities: Capabilities

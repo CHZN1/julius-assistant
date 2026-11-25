@@ -244,6 +244,7 @@ def main():
     tracker = jc.get_tracker()
     tracker.cap = 1e9 if hasattr(tracker, "cap") else None
     brain = jc.get_brain()
+    brain.ignore_offline_window = True  # an eval: one slow call fails only itself
     brain.tracker.cap_reached = lambda: False  # the eval has its own limit below
     picks = [int(x) for x in a.only.split(",") if x] or list(range(len(REQUESTS)))
     rows, spent = [], 0.0

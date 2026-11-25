@@ -52,7 +52,17 @@ PRESETS = {  # name -> (adapter, default base_url, default api_key_env)
 CAPABILITY_OPTIONS = (
     "vision",
     "forced_tool_choice",
-)  # options that describe the model rather than go to it
+    "max_output_tokens",
+    "deadline_s",
+)  # options that describe the model or its limits rather than go to it
+# A local model can get stuck repeating itself until it fills its whole output budget (qwen3 4B did on about one call in
+# three for one routing case: a minute of tokens, then an HTTP 500 from Ollama). Local tiers therefore get an output cap
+# and a deadline by default; [models.<tier>] options max_output_tokens and deadline_s override them.
+LOCAL_LIMITS = {
+    "front_end": {"max_output_tokens": 512, "deadline_s": 90.0}
+}  # 90 s: the first turn after a cold load (model plus a 13k-token prompt) took 54 s on an M4; the cap bounds a loop to ~27 s
+LOCAL_DEFAULT = {"deadline_s": 180.0}
+HOSTED_DEFAULT = {"deadline_s": 120.0}
 TRANSPORT: Any = (
     None  # an httpx transport for every HTTP adapter (tests replay recorded responses through it)
 )
@@ -170,6 +180,26 @@ _CLIENTS: dict[tuple, Any] = {}
 _LOCK = threading.Lock()
 
 
+def is_local(tm: TierModel) -> bool:
+    from urllib.parse import urlparse
+
+    host = urlparse(tm.base_url).hostname or ""
+    return (
+        tm.adapter == "ollama"
+        or host in ("localhost", "127.0.0.1", "::1")
+        or host.endswith(".local")
+    )
+
+
+def limits_for(tm: TierModel) -> dict[str, Any]:
+    """The tier's output cap and deadline: local defaults (tighter for the front end), hosted defaults, then the config."""
+    out = dict(LOCAL_LIMITS.get(tm.tier, LOCAL_DEFAULT)) if is_local(tm) else dict(HOSTED_DEFAULT)
+    for key in ("max_output_tokens", "deadline_s"):
+        if key in tm.options:
+            out[key] = tm.options[key]
+    return out
+
+
 def build_provider(
     tm: TierModel, timeout: float, max_retries: int = 1, anthropic_client: Any = None
 ) -> Any:
@@ -196,6 +226,7 @@ def build_provider(
             ),
             extra={k: v for k, v in tm.options.items() if k not in CAPABILITY_OPTIONS},
             transport=TRANSPORT,
+            limits=limits_for(tm),
             stats=stats,
         )
     if tm.adapter == "ollama":
@@ -208,7 +239,10 @@ def build_provider(
             capabilities=Capabilities(
                 forced_tool_choice=False, vision=bool(tm.options.get("vision", False))
             ),
-            options={k: v for k, v in tm.options.items() if k not in CAPABILITY_OPTIONS},
+            options={
+                **{k: v for k, v in tm.options.items() if k not in CAPABILITY_OPTIONS},
+                **limits_for(tm),
+            },
             transport=TRANSPORT,
             stats=stats,
         )

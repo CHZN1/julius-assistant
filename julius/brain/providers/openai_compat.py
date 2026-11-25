@@ -85,11 +85,13 @@ def to_tool_choice(choice: Any) -> Any:
     return None
 
 
-def body(request: dict[str, Any], model: str, stream: bool, forced: bool = True) -> dict[str, Any]:
+def body(
+    request: dict[str, Any], model: str, stream: bool, forced: bool = True, cap: int | None = None
+) -> dict[str, Any]:
     out: dict[str, Any] = {
         "model": model,
         "messages": to_messages(request, forced),
-        "max_tokens": int(request.get("max_tokens") or 1024),
+        "max_tokens": base.capped(request.get("max_tokens"), cap),
         "stream": stream,
     }
     tools = base.function_tools(request.get("tools"))
@@ -129,6 +131,7 @@ class OpenAICompatProvider:
         transport: Any = None,
         extra: dict[str, Any] | None = None,
         stats: dict[str, int] | None = None,
+        limits: dict[str, Any] | None = None,
     ) -> None:
         self.model, self.base_url = model, base_url.rstrip("/")
         self.api_key, self.timeout = api_key, timeout
@@ -136,35 +139,54 @@ class OpenAICompatProvider:
         self.transport = transport  # httpx transport (tests replay recorded responses through it)
         self.extra = dict(extra or {})  # provider-specific body fields from [models.<tier>] options
         self.stats = stats if stats is not None else {}
+        self.limits = dict(limits or {})  # max_output_tokens, deadline_s
 
-    def _client(self):
+    def _client(self, timeout: Any = None):
         import httpx
 
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
-        return httpx.Client(timeout=self.timeout, headers=headers, transport=self.transport)
+        return httpx.Client(
+            timeout=timeout or self.timeout, headers=headers, transport=self.transport
+        )
 
     def events(self, request: dict[str, Any], stream: bool = False) -> Iterator[base.Event]:
         import httpx
 
+        # always streamed, even for a one-shot call, so the deadline is checked while the model writes
         payload = (
-            body(request, self.model, stream, forced=self.capabilities.forced_tool_choice)
+            body(
+                request,
+                self.model,
+                True,
+                forced=self.capabilities.forced_tool_choice,
+                cap=self.limits.get("max_output_tokens"),
+            )
             | self.extra
         )
+        deadline = base.Deadline(self.limits.get("deadline_s"))
+        read = min(self.timeout, deadline.seconds) if deadline.seconds else self.timeout
         try:
-            with self._client() as client:
-                if not stream:
-                    r = client.post(f"{self.base_url}/chat/completions", json=payload)
-                    _raise_for(r)
-                    yield from self._from_response(r.json())
+            with (
+                self._client(httpx.Timeout(read, connect=10.0)) as client,
+                client.stream("POST", f"{self.base_url}/chat/completions", json=payload) as r,
+            ):
+                if r.status_code >= 400:
+                    r.read()
+                _raise_for(r)
+                if "json" in r.headers.get(
+                    "content-type", ""
+                ) and "event-stream" not in r.headers.get(
+                    "content-type", ""
+                ):  # a server that ignores "stream": one JSON reply
+                    r.read()
+                    yield from self._from_response(json.loads(r.text))
                     return
-                with client.stream("POST", f"{self.base_url}/chat/completions", json=payload) as r:
-                    if r.status_code >= 400:
-                        r.read()
-                    _raise_for(r)
-                    yield from self._from_sse(r.iter_lines())
-        except (httpx.ConnectError, httpx.TimeoutException, httpx.RemoteProtocolError) as e:
+                yield from self._from_sse(r.iter_lines(), deadline)
+        except httpx.TimeoutException as e:
+            raise base.ProviderTimeout(f"{self.base_url}: no reply within {read:.0f} s") from e
+        except (httpx.ConnectError, httpx.RemoteProtocolError) as e:
             raise base.ProviderUnavailable(f"{self.base_url}: {type(e).__name__}") from e
 
     def _from_response(self, data: dict[str, Any]) -> Iterator[base.Event]:
@@ -184,10 +206,14 @@ class OpenAICompatProvider:
             base.stop_reason(choice.get("finish_reason"), bool(calls)), usage_of(data.get("usage"))
         )
 
-    def _from_sse(self, lines: Iterator[str]) -> Iterator[base.Event]:
+    def _from_sse(
+        self, lines: Iterator[str], deadline: base.Deadline | None = None
+    ) -> Iterator[base.Event]:
         partial: dict[int, dict[str, Any]] = {}
         finish, usage = None, None
         for line in lines:
+            if deadline is not None:
+                deadline.check()
             if not line.startswith("data:"):
                 continue
             data = line[5:].strip()
@@ -228,6 +254,8 @@ def _raise_for(r: Any) -> None:
     detail = r.text[:200] if hasattr(r, "text") else ""
     if r.status_code in (401, 403):
         raise base.ProviderAuthError(f"HTTP {r.status_code}")
+    if r.status_code == 500 and ("tool" in detail.lower() or "pars" in detail.lower()):
+        raise base.ProviderBadOutput(f"HTTP 500: {detail}")
     if r.status_code in (408, 429) or r.status_code >= 500:
         raise base.ProviderUnavailable(f"HTTP {r.status_code}: {detail}")
     raise base.ProviderError(f"HTTP {r.status_code}: {detail}")

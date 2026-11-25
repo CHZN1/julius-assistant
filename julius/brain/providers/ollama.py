@@ -71,7 +71,7 @@ def body(
         "messages": to_messages(request),
         "stream": stream,
         "options": {
-            "num_predict": int(request.get("max_tokens") or 1024),
+            "num_predict": base.capped(request.get("max_tokens"), options.get("max_output_tokens")),
             "num_ctx": DEFAULT_CONTEXT,
             **options.get("options", {}),
         },
@@ -80,10 +80,19 @@ def body(
         tools = base.function_tools(request.get("tools"))
         if tools:
             out["tools"] = tools
-    for key in ("keep_alive", "think"):
+    for key in (
+        "keep_alive",
+        "think",
+    ):  # max_output_tokens and deadline_s are Julius's limits, not Ollama options
         if key in options:
             out[key] = options[key]
     return out
+
+
+def _bad_output(text: str) -> bool:
+    """Ollama's 500 for model output it could not turn into a tool call (the server itself is fine)."""
+    low = (text or "").lower()
+    return "tool" in low or "pars" in low
 
 
 class OllamaProvider:
@@ -108,10 +117,15 @@ class OllamaProvider:
     def events(self, request: dict[str, Any], stream: bool = False) -> Iterator[base.Event]:
         import httpx
 
-        payload = body(request, self.model, stream, self.options)
+        # always streamed, even for a one-shot call, so the deadline is checked while the model writes
+        payload = body(request, self.model, True, self.options)
+        deadline = base.Deadline(self.options.get("deadline_s"))
+        read = min(self.timeout, deadline.seconds) if deadline.seconds else self.timeout
         try:
             with (
-                httpx.Client(timeout=self.timeout, transport=self.transport) as client,
+                httpx.Client(
+                    timeout=httpx.Timeout(read, connect=10.0), transport=self.transport
+                ) as client,
                 client.stream("POST", f"{self.base_url}/api/chat", json=payload) as r,
             ):
                 if r.status_code >= 400:
@@ -122,22 +136,32 @@ class OllamaProvider:
                         raise base.ProviderError(
                             f"model {self.model!r} not found: ollama pull {self.model}"
                         )
+                    if r.status_code == 500 and _bad_output(r.text):
+                        raise base.ProviderBadOutput(f"HTTP 500: {r.text[:160]}")
                     if r.status_code >= 500 or r.status_code == 429:
                         raise base.ProviderUnavailable(f"HTTP {r.status_code}")
                     raise base.ProviderError(f"HTTP {r.status_code}: {r.text[:200]}")
-                yield from self._from_lines(r.iter_lines())
-        except (httpx.ConnectError, httpx.TimeoutException, httpx.RemoteProtocolError) as e:
+                yield from self._from_lines(r.iter_lines(), deadline)
+        except httpx.TimeoutException as e:
+            raise base.ProviderTimeout(f"{self.base_url}: no reply within {read:.0f} s") from e
+        except (httpx.ConnectError, httpx.RemoteProtocolError) as e:
             raise base.ProviderUnavailable(f"{self.base_url}: {type(e).__name__}") from e
 
-    def _from_lines(self, lines: Iterator[str]) -> Iterator[base.Event]:
+    def _from_lines(
+        self, lines: Iterator[str], deadline: base.Deadline | None = None
+    ) -> Iterator[base.Event]:
         calls, done = [], {}
         for line in lines:
+            if deadline is not None:
+                deadline.check()
             if not line.strip():
                 continue
             try:
                 chunk = json.loads(line)
             except ValueError:
                 continue
+            if chunk.get("error"):
+                raise base.ProviderBadOutput(str(chunk["error"])[:200])
             msg = chunk.get("message") or {}
             if msg.get("content"):
                 yield TextDelta(msg["content"])

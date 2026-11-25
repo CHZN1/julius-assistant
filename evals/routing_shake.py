@@ -82,6 +82,7 @@ def run(cases, names, runs, workers):
     import julius.brain.tools as jt
 
     brain, tracker, system = jc.get_brain(), jc.get_tracker(), re_.system_prompt()
+    brain.ignore_offline_window = True  # an eval: one slow case fails only itself
     base_tools = list(jt.SCHEMAS)
     results: dict[str, dict[str, list[bool]]] = {c["id"]: {n: [] for n in names} for c in cases}
     usd = 0.0

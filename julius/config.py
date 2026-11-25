@@ -31,7 +31,7 @@ DEFAULTS = {
         "save": True,
         "keep": 50,
     },
-    "offline": {"model": "llama3.2:3b", "retry_seconds": 60},
+    "offline": {"model": "llama3.2:3b", "retry_seconds": 60, "failures_before_offline": 2},
     "voice": {"keep_loaded": True},
     "memory": {"announce_auto": True},
     "service": {

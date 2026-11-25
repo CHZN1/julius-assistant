@@ -17,13 +17,17 @@ from typing import Any
 import julius.config as cfg
 import julius.costs as costs
 from julius import identity, log
-from julius.brain import providers
-from julius.brain.providers.base import ProviderAuthError, ProviderUnavailable
+from julius.brain import leak, providers
+from julius.brain.providers.base import ProviderAuthError, ProviderBadOutput, ProviderUnavailable
 from julius.costs import CostTracker
 
 AUTH_MESSAGE = "My API key expired or is invalid."
 CAP_MESSAGE = (
     "I've hit today's spending limit, so I'll stick to the quick model for the rest of the day."
+)
+FAILED_TURN_MESSAGE = "Sorry, my model didn't answer that time. Please try again."
+UNREACHABLE_MESSAGE = (
+    "I can't reach my model right now and I have no offline model, so I can't answer yet."
 )
 HARD_CAP_MESSAGE = "I've now used twice today's spending limit, so I'm switching to my offline model for the rest of the day."
 
@@ -226,6 +230,10 @@ class CloudBrain:
             False  # the spoken auth message has not been delivered through a streamed reply yet
         )
         self.offline_until = 0.0
+        self.failures = 0  # consecutive unavailable/timeout failures; the offline window opens only after several
+        self.ignore_offline_window = (
+            False  # eval brains: a failure fails that turn only, never later turns
+        )
         self.announced = {}
         self.status = {"mode": "cloud"}
         self._last_tools = None
@@ -324,6 +332,10 @@ class CloudBrain:
             ] + (
                 [{"type": "text", "text": "SESSION STATE (" + state}] if marker else []
             )  # per turn: after the cached prefix
+            if (
+                not self.front_end.is_anthropic
+            ):  # small local models recite their prompt unless told not to, last
+                kwargs["system"].append({"type": "text", "text": leak.PRIVATE_NOTE})
         api_tools = convert_tools(self.tool_schemas(tools)) if tools is not None else None
         if api_tools:
             api_tools = _personalize_tools(api_tools)
@@ -379,7 +391,9 @@ class CloudBrain:
                     message=SimpleNamespace(content=AUTH_MESSAGE, tool_calls=None)
                 )
             return self._offline(messages, tools, stream, options, announce=False)
-        if self._clock() < self.offline_until or self.tracker.offline_required():
+        if (
+            self._clock() < self.offline_until and not self.ignore_offline_window
+        ) or self.tracker.offline_required():
             return self._offline(messages, tools, stream, options, announce=False)
         try:
             kwargs = self.request(
@@ -393,12 +407,16 @@ class CloudBrain:
             if stream:
                 return self._stream(kwargs, messages, tools, options)
             response = self.client().messages.create(**kwargs)
+            self.failures = 0
             self.tracker.record("haiku", response.usage, **self._ledger())
-            return self._shape(response)
+            return self._guarded(self._shape(response), kwargs)
         except MissingKey:
             return self._say_auth(stream)
         except (anthropic.AuthenticationError, ProviderAuthError):
             return self._say_auth(stream)
+        except ProviderBadOutput as e:  # the server is fine; the model's reply was unusable
+            log.console(f"  [{self._who()}: unusable reply ({e}); this turn only]", flush=True)
+            return self._say(FAILED_TURN_MESSAGE, stream, failed=True)
         except (
             ProviderUnavailable,
             anthropic.APIConnectionError,
@@ -406,9 +424,26 @@ class CloudBrain:
             anthropic.RateLimitError,
             anthropic.InternalServerError,
         ):
-            return self._go_offline(messages, tools, stream, options)
+            return self._failed(messages, tools, stream, options)
 
     # ---------- responses ----------
+    def _guard(self, kwargs: dict[str, Any]) -> leak.LeakGuard | None:
+        """The prompt-recital check, for front ends that are not Anthropic (see julius/brain/leak.py)."""
+        if self.front_end.is_anthropic or not kwargs.get("system"):
+            return None
+        return leak.LeakGuard("\n".join(b["text"] for b in kwargs["system"]))
+
+    def _guarded(self, shaped: Any, kwargs: dict[str, Any]) -> Any:
+        guard = self._guard(kwargs)
+        if guard is not None and shaped.message.content:
+            text, dropped = guard.clean(shaped.message.content)
+            if dropped:
+                log.console(
+                    "  [dropped a reply sentence that recited the system prompt]", flush=True
+                )
+            shaped.message.content = text
+        return shaped
+
     @staticmethod
     def _shape(response: Any) -> Any:
         text = "".join(b.text for b in response.content if getattr(b, "type", "") == "text")
@@ -429,13 +464,17 @@ class CloudBrain:
         import anthropic
 
         brain = self
+        guard = self._guard(kwargs)
 
         def parts():
             first = True
             try:
                 with brain.client().messages.stream(**kwargs) as stream:
                     try:
-                        for text in stream.text_stream:
+                        texts = stream.text_stream
+                        if guard is not None:
+                            texts = guard.stream(texts)
+                        for text in texts:
                             first = False
                             yield SimpleNamespace(message=SimpleNamespace(content=text))
                         final = (
@@ -452,6 +491,7 @@ class CloudBrain:
                             yield SimpleNamespace(
                                 message=SimpleNamespace(content="", tool_calls=tool_calls)
                             )
+                        brain.failures = 0
                     finally:
                         snapshot = getattr(stream, "current_message_snapshot", None)
                         if snapshot is not None and getattr(snapshot, "usage", None) is not None:
@@ -461,6 +501,10 @@ class CloudBrain:
             except (anthropic.AuthenticationError, ProviderAuthError, MissingKey):
                 brain.auth_bad, brain.auth_pending = True, False  # delivered right here
                 yield SimpleNamespace(message=SimpleNamespace(content=AUTH_MESSAGE))
+            except ProviderBadOutput as e:
+                log.console(f"  [{brain._who()}: unusable reply ({e}); this turn only]", flush=True)
+                if first:
+                    yield from brain._say(FAILED_TURN_MESSAGE, True, failed=True)
             except (
                 ProviderUnavailable,
                 anthropic.APIConnectionError,
@@ -469,9 +513,9 @@ class CloudBrain:
                 anthropic.InternalServerError,
             ):
                 if not first:
+                    brain.failures += 1
                     return  # partial reply already spoken; end it rather than repeat
-                brain.offline_until = brain._clock() + brain.config["offline"]["retry_seconds"]
-                yield from brain._offline(messages, tools, True, options, announce=True)
+                yield from brain._failed(messages, tools, True, options)
 
         return parts()
 
@@ -498,15 +542,37 @@ class CloudBrain:
             return iter([SimpleNamespace(message=SimpleNamespace(content=AUTH_MESSAGE))])
         return SimpleNamespace(message=SimpleNamespace(content=AUTH_MESSAGE, tool_calls=None))
 
-    def _go_offline(
+    def _failed(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
         stream: Any,
         options: dict[str, Any],
     ) -> Any:
+        """The model timed out or could not be reached. One failure fails only this turn, with a spoken message; after
+        [offline] failures_before_offline in a row the offline window opens and the offline model answers (when there is
+        one). An eval brain never opens the window, so one slow case cannot fail the cases after it."""
+        self.failures += 1
+        limit = int(self.config["offline"].get("failures_before_offline", 2))
+        if self.ignore_offline_window or self.failures < limit:
+            log.console(
+                f"  [{self._who()} did not answer (failure {self.failures} of {limit} before going offline)]",
+                flush=True,
+            )
+            return self._say(FAILED_TURN_MESSAGE, stream, failed=True)
         self.offline_until = self._clock() + self.config["offline"]["retry_seconds"]
         return self._offline(messages, tools, stream, options, announce=True)
+
+    def _who(self) -> str:
+        return "Claude API" if self.front_end.is_anthropic else self.front_end.describe()
+
+    @staticmethod
+    def _say(text: str, stream: Any, failed: bool = False) -> Any:
+        """A spoken reply that is not the model's (a failure notice): marked failed=True so evals can tell it apart."""
+        msg = SimpleNamespace(content=text, tool_calls=None, failed=failed)
+        if stream:
+            return iter([SimpleNamespace(message=msg)])
+        return SimpleNamespace(message=msg)
 
     def _offline(
         self,
@@ -517,10 +583,13 @@ class CloudBrain:
         announce: Any,
     ) -> Any:
         if self.offline is None:
-            raise RuntimeError("Claude API unreachable and no offline model configured")
+            log.console(
+                f"  [{self._who()} unreachable and no offline model configured]", flush=True
+            )
+            return self._say(UNREACHABLE_MESSAGE, stream, failed=True)
         if announce:
             log.console(
-                f"  [{'Claude API' if self.front_end.is_anthropic else self.front_end.describe()} unreachable; using local {self.config['offline']['model']}]",
+                f"  [{self._who()} unreachable; using local {self.config['offline']['model']}]",
                 flush=True,
             )
         return self.offline(messages, tools, stream, options)
