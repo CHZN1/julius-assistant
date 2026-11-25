@@ -78,10 +78,34 @@ def check_path(path: str | Path) -> Path:
     return p
 
 
-def _decode_with_afconvert(p: Path, out: Path) -> None:
-    exe = shutil.which("afconvert") or "/usr/bin/afconvert"
+def _decode_audio(p: Path, out: Path) -> None:
+    if exe := shutil.which("ffmpeg"):
+        cmd = [
+            exe,
+            "-nostdin",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-n",
+            "-i",
+            str(p),
+            "-vn",
+            "-ac",
+            "1",
+            "-ar",
+            str(SR),
+            "-c:a",
+            "pcm_s16le",
+            "-f",
+            "wav",
+            str(out),
+        ]
+    elif exe := shutil.which("afconvert"):
+        cmd = [exe, "-f", "WAVE", "-d", f"LEI16@{SR}", "-c", "1", str(p), str(out)]
+    else:
+        raise AudioProblem("I have no audio converter: install ffmpeg, or use macOS afconvert.")
     r = subprocess.run(
-        [exe, "-f", "WAVE", "-d", f"LEI16@{SR}", "-c", "1", str(p), str(out)],
+        cmd,
         capture_output=True,
         timeout=120,
     )
@@ -109,7 +133,7 @@ def load(p: Path) -> tuple[Any, float, float]:
             pass
         with tempfile.TemporaryDirectory(prefix="julius-audio-") as tmp:
             wav = Path(tmp) / "decoded.wav"
-            _decode_with_afconvert(p, wav)
+            _decode_audio(p, wav)
             try:
                 return read(wav)
             except Exception as exc:
