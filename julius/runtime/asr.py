@@ -52,7 +52,7 @@ _SPRITE_NAMES: dict = {"t": 0.0, "names": []}
 
 
 def request_hint(base: str | None) -> str | None:
-    """The request vocabulary hint plus the art words and the names of saved sprites ("Sunday Roy"), refreshed once a minute."""
+    """The request vocabulary hint plus the art words and the names of saved sprites ("Sunday Rex"), refreshed once a minute."""
     from julius.runtime import heard
 
     if not base:  # [asr] vocabulary_hint = false (or no hint at all): leave it off

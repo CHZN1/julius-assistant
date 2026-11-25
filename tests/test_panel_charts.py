@@ -137,7 +137,7 @@ class Tool(Base):
         names = lambda text: {s["function"]["name"] for s in tools.select_schemas(text)}  # noqa: E731
         self.assertIn("render_chart", names("make a bar chart of the tallest buildings"))
         self.assertIn("render_chart", names("show that as a table"))
-        self.assertNotIn("render_chart", names("what's the weather in Fresno"))
+        self.assertNotIn("render_chart", names("what's the weather in Springfield"))
 
 
 class Gallery(Base):

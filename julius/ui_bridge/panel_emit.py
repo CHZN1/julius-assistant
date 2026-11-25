@@ -225,7 +225,7 @@ SAVE_AS_RE = re.compile(
     rf"^\W*(?:please\s+|can you\s+|could you\s+|now\s+)?(?:save|store|keep)(?:\s+{_SAVE_OBJ})?\s+(?:as|under(?:\s+the\s+name)?|called|named|with\s+the\s+name)\s+[\"'“]?(.{{1,60}}?)[\"'”]?(?:,?\s+please)?[\s.!?]*$",
     re.I,
 )
-# "call it Sunday Roy", "name it Sunday Roy": naming is saving under that name ("call it a day" is not a name)
+# "call it Sunday Rex", "name it Sunday Rex": naming is saving under that name ("call it a day" is not a name)
 CALL_IT_RE = re.compile(
     rf"^\W*(?:please\s+|can you\s+|could you\s+|let'?s\s+|now\s+)?(?:call|name|title)\s+{_SAVE_OBJ}\s+(?!a\s+day\b|a\s+night\b|quits\b|even\b|off\b)[\"'“]?(.{{1,60}}?)[\"'”]?(?:,?\s+please)?[\s.!?]*$",
     re.I,
@@ -551,7 +551,7 @@ SPRITE_NAME_BAD = re.compile(r"[^A-Za-z0-9 _().'-]+")
 
 
 def sprite_folder_name(name: str | None, now: float) -> str:
-    """ "Sprite 2026-11-16 13-58" by default; a name he gave ("save it as Sunday Roy") cleaned to letters, digits, spaces and a few marks."""
+    """ "Sprite 2026-11-16 13-58" by default; a name he gave ("save it as Sunday Rex") cleaned to letters, digits, spaces and a few marks."""
     if name:
         clean = re.sub(r"\s+", " ", SPRITE_NAME_BAD.sub(" ", name)).strip(" .")[:60]
         if clean:
@@ -738,7 +738,7 @@ def handle(
     m = SAVE_AS_RE.match(t) or CALL_IT_RE.match(t)
     if m and re.fullmatch(r"(?:my\s+|the\s+)?main(?:\s+(?:sprite|one))?", m.group(1).strip(), re.I):
         m = None  # "save as main sprite" is making it the main sprite (the art commands)
-    if m:  # "save it as Sunday Roy", "save as Roy's main sprite", "call it Sunday Roy": a folder with that name
+    if m:  # "save it as Sunday Rex", "save as Rex's main sprite", "call it Sunday Rex": a folder with that name
         return save_named(panel, files, saved_cfg, m.group(1))
     m = SAVE_WHAT_RE.match(t)
     if m:

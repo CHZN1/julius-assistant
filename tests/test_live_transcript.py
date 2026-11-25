@@ -126,23 +126,23 @@ class LiveTranscript(unittest.TestCase):
         self.assertIn("Opened Sprite ", out)
         self.assertNotIn("Other recent", out)
 
-        # 16:18 a new sprite, sunglasses and a cap, saved as Sunday Roy
+        # 16:18 a new sprite, sunglasses and a cap, saved as Sunday Rex
         art_tool.image_style("dropped", style="sprite")
         art_tool.sprite_edit("Add sunglasses and a cap.")
-        self.assertIn("Saved to", self.shortcut("Save it as Sunday Roy."))
+        self.assertIn("Saved to", self.shortcut("Save it as Sunday Rex."))
         renamed = [m for m in self.sent if m.get("type") == "panel.update" and m.get("title")]
         self.assertEqual(
-            renamed[-1]["title"], "Sprite: Sunday Roy"
+            renamed[-1]["title"], "Sprite: Sunday Rex"
         )  # the card takes the name it was saved under
 
-        # "Open my sprayer." / "Open my, I'm gonna spray it." / "Yes, Sprite." / "Open Sunday, Roy."
+        # "Open my sprayer." / "Open my, I'm gonna spray it." / "Yes, Sprite." / "Open Sunday, Rex."
         for said in ("Open my sprayer.", "Open my, I'm gonna spray it."):
             text = self.hear(said)
             self.assertEqual(text, "Open my sprite.")
-            self.assertIn("Opened Sunday Roy", self.shortcut(text))
+            self.assertIn("Opened Sunday Rex", self.shortcut(text))
         self.last_reply = "I'm not sure what you want me to open for the sprite. Do you mean your sprite? If so, say open my sprite."
-        self.assertIn("Opened Sunday Roy", self.shortcut(self.hear("Yes, Sprite.")))
-        self.assertIn("Opened Sunday Roy", self.shortcut(self.hear("Open Sunday, Roy.")))
+        self.assertIn("Opened Sunday Rex", self.shortcut(self.hear("Yes, Sprite.")))
+        self.assertIn("Opened Sunday Rex", self.shortcut(self.hear("Open Sunday, Rex.")))
         self.assertIsNotNone(source.current())  # opening a saved sprite never drops the photo
 
         # "make me a Pico 8 sprite." (the brain calls image_style with source dropped and the palette)
@@ -178,12 +178,12 @@ class LiveTranscript(unittest.TestCase):
         self.assertIn("Julius made 4 sprites this session", session_state.block(""))
 
     def test_the_second_live_session_naming_and_the_main_sprite(self):
-        # 2026-11-16 evening: "Save as Roy's main sprite" fell through to the brain, which said "I don't have a way to save a sprite"
+        # 2026-11-16 evening: "Save as Rex's main sprite" fell through to the brain, which said "I don't have a way to save a sprite"
         art_tool.image_style("dropped", style="sprite")
         for said, name in (
-            ("Save as Roy's main sprite.", "Roy's main sprite"),
-            ("Save it as Sunday Roy.", "Sunday Roy"),
-            ("Save this as Pixel Roy.", "Pixel Roy"),
+            ("Save as Rex's main sprite.", "Rex's main sprite"),
+            ("Save it as Sunday Rex.", "Sunday Rex"),
+            ("Save this as Pixel Rex.", "Pixel Rex"),
             ("Call it Bob.", "Bob"),
             ("Name it Lou.", "Lou"),
         ):
@@ -192,7 +192,7 @@ class LiveTranscript(unittest.TestCase):
         # the brain's own way to save (any wording the patterns miss): a tool, so it never says it can't
         from julius.brain import tools
 
-        self.assertIn("Saved to", tools.save_card(name="Roy brain save"))
+        self.assertIn("Saved to", tools.save_card(name="Rex brain save"))
         self.assertIn(
             "never say you can't",
             next(x for x in tools.SCHEMAS if x["function"]["name"] == "save_card")["function"][
@@ -200,12 +200,12 @@ class LiveTranscript(unittest.TestCase):
             ],
         )
 
-        # "Make this my main sprite." pins the current one (already saved as Roy brain save: no second copy)
+        # "Make this my main sprite." pins the current one (already saved as Rex brain save: no second copy)
         out = commands.handle("Make this my main sprite.")
-        self.assertEqual(out, "Roy brain save is now your main sprite.")
+        self.assertEqual(out, "Rex brain save is now your main sprite.")
         art_tool.image_style("dropped", style="sprite", palette="nes")
         out = commands.handle("Set as main sprite.")
-        self.assertIn("is now your main sprite. It replaces Roy brain save.", out)
+        self.assertIn("is now your main sprite. It replaces Rex brain save.", out)
         self.assertIn("Opened your main sprite", commands.handle(self.hear("Open my main sprite.")))
         self.assertEqual(sd.STUDIO.get()["palette"], "nes")
         self.assertIn("Main sprite:", session_state.block(""))

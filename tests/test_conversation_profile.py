@@ -26,7 +26,7 @@ class ConversationProfile(unittest.TestCase):
 
     def test_no_person_is_hard_coded(self):
         for text in (manager.SUMMARY_SYSTEM, manager.RECAP_SYSTEM):
-            self.assertNotIn("Roy", text)
+            self.assertIn("the user", text)
             self.assertNotIn(" his ", text)
 
 

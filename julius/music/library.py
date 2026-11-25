@@ -431,7 +431,7 @@ def lookup(name: str, db: Path | None = None) -> list[Path]:
 
 
 def group(rows: list[dict]) -> list[dict]:
-    """One entry per sound, however many formats it exists in: CHZN1_Mercy.mp3 and CHZN1_Mercy.wav are shown once with both formats."""
+    """One entry per sound, however many formats it exists in: CHZN1_Harbor.mp3 and CHZN1_Harbor.wav are shown once with both formats."""
     by: dict[tuple[str, str], dict] = {}
     for d in rows:
         k = (d["folder"], d["name"].casefold())

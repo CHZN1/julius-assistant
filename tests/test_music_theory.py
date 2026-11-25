@@ -636,7 +636,7 @@ class Tool(Base):
             "Give me a G7alt voicing",
         ):
             self.assertIn("music_theory", names(text), text)
-        for text in ("what's the weather in Fresno", "what time is it"):
+        for text in ("what's the weather in Springfield", "what time is it"):
             self.assertNotIn("music_theory", names(text), text)
 
 

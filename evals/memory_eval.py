@@ -165,9 +165,9 @@ QUERIES = [
 
 AUTO = [  # (sentence, is_a_durable_fact)
     ("I'm allergic to shellfish and I always carry an EpiPen", True),
-    ("I live in Clovis, just outside Springfield", True),
-    ("my wife's name is Dana", True),
-    ("I work as a nurse at Community Regional", True),
+    ("I live in Shelbyville, just outside Springfield", True),
+    ("my wife's name is Priya", True),
+    ("I work as a nurse at Springfield General", True),
     ("I've been a vegetarian for ten years", True),
     ("my son Leo is six years old", True),
     ("I prefer window seats on flights", True),

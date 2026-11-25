@@ -20,7 +20,7 @@ _counts: dict[str, int] = {}
 
 
 def record(kind: str, text: str, clock: Callable[[], float] = time.time) -> None:
-    """One thing Julius did ("made a sprite", "saved Sunday Roy"), for the brain's context."""
+    """One thing Julius did ("made a sprite", "saved Sunday Rex"), for the brain's context."""
     _actions.append((clock(), kind, text))
     _counts[kind] = _counts.get(kind, 0) + 1
 

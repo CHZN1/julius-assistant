@@ -75,7 +75,7 @@ def handle(text: str) -> str | None:
     ):
         from julius.art import (
             tool,
-        )  # "open my sprite", "open Sunday Roy" (a saved sprite's name): deterministic, no model call
+        )  # "open my sprite", "open Sunday Rex" (a saved sprite's name): deterministic, no model call
 
         return tool.sprite_edit("open " + m.group(1))
     req = parse(text)
@@ -92,7 +92,7 @@ def handle(text: str) -> str | None:
 
 
 def _sprite_named(name: str) -> bool:
-    """True when a saved sprite has exactly this name ("open Sunday Roy"); anything else is not a sprite request."""
+    """True when a saved sprite has exactly this name ("open Sunday Rex"); anything else is not a sprite request."""
     from julius.art import tool
 
     words = tool._words(name)

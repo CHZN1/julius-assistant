@@ -1,7 +1,7 @@
 """Copy Julius's old session logs into the conversations store. Copy only: nothing in julius_memory/ is moved, changed or deleted.
 
     python scripts/migrate_conversations.py              # dry run (the default): prints what would be created, writes nothing
-    python scripts/migrate_conversations.py --apply --yes  # the real run, only after Roy's yes
+    python scripts/migrate_conversations.py --apply --yes  # the real run, only after the user's yes
 
 - julius_memory/sessions/<date>.jsonl -> one conversation per file in the Inbox project, titled "<date>: <title>" (the title from one Haiku call
   per file on the real run; the dry run shows the date only). Each line becomes his message and Julius's answer, with the line's time.
@@ -189,7 +189,7 @@ def apply(p: dict, store: ConversationStore, title_fn) -> list[str]:
 def haiku_title(rows: list[dict]) -> str:
     from julius.conversations.manager import TITLE_SYSTEM, haiku
 
-    text = "\n".join(f"Roy: {r['user']}\nJulius: {r['julius']}" for r in rows[:8])[:3000]
+    text = "\n".join(f"User: {r['user']}\nJulius: {r['julius']}" for r in rows[:8])[:3000]
     return haiku(TITLE_SYSTEM, text, 20).splitlines()[0].strip(" .\"'")
 
 
@@ -214,7 +214,7 @@ def main() -> int:
     ap.add_argument(
         "--apply", action="store_true", help="really create the conversations (needs --yes)"
     )
-    ap.add_argument("--yes", action="store_true", help="Roy said yes to the real run")
+    ap.add_argument("--yes", action="store_true", help="the user said yes to the real run")
     ap.add_argument(
         "--db",
         default=None,
@@ -223,7 +223,7 @@ def main() -> int:
     a = ap.parse_args()
     store_path = Path(a.db) if a.db else default_path()
     if a.apply and not a.yes:
-        print("The real run needs --yes (after Roy's yes). Nothing was written.")
+        print("The real run needs --yes (after the user's yes). Nothing was written.")
         return 2
     existing = ConversationStore(store_path) if (a.apply or store_path.exists()) else None
     p = plan(existing)

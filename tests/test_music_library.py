@@ -122,14 +122,14 @@ class LibraryTests(unittest.TestCase):
 class FileEntryTests(unittest.TestCase):
     def setUp(self):
         self.d = Path(tempfile.mkdtemp())
-        pack = self.d / "Da Rocket  miniPack"
+        pack = self.d / "Blue Comet  miniPack"
         pack.mkdir()
         self.mine = pack / "CHZN1_Chase_BPM150.mp3"
         self.mine.write_bytes(b"x" * 5)
         self.theirs = pack / "Someone Else_BPM150.mp3"
         self.theirs.write_bytes(b"x" * 5)
-        self.mp3 = self.d / "CHZN1_Mercy_BPM180.mp3"
-        self.wav = self.d / "CHZN1_Mercy_BPM180.wav"
+        self.mp3 = self.d / "CHZN1_Harbor_BPM180.mp3"
+        self.wav = self.d / "CHZN1_Harbor_BPM180.wav"
         self.mp3.write_bytes(b"x")
         self.wav.write_bytes(b"xx")
         self.db = self.d / "idx.sqlite3"
@@ -151,8 +151,8 @@ class FileEntryTests(unittest.TestCase):
 
     def test_the_tool_shows_both_formats_on_one_line(self):
         with cfg(self.mp3, self.wav), mock.patch.object(library, "DB_PATH", self.db):
-            out = tool.find_samples("mercy")
-        self.assertEqual(out.count("CHZN1_Mercy_BPM180"), 1)
+            out = tool.find_samples("harbor")
+        self.assertEqual(out.count("CHZN1_Harbor_BPM180"), 1)
         self.assertIn(".mp3+.wav", out)
 
     def test_non_audio_and_missing_file_entries_are_dropped(self):
@@ -169,36 +169,15 @@ class FileEntryTests(unittest.TestCase):
         with cfg(f):
             self.assertEqual(library.allowlist(), [])
 
-    def test_shipped_allowlist_has_the_approved_own_work_only(self):
+    def test_the_public_julius_toml_ships_no_personal_library(self):
+        """Your own folders, files and drives go in julius.local.toml (gitignored); julius.toml ships an empty list."""
+        import tomllib
+
         import julius.config as c
 
-        names = (c.load_config().get("music") or {}).get("index_allowlist")
-        local = [n for n in names if not n.startswith("volume:")]
-        drive = [n for n in names if n.startswith("volume:")]
-        self.assertEqual(len(local), 15)
-        for n in local:
-            low = n.casefold()
-            self.assertTrue("chzn1" in low or low.endswith("new mleodies 2"), n)
-            for banned in ("chzn drum samples", "boomin bass", "surge", "versace", "topsounds"):
-                self.assertNotIn(banned, low)
-        for n in drive:  # the CHZN drive: UUID form only, and none of the groups the user excluded
-            self.assertTrue(n.startswith("volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/"), n)
-            low = n.casefold()
-            for banned in (
-                "drumkits",
-                "monte booker",
-                "chzn drum samples",
-                "midi drumkit",
-                "loop packs 2020",
-                "/logic",
-                "/users",
-                "scaler",
-                "prpht - love",
-                "love me (again)",
-                "backups.backupdb",
-            ):
-                self.assertNotIn(banned, low)
-            self.assertNotIn("/Volumes/", n)
+        music = tomllib.loads((c.ROOT / "julius.toml").read_text())["music"]
+        self.assertEqual(music["index_allowlist"], [])
+        self.assertEqual(music["volume_labels"], {})
 
 
 class OrAndOfflineTests(unittest.TestCase):
@@ -375,8 +354,8 @@ class PatternAndDriveScanTests(unittest.TestCase):
             "chzn1_lower_BPM100.mp3",
             "CZHN1_Typo_BPM120.wav",
             "CHNZ1_Typo2_BPM110.wav",
-            "PRPHT - Song (Prod. CHZN1).mp3",
-            "PRPHT - Honest.mp3",
+            "Nova Reyes - Song (Prod. CHZN1).mp3",
+            "Nova Reyes - Honest.mp3",
             "notes.txt",
         ):
             (self.drive / n).write_bytes(b"xx")
@@ -426,8 +405,8 @@ class PatternAndDriveScanTests(unittest.TestCase):
             names = {h["name"] for h in library.search(limit=25, db=self.db)}
         self.assertNotIn("CHZN1_Deep_BPM150", names)
         self.assertNotIn("CHZN1_Kick", names)
-        self.assertNotIn("PRPHT - Song (Prod. CHZN1)", names)
-        self.assertNotIn("PRPHT - Honest", names)
+        self.assertNotIn("Nova Reyes - Song (Prod. CHZN1)", names)
+        self.assertNotIn("Nova Reyes - Honest", names)
 
     def test_a_plain_search_never_walks_a_drive(self):
         with self.run_env(self.PATTERNS + [f"volume:{self.UUID}/Beats"]):
@@ -503,17 +482,17 @@ class ShippedPatternTests(unittest.TestCase):
         for yes in (
             "CHZN1_Cake_BPM160.wav",
             "chzn1_lower.mp3",
-            "CZHN1_TellMe_BPM153.wav",
+            "CZHN1_Ember_BPM153.wav",
             "CHNZ1_x.wav",
-            "CHZ1_CASH_BPM130.wav",
+            "CHZ1_Coin_BPM130.wav",
         ):
             self.assertTrue(hit(yes), yes)
         for no in (
-            "PRPHT - 21st Century Girl (Prod. CHZN1).mp3",
-            "Lil Turbo - Pirate V1 (Prod. CHZN1).wav",
-            "Feather Thief - Mine Forever (Prod. CHZN1) (LANDR MASTER).wav",
-            "Keats - Idc (Prod. CHZN1) Mix 1.mp3",
-            "PRPHT - Honest.mp3",
+            "Nova Reyes - Glass City (Prod. CHZN1).mp3",
+            "Kid Static - Lantern V1 (Prod. CHZN1).wav",
+            "Paper Kite - Always Yours (Prod. CHZN1) (LANDR MASTER).wav",
+            "Marlo - Idk (Prod. CHZN1) Mix 1.mp3",
+            "Nova Reyes - Honest.mp3",
         ):
             self.assertFalse(hit(no), no)
 

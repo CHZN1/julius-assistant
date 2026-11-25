@@ -175,7 +175,7 @@ SCHEMAS: dict[str, dict[str, str]] = {
         "palette": "list?",
         "editing": "bool?",
         "main": "bool?",
-        "title": "str?",  # a sprite card saved under a name ("save it as Roy's Main Sprite") takes that name
+        "title": "str?",  # a sprite card saved under a name ("save it as Rex's Main Sprite") takes that name
     },
     "panel.clear": {"scope": "str", "target": "str?", "reason": "str"},
     # not cards: the conversation list (the sidebar) and the notes the brain was given this turn (the "Memory used" chip)

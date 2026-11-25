@@ -9,7 +9,7 @@
 - **No made-up live data:** "What's the price of gas in Springfield right now?" Expect: he says he can't look it up (no figure). "Who won the Sharks game last night?" Expect: a tool call, then a real answer.
 - **"On it.":** "Research the history of the Springfield Grizzlies in detail." (or any request with a slow tool). Expect "On it." about 1.5 s after you stop, then the answer.
 - **Low-confidence confirm:** whisper or mumble "trash the old reports in the sandbox". Expect "I'm not sure I heard that right. Did you say: …?" then say "yes" (runs) or "no" (drops).
-- **Cross-agent undo:** "Remember that my sister's name is Dana." then "Forget that." then trash a sandbox file, then say "undo" twice. Expect first "Undid the last file change…", then "Undid your last memory change…".
+- **Cross-agent undo:** "Remember that my sister's name is Priya." then "Forget that." then trash a sandbox file, then say "undo" twice. Expect first "Undid the last file change…", then "Undid your last memory change…".
 - **UI end to end:** orb listening while you speak, thinking, then pulsing and scattering with his voice; transcript lines in the bubble; say "go to sleep" (asleep look), "stop listening" (quiet look, still); Ctrl+Option+J wakes; click the orb to shake it; brush it for the flares; stop the service (`julius_service.py off`) and the orb shows "Julius is offline", then `julius_service.py on` and it comes back by itself.
 
 ## Post-soak results (automatic run, 2026-11-09 00:15)

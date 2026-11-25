@@ -20,7 +20,7 @@ What is seeded, and why (all of it made up for the demo, except the main sprite)
 - Desktop/night_drive_loop.wav: a 140 BPM loop in A minor, made by julius.music.testsignals, for the BPM and key card.
 - Tomorrow's calendar: three demo events in the sandbox planner.
 - A "Julius" project conversation with the decisions it records, for "what did we decide in the Julius project".
-- Julius Saved/Roy's Main Sprite: a copy of the folder you pass with --main-sprite (your pinned main sprite), and the pointer to it.
+- Julius Saved/Rex's Main Sprite: a copy of the folder you pass with --main-sprite (your pinned main sprite), and the pointer to it.
 """
 
 import argparse
@@ -80,7 +80,7 @@ def env_for(run: Path) -> dict[str, str]:
 
 CONFIG = """# Demo mode (scripts/demo_mode.py): replaces julius.local.toml for the sandboxed demo instance.
 [profile]
-name = "Roy"
+name = "Alex"
 
 [events]
 port = {events}
@@ -247,7 +247,7 @@ def prepare(run: Path, clip: Path | None, main: Path | None) -> None:
         main is not None
     ):  # a copy of the pinned main sprite's folder (read only from the original) and the pointer to it
         dst = (
-            home / "Julius Saved" / "Roy's Main Sprite"
+            home / "Julius Saved" / "Rex's Main Sprite"
         )  # the copy's folder name is the name Julius says
         shutil.copytree(main, dst)
         spr = next(dst.glob("*.julius-sprite"))

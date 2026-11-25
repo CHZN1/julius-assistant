@@ -20,7 +20,7 @@ Half 1 is voice and typed only:Half 1 is voice and typed only:
 - Memory scopes: "remember for this project: ..." and "note for this chat: ..." go to the store's project and conversation scopes; global
   memory stays in `memory.sqlite3` as before (it holds 0 facts today, so nothing to migrate).
 - Migration: `scripts/migrate_conversations.py` is a dry run by default (19 files, 916 turns, 81,816 bytes of text); the real run
-  (`--apply --yes`) waits for Roy's yes, copies only, verifies turns and bytes per file, and logs to `~/dev/MOVE_LOG.md`.
+  (`--apply --yes`) waits for the user's yes, copies only, verifies turns and bytes per file, and logs to `~/dev/MOVE_LOG.md`.
 - `[conversations] enabled = false` in julius.toml switches it off. Numbers are from the live logs (`julius_memory/costs.jsonl`, last 14 days).
 
 ## Where things are today
@@ -65,7 +65,7 @@ Switching conversation loads that conversation's last 8 messages into `s.history
 
 ## 4. Memory scopes and retrieval
 
-- **Global**: about me, preferences ("I'm in Pacific time", "call me Roy"). Today's durable facts migrate here.
+- **Global**: about me, preferences ("I'm in Pacific time", "call me Alex"). Today's durable facts migrate here.
 - **Project**: notes and files for one project ("Julius uses Haiku for routing", the project's folders). Only used inside that project's conversations.
 - **Conversation**: just that chat ("we decided on 24 px for the Game Boy sprite"). Only used in that conversation.
 

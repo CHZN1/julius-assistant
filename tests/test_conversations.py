@@ -33,7 +33,7 @@ class Base(unittest.TestCase):
             if "title" in system:
                 return "Sprite size talk"
             if "summary" in system.lower():
-                return "Roy and Julius settled on a 24 px Game Boy sprite."
+                return "Alex and Julius settled on a 24 px Game Boy sprite."
             return "We talked about the sprite size."
 
         self.conv = Conversations(self.store, llm=llm, background=False)

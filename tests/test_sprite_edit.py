@@ -270,13 +270,13 @@ class NamingTests(StudioTests):
         return pe.handle(self.panel, self.files, words, str(saved)), saved
 
     def test_save_it_as_a_name_and_open_it_by_that_name(self):
-        out, saved = self.save_as("Save it as Sunday Roy")
+        out, saved = self.save_as("Save it as Sunday Rex")
         self.assertIn("Saved to", out)
-        self.assertTrue((saved / "Sunday Roy" / "Sunday Roy.julius-sprite").exists())
+        self.assertTrue((saved / "Sunday Rex" / "Sunday Rex.julius-sprite").exists())
         sd.STUDIO.__init__()
         with mock.patch.object(pe, "saved_dir", return_value=saved):
-            said = commands.handle("Open Sunday Roy")  # the name alone: a saved sprite's exact name
-            self.assertIn("Opened Sunday Roy", said)
+            said = commands.handle("Open Sunday Rex")  # the name alone: a saved sprite's exact name
+            self.assertIn("Opened Sunday Rex", said)
             self.assertIsNone(commands.handle("Open Safari"))  # not a sprite name: not ours
 
     def test_names_are_cleaned_and_never_overwrite(self):
@@ -311,9 +311,9 @@ class NamingTests(StudioTests):
 
     def test_every_naming_phrasing_saves_under_the_name(self):
         for words, name in (
-            ("Save as Roy's main sprite", "Roy's main sprite"),
-            ("save it as Sunday Roy.", "Sunday Roy"),
-            ("Save this as Pixel Roy", "Pixel Roy"),
+            ("Save as Rex's main sprite", "Rex's main sprite"),
+            ("save it as Sunday Rex.", "Sunday Rex"),
+            ("Save this as Pixel Rex", "Pixel Rex"),
             ("Call it Bob.", "Bob"),
             ("name it Lou, please", "Lou"),
         ):
@@ -331,7 +331,7 @@ class NamingTests(StudioTests):
         self.assertEqual(schema["function"]["parameters"].get("required", []), [])
         with mock.patch.object(pe, "saved_dir", return_value=saved):
             self.assertIn(
-                "folder called Roy's main sprite.", tools.save_card(name="Roy's main sprite")
+                "folder called Rex's main sprite.", tools.save_card(name="Rex's main sprite")
             )
             self.assertIn("Saved to", tools.save_card())
             self.assertIn("Saved to", tools.save_card(what="sprite"))
@@ -363,37 +363,37 @@ class MainSpriteTests(StudioTests):
         self.assertIn("already your main sprite", commands.handle("set as main sprite"))
 
     def test_a_saved_sprite_is_pinned_without_a_second_copy_and_a_new_main_replaces_the_old(self):
-        pe.handle(self.panel, self.files, "save it as Sunday Roy", str(self.saved))
+        pe.handle(self.panel, self.files, "save it as Sunday Rex", str(self.saved))
         first = commands.handle("set it as my main sprite")
-        self.assertEqual(first, "Sunday Roy is now your main sprite.")
+        self.assertEqual(first, "Sunday Rex is now your main sprite.")
         art_tool.image_style("me", style="sprite", palette="nes")
-        pe.handle(self.panel, self.files, "save as Roy NES", str(self.saved))
+        pe.handle(self.panel, self.files, "save as Rex NES", str(self.saved))
         second = commands.handle("make this my main sprite")
-        self.assertEqual(second, "Roy NES is now your main sprite. It replaces Sunday Roy.")
+        self.assertEqual(second, "Rex NES is now your main sprite. It replaces Sunday Rex.")
         self.assertEqual(len(list(self.saved.glob("**/*.julius-sprite"))), 2)
         off = [m for m in self.sent if m.get("type") == "panel.update" and m.get("main") is False]
         self.assertEqual(off[-1]["target"], self.card["panel_id"])  # the badge left the old card
 
     def test_open_my_main_sprite_and_the_session_record(self):
         self.assertIn("haven't picked a main sprite", commands.handle("open my main sprite"))
-        pe.handle(self.panel, self.files, "save it as Sunday Roy", str(self.saved))
+        pe.handle(self.panel, self.files, "save it as Sunday Rex", str(self.saved))
         commands.handle("make this my main sprite")
         art_tool.image_style("me", style="sprite", palette="nes")
         pe.handle(
             self.panel, self.files, "save it as Other main sprite", str(self.saved)
         )  # a name with "main" in it is just a name
         said = commands.handle("Open my main sprite.")
-        self.assertIn("Opened your main sprite, Sunday Roy", said)
+        self.assertIn("Opened your main sprite, Sunday Rex", said)
         self.assertEqual(self.sent[-1]["main"], True)
         from julius.brain import session_state
 
-        self.assertIn("Main sprite: Sunday Roy", session_state.block(""))
+        self.assertIn("Main sprite: Sunday Rex", session_state.block(""))
 
     def test_an_edit_after_saving_is_saved_again_before_pinning(self):
-        pe.handle(self.panel, self.files, "save it as Sunday Roy", str(self.saved))
+        pe.handle(self.panel, self.files, "save it as Sunday Rex", str(self.saved))
         art_tool.sprite_edit("add a cap")
         said = art_tool.sprite_edit("make this my main sprite")
-        self.assertIn("I saved it first, as Sunday Roy (2).", said)
+        self.assertIn("I saved it first, as Sunday Rex (2).", said)
         self.assertEqual(json.loads(art_tool.main_sprite()[1].read_text())["params"]["hat"], "cap")
 
     def test_save_as_main_sprite_means_make_it_main(self):

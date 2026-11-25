@@ -992,7 +992,7 @@ SCHEMAS.append(
     _utility_schema(
         "save_card",
         "Save a card from the side panel to disk (his Julius Saved folder): the newest card, or the one 'what' names (sprite, pixel art, pencil, "
-        "selfie, chart, research). name is optional: 'save as Roy's main sprite', 'call it Sunday Roy', 'name it Bob' give the folder that name. "
+        "selfie, chart, research). name is optional: 'save as Rex's main sprite', 'call it Sunday Rex', 'name it Bob' give the folder that name. "
         "You can always save his sprites and pictures: call this, never say you can't. Never for making a sprite his MAIN sprite (that is sprite_edit).",
         {"name": "string", "what": "string"},
         [],
@@ -1226,7 +1226,7 @@ _SCHEMA_GROUPS = (
         r"\b(?:conversations?|chats?|threads?)\b|\bprojects?\b|talking about|talked about",
         ("conversations",),
     ),
-    (  # "save as Roy's main sprite" matched only the memory tools, so the brain said it had no way to save a sprite
+    (  # "save as Rex's main sprite" matched only the memory tools, so the brain said it had no way to save a sprite
         r"\bsav(?:e|ed|ing)\b|\b(?:call|name|title) (?:it|this|that)\b|\bmain sprite\b",
         ("save_card", "sprite_edit", "image_style"),
     ),

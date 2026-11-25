@@ -309,7 +309,7 @@ class Tool(Base):
             "What tempo is my song",
         ):
             self.assertIn("analyze_audio", names(text), text)
-        self.assertNotIn("analyze_audio", names("what's the weather in Fresno"))
+        self.assertNotIn("analyze_audio", names("what's the weather in Springfield"))
         self.assertNotIn("analyze_audio", names("what time is it"))
 
 

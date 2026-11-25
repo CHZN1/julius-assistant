@@ -159,7 +159,7 @@ Nine stages, in order. Effort is in focused weeks for one developer working with
 | # | Stage | Effort | Depends on |
 |---|---|---|---|
 | 1 | README and repository ready for visitors | 1 wk | nothing |
-| 2 | Brand: JULIUS wordmark | 1 wk once Roy's sketch exists | Roy's letter sketches |
+| 2 | Brand: JULIUS wordmark | 1 wk once the maintainer's sketch exists | the maintainer's letter sketches |
 | 3 | Bring your own model | 3-4 wk | nothing |
 | 4 | Apple Developer Program: signing, notarization, ShazamKit | 1 wk plus Apple's waiting time | nothing; needed before any download is offered |
 | 5 | Security | 3-4 wk, plus an outside pentest | the threat model starts now; the pentest needs 9 |
@@ -178,10 +178,10 @@ Nine stages, in order. Effort is in focused weeks for one developer working with
 
 ### Stage 2: Brand, the JULIUS wordmark
 
-**Goals.** A custom JULIUS wordmark drawn from Roy's own letters, used everywhere the name appears.
+**Goals.** A custom JULIUS wordmark drawn from the maintainer's own letters, used everywhere the name appears.
 
 **Work.**
-1. Roy sketches the six letters on paper, with several tries of any letter he is unsure of.
+1. The maintainer sketches the six letters on paper, with several tries of any letter they are unsure of.
 2. Julius digitizes them: a photo or scan goes through the art helpers (threshold, clean-up), then a trace to vector (potrace or similar).
 3. The outlines are hand-fixed: consistent stroke weight, the baseline and x-height aligned, the spacing kerned.
 4. Outputs:
@@ -197,7 +197,7 @@ Nine stages, in order. Effort is in focused weeks for one developer working with
 - The wordmark reads at 16 px and on a phone at banner size.
 - Every export matches its platform's size.
 - The app icon passes the Stage 4 signing build.
-- Roy approves the final letters.
+- The maintainer approves the final letters.
 
 ### Stage 3: Bring your own model
 
