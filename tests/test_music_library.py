@@ -210,7 +210,7 @@ class OrAndOfflineTests(unittest.TestCase):
         self.assertEqual(either.count("\n- "), 3)
         self.assertIn("any of the filters", either)
 
-    UUID = "BBD8952A-31DB-3D53-B954-06E07A5395C2"
+    UUID = "0A1B2C3D-0000-4000-8000-123456789ABC"
 
     def _drive_env(self, mount_name):
         vols = self.d / "Volumes"
@@ -341,7 +341,7 @@ class RescanByVoiceTests(unittest.TestCase):
 
 
 class PatternAndDriveScanTests(unittest.TestCase):
-    UUID = "BBD8952A-31DB-3D53-B954-06E07A5395C2"
+    UUID = "0A1B2C3D-0000-4000-8000-123456789ABC"
 
     def setUp(self):
         self.d = Path(tempfile.mkdtemp())
@@ -468,7 +468,7 @@ class ShippedPatternTests(unittest.TestCase):
 
         import julius.config as c
 
-        U = "volume:BBD8952A-31DB-3D53-B954-06E07A5395C2/"
+        U = "volume:0A1B2C3D-0000-4000-8000-123456789ABC/"
         pats = [
             n[len(U) :]
             for n in c.load_config()["music"]["index_allowlist"]
