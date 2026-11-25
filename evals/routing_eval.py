@@ -636,6 +636,19 @@ def _breakdown(out, key):
     }
 
 
+def tool_json_validity():
+    """Share of the front end's tool calls whose arguments were valid JSON (the bring-your-own-model floor is 99%).
+    Anthropic returns parsed arguments, so only other providers are counted."""
+    from julius.brain import providers
+
+    st = providers.STATS.get("front_end") or {}
+    n = st.get("tool_calls", 0)
+    return {
+        "tool_calls_counted": n,
+        "tool_json_valid_pct": round(100 * (n - st.get("invalid_json", 0)) / n, 1) if n else None,
+    }
+
+
 def summarize(out, skipped, runs):
     """Aggregate accuracy, variation, latency and cost over the result rows."""
     brain_rows = [r for r in out if r["seconds"] > 0]
@@ -655,6 +668,7 @@ def summarize(out, skipped, runs):
         if brain_rows
         else None,
         "total_usd": round(sum(r["usd"] for r in out), 4),
+        **tool_json_validity(),
         "confusion": {f"{r['expected_path']}->{r['actual_path']}": 0 for r in out},
     }
     for r in out:

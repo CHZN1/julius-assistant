@@ -428,6 +428,13 @@ def section_e():
     return {"runs": results}, ok_all
 
 
+def _provider():
+    sys.path.insert(0, str(ROOT / "evals"))
+    import common
+
+    return common.provider_of("memory")
+
+
 def main():
     free = "--free" in sys.argv
     sections = {
@@ -450,6 +457,7 @@ def main():
     summary = {
         "suite": "memory",
         "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "provider": _provider(),
         "ok_pct": ok_pct,
         "passed": passed,
         "total_usd": usd,

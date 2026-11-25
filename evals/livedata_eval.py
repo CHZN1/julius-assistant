@@ -7,6 +7,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -68,6 +69,21 @@ def main():
         bad += not ok
         print(f"{'ok  ' if ok else 'FAIL'} [{c['kind']:8}] {c['say']!r}: {why}\n       {a[:150]!r}")
     print(f"\n{len(cases) - bad}/{len(cases)} respect the rule")
+    import common
+
+    common.RESULTS.mkdir(exist_ok=True)
+    (common.RESULTS / f"livedata_{time.strftime('%Y%m%d_%H%M%S')}.summary.json").write_text(
+        json.dumps(
+            {
+                "suite": "livedata",
+                "date": time.strftime("%Y-%m-%d %H:%M"),
+                "provider": common.provider_of("livedata"),
+                "cases": len(cases),
+                "ok_pct": round(100 * (len(cases) - bad) / len(cases), 1),
+            },
+            indent=1,
+        )
+    )
     return 1 if bad else 0
 
 

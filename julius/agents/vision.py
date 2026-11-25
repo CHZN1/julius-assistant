@@ -23,6 +23,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from julius import costs, identity, log
+from julius.brain import providers
 from julius.paths import REPO_ROOT
 
 MAX_EDGE = 1568
@@ -335,8 +336,9 @@ def ask_model(
         "screen": "a screenshot of the whole screen",
         "image": "an image",
     }.get(source, "a picture")
-    r = brain.slow_client().messages.create(
-        model=brain.config["models"][tier],
+
+    r = providers.client_for(brain, "vision", legacy=tier).messages.create(
+        model=providers.model_for(brain, "vision", legacy=tier),
         system=system or (SYSTEM + (NUTRITION_RULE if NUTRITION.search(question or "") else "")),
         messages=[
             {
@@ -450,7 +452,7 @@ def shop(
                 ),
                 "image": files.put_memory(jpeg, "jpg"),
                 "alt": f"{label}, {w} by {h}",
-                "model": brain.config["models"]["sonnet"],
+                "model": providers.model_for(brain, "vision", legacy="sonnet"),
                 "cost_usd": usd,
                 "est_cost_usd": usd,
             },
@@ -546,7 +548,7 @@ def look(
                 "answer": answer,
                 "image": files.put_memory(jpeg, "jpg"),
                 "alt": f"{label}, {w} by {h}",
-                "model": brain.config["models"][tier],
+                "model": providers.model_for(brain, "vision", legacy=tier),
                 "cost_usd": actual,
                 "est_cost_usd": est,
             }

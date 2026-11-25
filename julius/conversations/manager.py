@@ -64,8 +64,10 @@ def haiku(system: str, text: str, max_tokens: int = 250) -> str:
     brain = jc.get_brain()
     cfg = dict(jc.TIERS["haiku"])
     cfg["max_tokens"] = max_tokens
-    r = brain.slow_client().messages.create(
-        model=brain.config["models"]["haiku"],
+    from julius.brain import providers
+
+    r = providers.client_for(brain, "front_end").messages.create(
+        model=providers.model_for(brain, "front_end"),
         system=system,
         messages=[{"role": "user", "content": text}],
         **cfg,

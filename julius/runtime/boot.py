@@ -298,14 +298,24 @@ def setup_cloud_brain(s: Session) -> None:
 
     s.cloud_brain = cloud.get_brain(offline=_offline_chat)
     s.cloud_tracker = cloud.get_tracker()
-    models = s.cloud_brain.config["models"]
     log.console(
-        f"  [cloud brain: {models['haiku']} front end, {models['sonnet']} planner; "
-        f"API key {config.describe_key()}; daily cap ${s.cloud_tracker.cap_usd:.2f}, "
+        f"  [brain: {brain_line(s.cloud_brain.config)}; "
+        f"daily cap ${s.cloud_tracker.cap_usd:.2f}, "
         f"spent ${s.cloud_tracker.today_total():.4f}; "
         f"offline model {s.cloud_brain.config['offline']['model']}]",
         flush=True,
     )
+
+
+def brain_line(conf: dict[str, Any]) -> str:
+    """Which provider and model each tier uses, and the Anthropic key's state only when a tier needs it. Never a key."""
+    from julius.brain import providers
+
+    tiers = {t: providers.resolve(t, conf) for t in ("front_end", "planner", "research")}
+    parts = [f"{t.replace('_', ' ')} {m.provider}:{m.model}" for t, m in tiers.items()]
+    if any(m.is_anthropic for m in tiers.values()):
+        parts.append(f"Anthropic key {config.describe_key()}")
+    return ", ".join(parts)
 
 
 def import_old_facts(memory_store: Any) -> None:

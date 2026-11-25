@@ -179,6 +179,10 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
     from julius import identity
 
     identity.from_config(config)  # a bad [identity] name fails here, at start-up
+    from julius.brain import providers
+
+    for tier in providers.TIERS:  # a bad [models.<tier>] block fails here, at start-up
+        providers.resolve(tier, config, env={})
     code = config["code"]
     if not (0 < code["default_cap_usd"] <= code["max_cap_usd"]):
         raise ValueError("code.default_cap_usd must be positive and not above code.max_cap_usd")

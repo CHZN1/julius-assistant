@@ -17,6 +17,8 @@ from typing import Any
 import julius.config as cfg
 import julius.costs as costs
 from julius import identity, log
+from julius.brain import providers
+from julius.brain.providers.base import ProviderAuthError, ProviderUnavailable
 from julius.costs import CostTracker
 
 AUTH_MESSAGE = "My API key expired or is invalid."
@@ -217,7 +219,8 @@ class CloudBrain:
             clock,
         )
         self._slow = None
-        self.model = config["models"]["haiku"]
+        self.front_end = providers.resolve("front_end", config)
+        self.model = self.front_end.model
         self.auth_bad = False
         self.auth_pending = (
             False  # the spoken auth message has not been delivered through a streamed reply yet
@@ -229,18 +232,36 @@ class CloudBrain:
 
     # ---------- client and state ----------
     def client(self) -> Any:
+        """The front end's client (short timeout, streamed): the Anthropic SDK or, for another provider, the shim."""
         if self._client is None:
-            self._client = make_client()
+            self._client = providers.client(self.front_end, 20.0, 1, make_client)
         return self._client
 
     def slow_client(self) -> Any:
-        """Longer timeout for planner and sub-agent calls (non-streaming, adaptive thinking)."""
+        """Longer timeout for planner and sub-agent calls (non-streaming, adaptive thinking) on Anthropic."""
         if self._slow is None:
-            self._slow = make_client(timeout=120.0, max_retries=2)
+            from julius.brain.providers.anthropic import TaggingClient
+
+            self._slow = TaggingClient(make_client(timeout=120.0, max_retries=2))
         return self._slow
+
+    def tier_model(self, tier: str, legacy: str | None = None) -> providers.TierModel:
+        return providers.resolve(tier, self.config, legacy)
+
+    def client_for(self, tier: str, legacy: str | None = None) -> Any:
+        """The client for a tier's slow calls (planner, research, vision, conversation titles): Anthropic's shared slow
+        client, or the tier's own provider."""
+        tm = self.tier_model(tier, legacy)
+        if tm.is_anthropic:
+            return self.slow_client()
+        return providers.client(tm, 120.0, 2, make_client)
+
+    def model_for(self, tier: str, legacy: str | None = None) -> str:
+        return self.tier_model(tier, legacy).model
 
     def reset_auth(self) -> None:
         self.auth_bad, self._client, self._slow = False, None, None
+        providers.reset()
 
     def cap_notice(self) -> Any:
         """The spoken notice for a spend threshold, once per day each: the cap (Haiku only), then twice the cap (offline)."""
@@ -372,13 +393,14 @@ class CloudBrain:
             if stream:
                 return self._stream(kwargs, messages, tools, options)
             response = self.client().messages.create(**kwargs)
-            self.tracker.record("haiku", response.usage)
+            self.tracker.record("haiku", response.usage, **self._ledger())
             return self._shape(response)
         except MissingKey:
             return self._say_auth(stream)
-        except anthropic.AuthenticationError:
+        except (anthropic.AuthenticationError, ProviderAuthError):
             return self._say_auth(stream)
         except (
+            ProviderUnavailable,
             anthropic.APIConnectionError,
             anthropic.APITimeoutError,
             anthropic.RateLimitError,
@@ -433,11 +455,14 @@ class CloudBrain:
                     finally:
                         snapshot = getattr(stream, "current_message_snapshot", None)
                         if snapshot is not None and getattr(snapshot, "usage", None) is not None:
-                            brain.tracker.record("haiku", snapshot.usage, note="stream")
-            except (anthropic.AuthenticationError, MissingKey):
+                            brain.tracker.record(
+                                "haiku", snapshot.usage, note="stream", **brain._ledger()
+                            )
+            except (anthropic.AuthenticationError, ProviderAuthError, MissingKey):
                 brain.auth_bad, brain.auth_pending = True, False  # delivered right here
                 yield SimpleNamespace(message=SimpleNamespace(content=AUTH_MESSAGE))
             except (
+                ProviderUnavailable,
                 anthropic.APIConnectionError,
                 anthropic.APITimeoutError,
                 anthropic.RateLimitError,
@@ -450,11 +475,18 @@ class CloudBrain:
 
         return parts()
 
+    def _ledger(self) -> dict[str, str]:
+        """The front end's provider and model for the cost ledger (a streamed reply's usage carries no tag of its own)."""
+        return {"provider": self.front_end.provider, "model": self.front_end.model}
+
     # ---------- failure paths ----------
     def mark_auth_bad(self) -> None:
         self.auth_bad, self.auth_pending = True, True
+        who = (
+            "Anthropic API key" if self.front_end.is_anthropic else f"{self.front_end.provider} key"
+        )
         log.console(
-            "  [Anthropic API key missing or invalid; cloud brain disabled until restart]",
+            f"  [{who} missing or invalid; cloud brain disabled until restart]",
             flush=True,
         )
 
@@ -488,7 +520,7 @@ class CloudBrain:
             raise RuntimeError("Claude API unreachable and no offline model configured")
         if announce:
             log.console(
-                f"  [Claude API unreachable; using local {self.config['offline']['model']}]",
+                f"  [{'Claude API' if self.front_end.is_anthropic else self.front_end.describe()} unreachable; using local {self.config['offline']['model']}]",
                 flush=True,
             )
         return self.offline(messages, tools, stream, options)

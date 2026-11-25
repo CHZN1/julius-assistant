@@ -4,6 +4,8 @@ Rates are USD per million tokens from the Anthropic pricing page (checked 2026-1
 Haiku 5.5 $0.10 in / $0.125 5m cache write / $0.01 cache read / $0.50 out for prompts up to 100K
 tokens ($0.50 / $0.625 / $0.05 / $2.50 above), Sonnet 5.5 $2 / $2.50 / $0.10 / $10.
 Thinking tokens are billed as output and are already included in usage.output_tokens.
+Another provider's usage (bring your own model) carries its own per-million rates from [models.<tier>] price_in and
+price_out, and a local model costs $0. Every ledger row records the provider and model that answered.
 """
 
 import json
@@ -33,8 +35,30 @@ def _n(usage: SimpleNamespace | dict[str, int], name: str) -> int:
     return int(value or 0)
 
 
+def _fields(usage: SimpleNamespace | dict[str, int]) -> dict[str, object]:
+    return (
+        dict(usage)
+        if isinstance(usage, dict)
+        else dict(vars(usage))
+        if hasattr(usage, "__dict__")
+        else {}
+    )
+
+
 def cost_of(tier: str, usage: SimpleNamespace | dict[str, int]) -> float:
     """USD for one response's usage (input, output, cache-write and cache-read tokens)."""
+    provider = (
+        getattr(usage, "provider", None) if not isinstance(usage, dict) else usage.get("provider")
+    )
+    if provider and provider != "anthropic":
+        rates = (
+            getattr(usage, "rates", None) if not isinstance(usage, dict) else usage.get("rates")
+        ) or {}
+        fresh = _n(usage, "input_tokens") + _n(usage, "cache_read_input_tokens")
+        return (
+            fresh * float(rates.get("in", 0.0))
+            + _n(usage, "output_tokens") * float(rates.get("out", 0.0))
+        ) / 1_000_000
     card = RATES[tier]
     fresh, out = _n(usage, "input_tokens"), _n(usage, "output_tokens")
     write, read = _n(usage, "cache_creation_input_tokens"), _n(usage, "cache_read_input_tokens")
@@ -93,9 +117,18 @@ class CostTracker:
             return self.turn
 
     def record(
-        self, tier: str, usage: SimpleNamespace, note: str = ""
+        self,
+        tier: str,
+        usage: SimpleNamespace,
+        note: str = "",
+        provider: str | None = None,
+        model: str | None = None,
     ) -> dict[str, str | float | int]:
-        """Log one API response. Returns the log row."""
+        """Log one API response with the provider and model that answered (given, or tagged on the usage). Returns the log row."""
+        provider = provider or getattr(usage, "provider", None) or "anthropic"
+        model = model or getattr(usage, "model", None) or RATES[tier]["model"]
+        if provider != "anthropic" and getattr(usage, "provider", None) != provider:
+            usage = SimpleNamespace(**{**_fields(usage), "provider": provider})
         usd = cost_of(tier, usage)
         with self._lock:
             self._roll()
@@ -104,7 +137,8 @@ class CostTracker:
                 "date": self._day,
                 "turn": self.turn,
                 "tier": tier,
-                "model": RATES[tier]["model"],
+                "provider": provider,
+                "model": model,
                 "input": _n(usage, "input_tokens"),
                 "output": _n(usage, "output_tokens"),
                 "cache_write": _n(usage, "cache_creation_input_tokens"),

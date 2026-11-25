@@ -10,6 +10,7 @@ from typing import Any
 
 import julius.brain.cloud as jc
 from julius import identity
+from julius.brain import providers
 
 MAX_RESULT_CHARS = 6000
 SPOKEN_LIMIT = 500
@@ -273,7 +274,7 @@ class Loop:
         )
         settings = jc.TIERS[tier]
         self.kwargs = {
-            "model": brain.config["models"][tier],
+            "model": providers.model_for(brain, providers.tier_of(tier), legacy=tier),
             "max_tokens": settings["max_tokens"],
             "cache_control": {"type": "ephemeral"},
             "system": [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
@@ -288,9 +289,9 @@ class Loop:
     def _call(self, messages: list[dict[str, Any]], **extra) -> Any:
         if self.tier == "sonnet" and self.brain.tracker.cap_reached():
             raise SpendCap()
-        response = self.brain.slow_client().messages.create(
-            messages=messages, **self.kwargs, **extra
-        )
+        response = providers.client_for(
+            self.brain, providers.tier_of(self.tier), legacy=self.tier
+        ).messages.create(messages=messages, **self.kwargs, **extra)
         self.brain.tracker.record(self.tier, response.usage, note=self.note)
         return response
 

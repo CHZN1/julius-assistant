@@ -263,8 +263,10 @@ def rewrite(brain: Any, form: str, panel: Any, turn: Any) -> str:
     src = Path(LAST_PAGE["path"])
     cfg = dict(jc.TIERS["sonnet"])
     cfg["max_tokens"] = 900
-    r = brain.slow_client().messages.create(
-        model=brain.config["models"]["sonnet"],
+    from julius.brain import providers
+
+    r = providers.client_for(brain, "planner").messages.create(
+        model=providers.model_for(brain, "planner"),
         system=REWRITE_SYSTEM,
         messages=[
             {

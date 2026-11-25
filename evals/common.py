@@ -9,9 +9,43 @@ HERE = Path(__file__).resolve().parent
 RESULTS = HERE / "results"
 
 
+SUITE_TIER = {  # the model tier each suite measures (bring your own model); suites without a model call are "-"
+    "routing": "front_end",
+    "partial_routing": "-",
+    "routing_shake": "front_end",
+    "planner": "planner",
+    "research": "research",
+    "vision": "vision",
+    "code": "coding",
+    "file": "-",
+    "music": "-",
+    "audio": "front_end",
+    "livedata": "front_end",
+    "memory": "front_end",
+}
+
+
+def provider_of(suite):
+    """'provider:model at url' for the tier this suite measures (from julius.toml and JULIUS_TIER_* overrides), or '-'."""
+    tier = SUITE_TIER.get(suite, "front_end")
+    if tier == "-":
+        return "-"
+    try:
+        import julius.config as cfg
+        from julius.brain import providers
+
+        return providers.resolve(tier, cfg.load_config()).describe()
+    except Exception as e:  # a broken config is reported in the column, not hidden
+        return f"? ({e})"
+
+
 def write_results(suite, rows, summary):
-    """Write results/<suite>_<timestamp>.csv plus a .summary.json; returns (csv_path, previous_csv_path_or_None)."""
+    """Write results/<suite>_<timestamp>.csv plus a .summary.json; returns (csv_path, previous_csv_path_or_None).
+    Every row and the summary carry the provider and model of the tier the suite measures."""
     RESULTS.mkdir(exist_ok=True)
+    provider = provider_of(suite)
+    rows = [{**r, "provider": provider} for r in rows]
+    summary.setdefault("provider", provider)
     previous = latest(suite)
     stamp = time.strftime("%Y%m%d_%H%M%S")
     path = RESULTS / f"{suite}_{stamp}.csv"

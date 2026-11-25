@@ -32,6 +32,7 @@ from typing import Any
 
 import julius.brain.cloud as jc
 import julius.costs as costs
+from julius.brain import providers
 
 HOME = Path.home() / ".julius"
 MAX_REDIRECTS = 3
@@ -387,7 +388,7 @@ class _CostLoop:
         self.brain, self.max_usd, self.spent, self.calls = brain, max_usd, 0.0, 0
         settings = jc.TIERS["haiku"]
         self.kwargs = {
-            "model": brain.config["models"]["haiku"],
+            "model": providers.model_for(brain, "research"),
             "max_tokens": settings["max_tokens"],
             "cache_control": {"type": "ephemeral"},
             "system": [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
@@ -399,9 +400,15 @@ class _CostLoop:
         return self.spent >= self.max_usd
 
     def call(self, messages: list[dict[str, Any]], **extra) -> Any:
-        r = self.brain.slow_client().messages.create(messages=messages, **self.kwargs, **extra)
-        self.brain.tracker.record("haiku", r.usage, note="research")
-        self.spent += costs.cost_of("haiku", r.usage)
+        r = providers.client_for(self.brain, "research").messages.create(
+            messages=messages, **self.kwargs, **extra
+        )
+        row = self.brain.tracker.record("haiku", r.usage, note="research")
+        self.spent += (
+            row["usd"]
+            if isinstance(row, dict) and "usd" in row
+            else costs.cost_of("haiku", r.usage)
+        )
         self.calls += 1
         return r
 

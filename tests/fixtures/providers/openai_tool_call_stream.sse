@@ -1,0 +1,8 @@
+data: {"id":"chatcmpl-175","object":"chat.completion.chunk","created":1795585966,"model":"qwen3:4b-instruct-2507-q4_K_M","system_fingerprint":"fp_ollama","choices":[{"index":0,"delta":{"role":"assistant","content":"","tool_calls":[{"id":"V99lrs1wnCFTa3LbMwKkA7YZh73dYTtj","index":0,"type":"function","function":{"name":"get_weather","arguments":"{\"city\":\"Springfield\"}"}}]},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-175","object":"chat.completion.chunk","created":1795585966,"model":"qwen3:4b-instruct-2507-q4_K_M","system_fingerprint":"fp_ollama","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}
+
+data: {"id":"chatcmpl-175","object":"chat.completion.chunk","created":1795585966,"model":"qwen3:4b-instruct-2507-q4_K_M","system_fingerprint":"fp_ollama","choices":[],"usage":{"prompt_tokens":166,"completion_tokens":21,"total_tokens":187}}
+
+data: [DONE]
+

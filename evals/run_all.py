@@ -194,16 +194,124 @@ def paid_suites(skip):
     return plan
 
 
+FLOORS = {  # bring your own model: a provider passes a tier only at these (docs/PROVIDERS.md)
+    "routing": ("ok_pct", 95.0),
+    "file": ("ok_pct", 100.0),
+    "memory": ("ok_pct", 100.0),
+    "livedata": ("ok_pct", 100.0),
+    "routing_json": ("tool_json_valid_pct", 99.0),
+}
+
+
+def provider_suites(a, skip):
+    """--provider: the suites that measure a model tier (routing, file, live data, memory, planner, research)."""
+    plan = []
+    if "routing" not in skip:
+        plan.append(
+            (
+                "routing",
+                "routing_eval.py",
+                ["--runs", a.runs, "--workers", a.workers],
+                "routing",
+                "ok_pct",
+                "correct",
+                100.0,
+                False,
+            )
+        )
+    if "file" not in skip:
+        plan.append(("file agent", "file_eval.py", [], "file", "ok_pct", "pass", 100.0, False))
+    if "livedata" not in skip:
+        plan.append(
+            (
+                "live data",
+                "livedata_eval.py",
+                [],
+                "livedata",
+                "ok_pct",
+                "respect the rule",
+                100.0,
+                False,
+            )
+        )
+    if "memory" not in skip:
+        plan.append(
+            ("memory", "memory_eval.py", [], "memory", "ok_pct", "sections ok", 100.0, False)
+        )
+    if "planner" not in skip:
+        plan.append(
+            ("planner", "planner_eval.py", [], "planner", "ok_pct", "clean runs", 100.0, False)
+        )
+    if "research" not in skip:
+        plan.append(
+            (
+                "research",
+                "research_eval.py",
+                ["--runs", "1"],
+                "research",
+                "ok_pct",
+                "cases",
+                100.0,
+                False,
+            )
+        )
+    return plan
+
+
+def apply_floors(row, prefix):
+    """Judge a --provider row by the floors instead of by the previous run."""
+    _, new = latest_summary(prefix)
+    new = new or {}
+    why = []
+    for name, (key, floor) in FLOORS.items():
+        if name.split("_")[0] != prefix or new.get(key) is None:
+            continue
+        if new[key] < floor:
+            why.append(f"{key} {new[key]} < {floor}")
+    if prefix == "routing" and new.get("tool_json_valid_pct") is not None:
+        row["detail"] = (
+            row["detail"]
+            + f"; tool-call JSON valid {new['tool_json_valid_pct']}% of {new.get('tool_calls_counted')}"
+        ).strip("; ")
+    row["provider"] = new.get("provider", "")
+    row["floor_ok"] = not why and row["score"] != "DID NOT RUN"
+    if why:
+        row["why"] = "; ".join(why)
+    row["regressed"] = not row["floor_ok"]
+    return row
+
+
 def print_table(rows):
     w = max(len(r["suite"]) for r in rows)
     print(f"\n{'suite'.ljust(w)}  {'score':22} {'time':>7} {'cost':>8}  status")
     for r in rows:
-        status = "REGRESSION: " + r["why"] if r["regressed"] else "ok"
+        status = (
+            ("BELOW FLOOR: " if "floor_ok" in r else "REGRESSION: ") + r["why"]
+            if r["regressed"]
+            else "ok"
+        )
         print(
             f"{r['suite'].ljust(w)}  {str(r['score']):22} {r['seconds']:6.0f}s ${r['usd']:<7.3f}  {status}"
         )
         if r["detail"]:
             print(f"{' ' * w}  {r['detail']}")
+        if r.get("provider"):
+            print(f"{' ' * w}  provider {r['provider']}")
+
+
+def write_table(rows, a):
+    """evals/results/providers_<stamp>.csv: one row per suite with the provider column and the floor verdict."""
+    import csv
+
+    RESULTS.mkdir(exist_ok=True)
+    path = RESULTS / f"providers_{time.strftime('%Y%m%d_%H%M%S')}.csv"
+    fields = ["suite", "provider", "tier", "score", "floor_ok", "why", "seconds", "usd", "detail"]
+    with open(path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
+        w.writeheader()
+        for r in rows:
+            w.writerow({**r, "tier": a.tier})
+    print(f"results {path.name}")
 
 
 def main():
@@ -211,8 +319,47 @@ def main():
     ap.add_argument("--free", action="store_true")
     ap.add_argument("--skip", default="")
     ap.add_argument("--runs", default="3")
+    ap.add_argument(
+        "--provider",
+        help="run the model evals against this provider (anthropic, ollama, lmstudio, ...)",
+    )
+    ap.add_argument("--model", default="", help="with --provider: the model name")
+    ap.add_argument("--tier", default="front_end", help="with --provider: which tier it replaces")
+    ap.add_argument(
+        "--base-url",
+        default="",
+        help="with --provider: the endpoint, when not the preset's default",
+    )
+    ap.add_argument(
+        "--workers",
+        default="6",
+        help="routing eval threads (1 for a local model: keeps its prompt cache warm)",
+    )
     a = ap.parse_args()
     skip = set(filter(None, a.skip.split(",")))
+    if a.provider:
+        import os
+
+        os.environ[f"JULIUS_TIER_{a.tier.upper()}"] = f"{a.provider}:{a.model}"
+        if a.base_url:
+            os.environ[f"JULIUS_TIER_{a.tier.upper()}_BASE_URL"] = a.base_url
+        sys.path.insert(0, str(ROOT))
+        from julius import config
+        from julius.brain import providers
+
+        print(
+            f"provider run: {a.tier} = {providers.resolve(a.tier, config.load_config()).describe()}"
+        )
+        rows = [apply_floors(suite(*spec), spec[3]) for spec in provider_suites(a, skip)]
+        print_table(rows)
+        write_table(rows, a)
+        failed = [r["suite"] for r in rows if not r["floor_ok"]]
+        print(
+            f"\n{a.provider} passes {a.tier}"
+            if not failed
+            else f"\nbelow the floor in: {', '.join(failed)}"
+        )
+        return 1 if failed else 0
     rows = [unit() if spec is None else suite(*spec) for spec in planned_suites(a, skip)]
     print_table(rows)
     bad = [r["suite"] for r in rows if r["regressed"]]

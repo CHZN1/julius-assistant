@@ -14,6 +14,10 @@ turn_max_usd = 0.15        # hard cap on one turn's model spend; no further tool
 [models]
 haiku  = "claude-haiku-5-5"   # voice front end: every turn starts here
 sonnet = "claude-sonnet-5-5"  # planner/orchestrator: reached through escalate_to_planner
+# Bring your own model (docs/PROVIDERS.md): give any tier its own provider. Tiers you don't list keep the two lines above.
+# [models.front_end]          # also: planner, research, vision
+# provider = "ollama"         # anthropic | ollama | ollama_v1 | lmstudio | llamacpp | vllm | openrouter | openai_compat
+# model = "qwen3:4b-instruct-2507-q4_K_M"
 
 [spend]
 daily_cap_usd = 5.00        # total across tiers; once reached Julius says so and stays on Haiku only (no planner)

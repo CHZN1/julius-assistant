@@ -42,7 +42,23 @@ Julius can be interrupted mid-sentence (echo cancellation lets you talk over it)
 
 ## Bring your own models
 
-Today, Julius uses your own Anthropic API key, or runs fully local through [Ollama](https://ollama.com) with `[brain] mode = "local"` in `julius.toml`. A local model also takes over automatically when the API can't be reached (`llama3.2:3b`). A documented provider interface is the next big step on the [roadmap](docs/ROADMAP.md) (Stage 3). It will let each tier (voice front end, planner, coding agent) use any model: Ollama, LM Studio, llama.cpp, or any OpenAI-compatible endpoint, with the evals running against any of them.
+Each model tier (the voice front end, the planner, the research agent and vision) can run on Anthropic, on a local model through [Ollama](https://ollama.com), or on any OpenAI-compatible endpoint: LM Studio, llama.cpp `llama-server`, vLLM, OpenRouter or Ollama's `/v1`. With no extra settings everything runs on your own Anthropic API key, exactly as before. A local model also takes over automatically when the API can't be reached (`llama3.2:3b`).
+
+For example, to run every voice turn on your Mac with Ollama:
+
+```bash
+ollama pull qwen3:4b-instruct-2507-q4_K_M
+```
+
+Then add this to `julius.local.toml`:
+
+```toml
+[models.front_end]
+provider = "ollama"
+model = "qwen3:4b-instruct-2507-q4_K_M"
+```
+
+Every cost-ledger row records which provider and model answered (local turns cost $0). The evals run against any provider: `python evals/run_all.py --provider ollama --model qwen3:4b-instruct-2507-q4_K_M --tier front_end --workers 1`. [docs/PROVIDERS.md](docs/PROVIDERS.md) covers every provider, the per-tier settings, what each provider can and can't do, the floors a model must reach, and the measured results. The coding agent still uses `claude -p`; its own edit/test loop for other models is planned there.
 
 ## Install (macOS)
 
