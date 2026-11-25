@@ -100,7 +100,9 @@ def _decode_audio(p: Path, out: Path) -> None:
             "wav",
             str(out),
         ]
-    elif exe := shutil.which("afconvert"):
+    elif exe := shutil.which("afconvert") or (
+        "/usr/bin/afconvert" if Path("/usr/bin/afconvert").exists() else None
+    ):
         cmd = [exe, "-f", "WAVE", "-d", f"LEI16@{SR}", "-c", "1", str(p), str(out)]
     else:
         raise AudioProblem("I have no audio converter: install ffmpeg, or use macOS afconvert.")
