@@ -1,13 +1,17 @@
 """Julius memory: sessions, durable facts, project state, staging + review."""
 
 import json
+import os
 import uuid
 from datetime import date, datetime
+from pathlib import Path
 from typing import Any
 
 from julius.paths import REPO_ROOT
 
-MEM = REPO_ROOT / "julius_memory"
+MEM = Path(
+    os.environ.get("JULIUS_MEMORY_DIR") or REPO_ROOT / "julius_memory"
+)  # boot sets it again from the same variable
 SESS = MEM / "sessions"
 
 

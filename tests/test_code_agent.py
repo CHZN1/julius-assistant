@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import julius.agents.code_agent as ca
 
@@ -176,13 +177,9 @@ class CommandTests(Base):
 
     def test_the_environment_carries_only_the_one_key_and_private_dirs(self):
         t = self.task()
-        os.environ["ODDS_API_KEY"] = "odds-secret"
-        os.environ["AWS_SECRET_ACCESS_KEY"] = "aws-secret"
-        try:
+        fake = {"ODDS_API_KEY": "odds-secret", "AWS_SECRET_ACCESS_KEY": "aws-secret"}
+        with patch.dict(os.environ, fake):  # your own values, if any, are back afterwards
             argv, env, _ = ca.build_command(t, "sk-test", config=self.cfg)
-        finally:
-            os.environ.pop("ODDS_API_KEY")
-            os.environ.pop("AWS_SECRET_ACCESS_KEY")
         self.assertEqual(env["ANTHROPIC_API_KEY"], "sk-test")
         self.assertNotIn("odds-secret", " ".join(env.values()) + " ".join(argv))
         self.assertNotIn("aws-secret", " ".join(env.values()))

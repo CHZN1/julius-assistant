@@ -82,8 +82,14 @@ class BackupToolTests(unittest.TestCase):
         _ca.CODE_HOME.mkdir()  # never read the real task folders
         self.old = (jt.file_session, jt.code_session)
         jt.file_session, jt.code_session = self.session, self.code
+        import julius.agents.files as jf
+
+        # file_request stamps plans with the process-wide turn counter; other tests leave it anywhere, so pin it here
+        self._jf, self._old_turn = jf, jf._TURN["n"]
+        jf._TURN["n"] = 1
 
     def tearDown(self):
+        self._jf._TURN["n"] = self._old_turn
         self._ca.CODE_HOME = self._old_home
         jt.file_session, jt.code_session = self.old
         jo._STATE["user_text"] = ""
@@ -99,7 +105,7 @@ class BackupToolTests(unittest.TestCase):
         self.assertIn("Preview only", out)
         self.assertTrue((self.root / "Downloads" / "report.txt").exists())
         self.assertIsNotNone(self.session.pending)
-        self.assertEqual(self.session.handle("yes", 5)["code"], "completed")
+        self.assertEqual(self.session.handle("yes", 2)["code"], "completed")  # the next turn
         self.assertFalse((self.root / "Downloads" / "report.txt").exists())
 
     def test_a_file_name_the_user_never_said_is_replaced_by_what_he_said(self):

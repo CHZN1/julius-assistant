@@ -17,7 +17,7 @@ sonnet = "claude-sonnet-5-5"  # planner/orchestrator: reached through escalate_t
 # Bring your own model (docs/PROVIDERS.md): give any tier its own provider. Tiers you don't list keep the two lines above.
 # [models.front_end]          # also: planner, research, vision
 # provider = "ollama"         # anthropic | ollama | ollama_v1 | lmstudio | llamacpp | vllm | openrouter | openai_compat
-# model = "llama3.3:70b"      # a large model you already serve; small ones are below the floors (docs/PROVIDERS.md)
+# model = "llama3.3:70b"      # example only, not tested here: a large model you already serve; small ones are below the floors (docs/PROVIDERS.md)
 
 [spend]
 daily_cap_usd = 5.00        # total across tiers; once reached Julius says so and stays on Haiku only (no planner)

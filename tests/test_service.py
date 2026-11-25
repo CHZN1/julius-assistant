@@ -7,6 +7,7 @@ import plistlib
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from julius import log as julius_log
 from julius import state
@@ -127,15 +128,14 @@ class LogsCommandTests(unittest.TestCase):
 class TempDirTests(unittest.TestCase):
     def test_runtime_temp_lives_under_the_julius_state_dir_and_the_service_exports_it(self):
         d = tempfile.mkdtemp()
-        os.environ["JULIUS_STATE_DIR"] = d
-        try:
+        with mock.patch.dict(
+            os.environ, {"JULIUS_STATE_DIR": d}
+        ):  # restores the previous value after
             self.assertEqual(state.tmp_dir(), Path(d) / "tmp")
             self.assertTrue((Path(d) / "tmp").is_dir())
             self.assertEqual(
                 service.plist_dict()["EnvironmentVariables"]["TMPDIR"], str(Path(d) / "tmp") + "/"
             )
-        finally:
-            os.environ.pop("JULIUS_STATE_DIR", None)
 
     def test_speech_workers_keep_their_scratch_folder_out_of_the_system_temp_dir(self):
         for f in ("julius/audio/mlx_tts_worker.py", "julius/audio/tts_worker.py"):
@@ -152,7 +152,9 @@ class QuietTests(unittest.TestCase):
         self.assertTrue(g.accepting())
 
     def test_quiet_survives_a_restart(self):
-        os.environ["JULIUS_STATE_DIR"] = tempfile.mkdtemp()
+        patch = mock.patch.dict(os.environ, {"JULIUS_STATE_DIR": tempfile.mkdtemp()})
+        patch.start()
+        self.addCleanup(patch.stop)
         self.assertFalse(state.is_quiet())
         state.set_quiet(True)
         self.assertTrue(state.is_quiet())

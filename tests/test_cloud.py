@@ -384,6 +384,19 @@ class FailureTests(unittest.TestCase):
         streamed = "".join(p.message.content for p in b.chat(MSGS, stream=True))
         self.assertEqual(streamed, jc.UNREACHABLE_MESSAGE)
 
+    def test_an_offline_model_that_is_not_installed_is_said_not_raised(self):
+        def no_ollama(m, t, stream, o):
+            if stream:
+                return (x for x in [1] if (_ for _ in ()).throw(ConnectionError("no ollama")))
+            raise ConnectionError("no ollama")
+
+        b = brain(FakeMessages(error=conn_error()), offline=no_ollama)
+        b.chat(MSGS)
+        out = b.chat(MSGS).message
+        self.assertEqual((out.content, out.failed), (jc.UNREACHABLE_MESSAGE, True))
+        spoken = "".join(p.message.content for p in b.chat(MSGS, stream=True))
+        self.assertEqual(spoken, jc.UNREACHABLE_MESSAGE)
+
     def test_an_eval_brain_never_opens_the_offline_window(self):
         api = FakeMessages(
             response=SimpleNamespace(content=[block("text", text="fine")], usage=usage()),

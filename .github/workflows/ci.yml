@@ -36,3 +36,5 @@ jobs:
         run: python -c "import openwakeword.utils as u; u.download_models()"
       - name: Free unit tests (no network, no API key, no models)
         run: python -m unittest discover -s tests -t .
+      - name: The same tests in a random module order (reproduce with the printed seed)
+        run: python scripts/test_shuffled.py ${{ github.run_number }}

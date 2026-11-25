@@ -27,7 +27,7 @@ CAP_MESSAGE = (
 )
 FAILED_TURN_MESSAGE = "Sorry, my model didn't answer that time. Please try again."
 UNREACHABLE_MESSAGE = (
-    "I can't reach my model right now and I have no offline model, so I can't answer yet."
+    "I can't reach my model right now and my offline model isn't available, so I can't answer yet."
 )
 HARD_CAP_MESSAGE = "I've now used twice today's spending limit, so I'm switching to my offline model for the rest of the day."
 
@@ -592,7 +592,33 @@ class CloudBrain:
                 f"  [{self._who()} unreachable; using local {self.config['offline']['model']}]",
                 flush=True,
             )
-        return self.offline(messages, tools, stream, options)
+        try:
+            out = self.offline(messages, tools, stream, options)
+        except Exception as e:  # Ollama not installed or not running: say so, never crash the turn
+            return self._offline_failed(e, stream)
+        if not stream:
+            return out
+        return self._guard_offline_stream(out)
+
+    def _offline_failed(self, e: Exception, stream: Any) -> Any:
+        log.console(f"  [offline model unavailable too: {type(e).__name__}]", flush=True)
+        return self._say(UNREACHABLE_MESSAGE, stream, failed=True)
+
+    def _guard_offline_stream(self, parts: Any) -> Any:
+        """A streamed offline reply fails lazily (on the first chunk); turn that into the spoken notice too."""
+        brain = self
+
+        def safe():
+            spoke = False
+            try:
+                for part in parts:
+                    spoke = True
+                    yield part
+            except Exception as e:
+                if not spoke:
+                    yield from brain._offline_failed(e, True)
+
+        return safe()
 
 
 _BRAIN = None

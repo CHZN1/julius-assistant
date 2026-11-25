@@ -5,6 +5,7 @@ import stat
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 
@@ -131,12 +132,11 @@ class Storage(unittest.TestCase):
         self.assertFalse(s.dir.exists())
 
     def test_default_location_is_local_and_overridable(self):
-        os.environ["JULIUS_WAKE_PERSONAL"] = "/tmp/x_wp"
-        try:
+        with mock.patch.dict(os.environ, {"JULIUS_WAKE_PERSONAL": "/tmp/x_wp"}):
             self.assertEqual(wp.home(), Path("/tmp/x_wp"))
-        finally:
-            os.environ.pop("JULIUS_WAKE_PERSONAL")
-        self.assertTrue(str(wp.home()).endswith("/.julius/wake_personal"))
+        with mock.patch.dict(os.environ):
+            os.environ.pop("JULIUS_WAKE_PERSONAL", None)
+            self.assertTrue(str(wp.home()).endswith("/.julius/wake_personal"))
 
     def test_nothing_is_uploaded_and_the_folder_is_gitignored_by_location(self):
         src = (Path(wp.__file__)).read_text()

@@ -42,9 +42,9 @@ Julius can be interrupted mid-sentence (echo cancellation lets you talk over it)
 
 ## Bring your own models
 
-Each model tier (the voice front end, the planner, the research agent and vision) can run on Anthropic, on a local model through [Ollama](https://ollama.com), or on any OpenAI-compatible endpoint: LM Studio, llama.cpp `llama-server`, vLLM, OpenRouter or Ollama's `/v1`. With no extra settings everything runs on your own Anthropic API key, exactly as before. A local model also takes over automatically when the API can't be reached (`llama3.2:3b`).
+Each model tier (the voice front end, the planner, the research agent and vision) can run on Anthropic, on a model you serve through [Ollama](https://ollama.com), or on any OpenAI-compatible endpoint: LM Studio, llama.cpp `llama-server`, vLLM, OpenRouter or Ollama's `/v1`. With no extra settings everything runs on your own Anthropic API key, exactly as before.
 
-It's meant for large models (roughly 70B-class) on your own hardware or a strong hosted open model: small laptop-sized models are measured below the floors Julius needs. For example, with a large model your Ollama server already has, add this to `julius.local.toml`:
+It's meant for large models (roughly 70B-class) on your own hardware or a strong hosted open model: small laptop-sized models are measured below the floors Julius needs. An example config (not tested here: no large model has been measured yet), with a large model your Ollama server already has, in `julius.local.toml`:
 
 ```toml
 [models.front_end]
@@ -52,7 +52,7 @@ provider = "ollama"
 model = "llama3.3:70b"
 ```
 
-Every cost-ledger row records which provider and model answered (your own hardware costs $0). The evals run against any provider: `python evals/run_all.py --provider ollama --model llama3.3:70b --tier front_end --workers 1`. [docs/PROVIDERS.md](docs/PROVIDERS.md) covers every provider, the per-tier settings, what each provider can and can't do, the floors a model must reach, and the measured results. The coding agent still uses `claude -p`; its own edit/test loop for other models is planned there.
+Every cost-ledger row records which provider and model answered (your own hardware costs $0). The evals run against any provider, for example `python evals/run_all.py --provider ollama --model <your model> --tier front_end --workers 1`. [docs/PROVIDERS.md](docs/PROVIDERS.md) covers every provider, the per-tier settings, what each provider can and can't do, the floors a model must reach, and the measured results. The coding agent still uses `claude -p`; its own edit/test loop for other models is planned there.
 
 ## Install (macOS)
 
@@ -109,7 +109,8 @@ The stop and wake hotkeys (Ctrl+Option+S and Ctrl+Option+J) need no permission.
   ```
   Then check it with `.venv/bin/python -m julius.service.service doctor` and `… smoke`. `… off` removes it.
 - **Product search from a photo:** put a [SerpApi](https://serpapi.com) key in `.env` as `SERPAPI_KEY`. Without it, nothing is sent to SerpApi.
-- **Local only:** install Ollama, run `ollama pull qwen3:4b-instruct-2507-q4_K_M`, and set `[brain] mode = "local"` in `julius.toml`.
+- **Your own models:** to run Julius on a large model you host yourself, or on a hosted open model, see [docs/PROVIDERS.md](docs/PROVIDERS.md). Small laptop-sized models are measured below the floors Julius needs, so this is for large setups (roughly 70B-class).
+- **Works without internet (limited):** when the API can't be reached, Julius can fall back to a small local model (`[offline] model`, `llama3.2:3b`) if you have [Ollama](https://ollama.com) and that model installed. It is a stopgap only: it handles simple questions, but it often picks the wrong tool and can state live figures it hasn't fetched. Without it, Julius says it can't answer until the connection is back.
 
 **Give it another name:** set `name` under `[identity]` in `julius.toml` (or in your own `julius.local.toml`), then restart. The new name is used in:
 - the prompts and the spoken replies;

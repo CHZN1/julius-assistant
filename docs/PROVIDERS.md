@@ -31,7 +31,7 @@ Every model Julius uses goes through one provider interface (`julius/brain/provi
 
 ## Configure a tier
 
-In `julius.toml`, or in `julius.local.toml` to keep it to your machine. For example, the front end on a large model you serve with Ollama:
+In `julius.toml`, or in `julius.local.toml` to keep it to your machine. The two blocks below are **example configs**: the model names show the shape of a large setup and have not been run here (see Measured for what has). The front end on a large model you serve with Ollama:
 
 ```toml
 [models.front_end]
@@ -45,7 +45,7 @@ model = "llama3.3:70b"                   # any model your server already has
 # options = { num_ctx = 16384 }          # Ollama options, or extra chat-completions fields
 ```
 
-Or a hosted open model through OpenRouter (the key is read from `OPENROUTER_API_KEY`):
+Or a hosted open model through OpenRouter (example config, not yet run; the key is read from `OPENROUTER_API_KEY`):
 
 ```toml
 [models.planner]
@@ -55,7 +55,7 @@ price_in = 0.0       # set these to the provider's current USD per million token
 price_out = 0.0
 ```
 
-Tiers you don't list keep their default. A bad block (unknown provider, missing model, missing `base_url`, a URL that isn't http or https) stops Julius at start-up with a message naming the block. `JULIUS_TIER_<TIER>` (`provider:model`), `JULIUS_TIER_<TIER>_BASE_URL` and `JULIUS_TIER_<TIER>_OPTIONS` (JSON) override the file for one run, for example `JULIUS_TIER_FRONT_END="ollama:llama3.3:70b" python -m julius`. With no Anthropic tier left, no Anthropic key is needed: a full turn with the key unset was run on 2026-11-24.
+Tiers you don't list keep their default. A bad block (unknown provider, missing model, missing `base_url`, a URL that isn't http or https) stops Julius at start-up with a message naming the block. `JULIUS_TIER_<TIER>` (`provider:model`), `JULIUS_TIER_<TIER>_BASE_URL` and `JULIUS_TIER_<TIER>_OPTIONS` (JSON) override the file for one run, for example `JULIUS_TIER_FRONT_END="ollama:<your model>" python -m julius`. With no Anthropic tier left, no Anthropic key is needed: a full turn with the key unset was run on 2026-11-24.
 
 ### Limits on models you serve yourself
 
@@ -87,7 +87,7 @@ Every cost-ledger row (`julius_memory/costs.jsonl`) records the `provider` and `
 ## Measuring a provider
 
 ```bash
-python evals/run_all.py --provider ollama --model llama3.3:70b --tier front_end --workers 1
+python evals/run_all.py --provider ollama --model <your model> --tier front_end --workers 1
 ```
 
 This runs the routing, file-agent, live-data, memory, planner and research evals with that tier replaced (`--skip planner,research` leaves out the two that measure other tiers). Every eval CSV and summary gains a `provider` column, and the run writes `evals/results/providers_<date>.csv`. Use `--workers 1` for a model on a single local server: one request at a time keeps its prompt cache warm.
