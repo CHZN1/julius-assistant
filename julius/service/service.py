@@ -45,6 +45,7 @@ def plist_dict(root: Path = ROOT, log_dir: str | None = None) -> dict[str, Any]:
         "ThrottleInterval": 15,
         "ProcessType": "Interactive",
         "LimitLoadToSessionType": "Aqua",
+        "Umask": 0o077,  # the logs launchd creates (stdout, stderr) are owner-only too
         "EnvironmentVariables": {
             "JULIUS_SERVICE": "1",
             "JULIUS_PROFILE": "cloud",

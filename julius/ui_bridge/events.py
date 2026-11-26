@@ -5,6 +5,7 @@ Messages (JSON text frames, server -> client only; anything a client sends is ig
   {"type":"state","state":"idle|listening|thinking|speaking|asleep|quiet","prev":"...","t":...}  on every change
   {"type":"level","level":0.0-1.0,"t":...}        Julius's own voice as it leaves the speakers (RMS x4, clipped), about 30 times a second while he is speaking, then one 0
   {"type":"transcript","who":"you|julius","text":"...","turn":N,"t":...}   a line the user said, or a sentence Julius is saying
+                                                  ("alone": true on a line Julius says on its own, like the wake greeting: show it as a new message)
   {"type":"panel.research|panel.update|panel.clear",...}   side-panel data (see ui_bridge/panel.py and docs/EVENT_FEED.md)
 
 Safety: binds 127.0.0.1 only (the host is not configurable); a request whose Host or Origin is not localhost/127.0.0.1 is refused (DNS rebinding, other web pages);
@@ -120,6 +121,7 @@ class EventHub:
         id: str | None = None,
         pending: bool | None = None,
         cancelled: bool | None = None,
+        alone: bool = False,
     ) -> None:
         """A transcript line. A typed message has an `id`: it appears at once with `pending: true`, and later lines with the same id (edited, cancelled,
         or picked up for its turn) replace it rather than adding a new one."""
@@ -133,6 +135,8 @@ class EventHub:
             "turn": turn,
             "t": round(self.clock(), 3),
         }
+        if alone:  # a line Julius says on its own (the wake greeting): a new message, not part of the last reply
+            line["alone"] = True
         if id:
             line["id"] = id
             if pending is not None:

@@ -19,6 +19,9 @@ def main(argv: list[str] | None = None) -> int:
         epilog="Profiles: ./run_julius.sh (JULIUS_PROFILE=cloud|balanced|fast|...). "
         "Environment variables override the defaults.",
     ).parse_args(argv)
+    from julius import private
+
+    private.owner_only_umask()  # memory, logs, ledger, tokens: owner-only from the first file written
     if os.environ.get("JULIUS_SERVICE") == "1":
         from julius import config, log
 

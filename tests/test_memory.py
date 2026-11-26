@@ -81,6 +81,10 @@ class FlowTests(unittest.TestCase):
         log = (d / "sessions" / "2026-11-05.jsonl").read_text()
         self.assertNotIn("Ana", log)
         self.assertIn("sunny", log)
+        # a forgotten memory waits in the memory trash for 30 days (threat model H1); emptying it leaves no residue
+        self.assertEqual(len(s.trash()), 1)
+        self.assertIn("Say yes", a.handle("empty the memory trash"))
+        self.assertIn("gone for good", a.handle("yes"))
         raw = s.path.read_bytes()
         self.assertNotIn(b"Springfield", raw)  # secure_delete overwrote the row
         self.assertIn("put it back", a.handle("undo that"))

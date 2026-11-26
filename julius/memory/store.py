@@ -167,6 +167,9 @@ def clean(text: str, limit: int = 240) -> str:
     return (t[:limit].rsplit(" ", 1)[0] if len(t) > limit else t).strip()
 
 
+TRASH_DAYS = 30  # like conversations: a forgotten memory can be restored for this long
+
+
 class MemoryStore:
     def __init__(self, path: Path) -> None:
         self.path = Path(path)
@@ -185,6 +188,12 @@ class MemoryStore:
                 "CREATE TABLE IF NOT EXISTS memories(id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL, kind TEXT DEFAULT 'fact', source TEXT DEFAULT 'said', created REAL, used REAL DEFAULT 0, uses INTEGER DEFAULT 0, utterance TEXT DEFAULT '')"
             )
             c.execute("CREATE VIRTUAL TABLE IF NOT EXISTS mem_fts USING fts5(text)")
+            # forgotten memories wait here for TRASH_DAYS so a mistaken (or injected) forget can be undone; nothing in here is
+            # searched, recalled or given to the model
+            c.execute(
+                "CREATE TABLE IF NOT EXISTS memory_trash(id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL, kind TEXT, source TEXT, created REAL, utterance TEXT DEFAULT '', deleted REAL NOT NULL)"
+            )
+        self.purge_trash()
 
     def add(
         self, text: str, kind: str = "fact", source: str = "said", utterance: str = ""
@@ -287,12 +296,25 @@ class MemoryStore:
                 c.execute("UPDATE memories SET used=?, uses=uses+1 WHERE id=?", (time.time(), i))
 
     def forget(
-        self, ids: list[int], sessions_dir: Path | None = None
+        self, ids: list[int], sessions_dir: Path | None = None, now: float | None = None
     ) -> list[dict[str, str | float | int]]:
-        """Hard delete: the rows, their index entries, and the session-log turns that mention them. Returns the deleted rows (for one undo)."""
+        """Forget: the rows leave memory, the index and the session logs at once (nothing recalls them any more), and wait in
+        the memory trash for TRASH_DAYS, from where "restore the memory about X" brings them back. Returns the forgotten rows."""
         rows = self.get(ids)
+        when = time.time() if now is None else now
         with self._db() as c:
             for r in rows:
+                c.execute(
+                    "INSERT INTO memory_trash(text, kind, source, created, utterance, deleted) VALUES (?,?,?,?,?,?)",
+                    (
+                        r["text"],
+                        r.get("kind"),
+                        r.get("source"),
+                        r.get("created"),
+                        r.get("utterance") or "",
+                        when,
+                    ),
+                )
                 c.execute("DELETE FROM memories WHERE id=?", (r["id"],))
                 c.execute("DELETE FROM mem_fts WHERE rowid=?", (r["id"],))
             c.execute("INSERT INTO mem_fts(mem_fts) VALUES('optimize')")
@@ -318,6 +340,71 @@ class MemoryStore:
             self.add(
                 r["text"], r.get("kind", "fact"), r.get("source", "said"), r.get("utterance", "")
             )
+        with self._db() as c:  # back in memory: out of the trash
+            for r in rows:
+                c.execute("DELETE FROM memory_trash WHERE text=?", (r["text"],))
+
+    # ---- the memory trash ----
+    def trash(self, topic: str | None = None) -> list[dict[str, str | float | int]]:
+        """What is in the trash, newest first (optionally only rows sharing words with `topic`)."""
+        with self._db() as c:
+            rows = [
+                dict(r)
+                for r in c.execute("SELECT * FROM memory_trash ORDER BY deleted DESC, id DESC")
+            ]
+        if topic:
+            want = set(words(topic))
+            rows = [r for r in rows if want & set(words(r["text"]))]
+        return rows
+
+    def restore_from_trash(self, ids: list[int]) -> list[dict[str, str | float | int]]:
+        """Put trashed rows back into memory. Returns the restored rows."""
+        with self._db() as c:
+            rows = (
+                [
+                    dict(r)
+                    for r in c.execute(
+                        f"SELECT * FROM memory_trash WHERE id IN ({','.join('?' * len(ids))})",
+                        list(ids),
+                    )
+                ]
+                if ids
+                else []
+            )
+        for r in rows:
+            self.add(
+                r["text"],
+                r.get("kind") or "fact",
+                r.get("source") or "said",
+                r.get("utterance") or "",
+            )
+        with self._db() as c:
+            for r in rows:
+                c.execute("DELETE FROM memory_trash WHERE id=?", (r["id"],))
+        return rows
+
+    def purge_trash(
+        self,
+        ids: list[int] | None = None,
+        older_than_days: float = TRASH_DAYS,
+        now: float | None = None,
+    ) -> int:
+        """Delete trashed rows for good: these ids (an explicitly confirmed "empty the memory trash"), or everything older
+        than the window. Returns how many went."""
+        with self._db() as c:
+            if ids is not None:
+                cur = (
+                    c.execute(
+                        f"DELETE FROM memory_trash WHERE id IN ({','.join('?' * len(ids))})",
+                        list(ids),
+                    )
+                    if ids
+                    else None
+                )
+            else:
+                cutoff = (time.time() if now is None else now) - older_than_days * 86400
+                cur = c.execute("DELETE FROM memory_trash WHERE deleted < ?", (cutoff,))
+            return cur.rowcount if cur is not None else 0
 
     def export_markdown(self, path: Path) -> None:
         lines = [

@@ -5,7 +5,9 @@ from pathlib import Path
 
 
 def state_dir() -> Path:
-    return Path(os.environ.get("JULIUS_STATE_DIR", "~/.julius")).expanduser()
+    return Path(
+        os.environ.get("JULIUS_STATE_DIR") or "~/.julius"
+    ).expanduser()  # empty means unset, never "here"
 
 
 def tmp_dir() -> Path:
@@ -16,7 +18,7 @@ def tmp_dir() -> Path:
 
 
 def _flag() -> Path:
-    return Path(os.environ.get("JULIUS_STATE_DIR", "~/.julius")).expanduser() / "quiet"
+    return state_dir() / "quiet"
 
 
 def is_quiet() -> bool:

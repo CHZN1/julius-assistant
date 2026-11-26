@@ -354,6 +354,37 @@ class MergeTests(Base):
             self.assertFalse((self.proj / n).exists(), n)
         self.assertFalse((self.proj / ".git").exists())
 
+    def test_a_key_written_into_code_refuses_the_whole_merge(self):
+        # threat model M2: the sandbox's environment holds the API key; a file the agent wrote with it must not merge
+        key = "sk-ant-api03-" + "Zk9qLmN4pQ2rS7tV1wX8yB3cD6eF0gH5" + "jK2mN7pQ4rS9tV"
+        for name, body in (
+            ("config.py", f'API = "{key}"\n'),
+            ("deploy.sh", "export AWS_KEY=AKIAIOSFODNN7EXAMPLQ\n"),
+            (
+                "handoff_notes.md",
+                "-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n",
+            ),  # an innocent name: the contents give it away
+        ):
+            with self.subTest(name):
+                t = self.task()
+                self.finish(t, **{name: body, "ok.py": "fine\n"})
+                with patch.dict(os.environ, {"ANTHROPIC_API_KEY": key}):
+                    plan = ca.merge_plan(t)
+                    self.assertEqual([x["file"] for x in plan["secrets"]], [name])
+                    self.assertNotIn(key, str(plan))  # the finding names the kind, never the value
+                    with self.assertRaises(ca.CodeProblem) as cm:
+                        ca.merge(t, self.cfg)
+                self.assertEqual(cm.exception.code, "secret")
+                self.assertNotIn(key, cm.exception.message)
+                self.assertFalse((self.proj / name).exists())
+                self.assertFalse((self.proj / "ok.py").exists())  # nothing at all is copied
+
+    def test_test_placeholders_do_not_block_a_merge(self):
+        t = self.task()
+        self.finish(t, **{"test_x.py": 'KEY = "sk-test"\nTOKEN = "sk-ant-TEST-NOT-A-REAL-KEY"\n'})
+        self.assertEqual(ca.merge_plan(t)["secrets"], [])
+        self.assertEqual(ca.merge(t, self.cfg)["added"], ["test_x.py"])
+
     def test_merge_refuses_a_project_that_is_no_longer_eligible(self):
         t = self.task()
         t.project = str(self.home)

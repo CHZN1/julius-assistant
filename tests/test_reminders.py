@@ -59,7 +59,9 @@ class ServiceTests(unittest.TestCase):
         self.assertIn("3:45", spoken)
         self.assertIn("call mom", self.service.list())
         self.text = "cancel my call mom reminder"
-        self.assertIn("cancelled", self.service.cancel("call mom"))
+        self.assertIn(
+            "Cancelled: call mom", self.service.cancel("call mom")
+        )  # the reply names what was cancelled
         self.assertEqual(self.service.list(), "You have no active reminders.")
 
     def test_requires_the_person_to_ask(self):

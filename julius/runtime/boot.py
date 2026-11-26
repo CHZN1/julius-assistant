@@ -63,6 +63,11 @@ def asr_model_for(name: str) -> str:
 
 def setup_basics(s: Session) -> None:
     """Cancellation, microphone gate, self-echo filter, recording and the memory folder."""
+    from julius import private
+
+    with contextlib.suppress(Exception):  # files earlier versions created group- or world-readable
+        if n := private.secure_existing():
+            log.console(f"  [privacy: {n} Julius files and folders made owner-only]", flush=True)
     if s.scripted and (test_root := test_run.isolate()):
         log.console(f"  [test run: memory, conversations and costs go to {test_root}]", flush=True)
     s.cancellation = Cancellation()

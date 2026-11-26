@@ -468,6 +468,17 @@ class CodeSession:
         except ca.CodeProblem as exc:
             return self._out(False, exc.code, exc.message)
         plan = ca.merge_plan(t)
+        if plan.get("secrets"):
+            listed = "; ".join(
+                f"{x['file']} ({', '.join(x['kinds'])})" for x in plan["secrets"][:4]
+            )
+            return self._out(
+                False,
+                "secret",
+                f"I won't merge: {len(plan['secrets'])} file(s) contain what looks like a key: {listed}. Remove it from the "
+                "task's copy, or discard the task.",
+                task=t.id,
+            )
         n = len(plan["apply"])
         if not n:
             why = (

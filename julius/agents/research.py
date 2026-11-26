@@ -435,11 +435,25 @@ class ResearchAgent:
         self.save = bool(c.get("save", True))
         self.clock = clock
 
+    @property
+    def memory(self) -> list[str]:
+        """Memory notes the outbound checks compare against (loaded per run; tests may set _memory directly)."""
+        if not hasattr(self, "_memory"):
+            from julius.brain import outbound
+
+            self._memory = outbound.memory_notes()
+        return self._memory
+
     # tools
     def _search(self, args: list[str]) -> Any:
         q = str(args.get("query", "")).strip()[:200]
         if not q:
             return "research_search needs a query."
+        from julius.brain import outbound
+
+        why = outbound.check_query(q, self.memory, getattr(self, "said", ""))
+        if why:
+            return f"Blocked: that search {why}. Search for the topic in plain words."
         try:
             hits = self.search_fn(q)
         except Exception as e:
@@ -458,6 +472,11 @@ class ResearchAgent:
         url = str(args.get("url", "")).strip()
         if url in self.pages:
             return "Already read that page."
+        from julius.brain import outbound
+
+        why = outbound.check_url(url, getattr(self, "task", ""), self.memory, self.seen_search)
+        if why:
+            return f"Blocked: {why}. Open pages from search results, or links without data in them."
         if len(self.pages) >= self.max_pages:
             return f"Page limit reached ({self.max_pages}). Use what you have and call research_finish."
         try:
@@ -503,6 +522,11 @@ class ResearchAgent:
         """-> result dict. Always returns one, including on limits and failures (stopped says which)."""
         self.pages, self.page_order, self.seen_search, self.retried = {}, [], set(), 0
         question = " ".join(str(question).split())[:600]
+        from julius.brain import outbound
+        from julius.brain import tools as jt
+
+        self.task, self.said = question, jt._said_this_turn()
+        self._memory = outbound.memory_notes()
         loop = _CostLoop(self.brain, SYSTEM, SCHEMAS, self.max_usd)
         messages, final, stopped = [{"role": "user", "content": question}], None, "done"
         for _step in range(self.max_steps):

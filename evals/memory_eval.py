@@ -1,7 +1,7 @@
 """Memory eval: voice commands, forgetting, recall, automatic capture, and a restart-persistence run with the real runtime.
 
   A commands    ~50 phrasings that must (or must not) be memory commands                                  free, deterministic
-  B forgetting  remember -> forget leaves nothing in the database, the index, the model notes or the session logs   free
+  B forgetting  remember -> forget leaves nothing recallable (index, notes, session logs; the row waits in the memory trash), and emptying the trash leaves nothing in the file   free
   C recall      30 stored facts, 40 questions: is the right fact inside the notes the model would receive?     free
   D auto        60 labelled sentences through the real extractor (Haiku): precision / recall of stored facts  ~$0.02
   E end-to-end headless runs in separate processes: state, restart, ask; forget, restart, ask; injection text  ~$0.01
@@ -317,14 +317,19 @@ def section_b():
             + "\n"
         )
         a.handle(f"forget {probe}")
-        if (
+        recallable = (  # straight after forgetting: nothing recalls it (it waits in the memory trash for 30 days)
             s.all()
             or s.search(probe)
             or a.block(probe)
             or probe in (d / "sessions" / "d.jsonl").read_text()
-            or probe.encode() in s.path.read_bytes()
             or probe in (d / "MEMORY.md").read_text()
-        ):
+            or not s.trash(probe)
+        )
+        a.handle("empty the memory trash")
+        a.handle("yes")
+        if (
+            recallable or s.trash() or probe.encode() in s.path.read_bytes()
+        ):  # emptied: gone from the file too
             residue.append(probe)
     return {"residue": residue}, not residue
 

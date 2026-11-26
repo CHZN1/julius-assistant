@@ -90,6 +90,7 @@ class Listener:
         line = sleep_line(s, text) if sleeping else "I am here."
         if record:
             s.rec_event("reply", text=line, control=control)
+        s.line_alone = True  # its own message in the UI, not the end of the previous reply
         self.say(line)
         if sleeping:
             release_idle_models(s)
@@ -101,6 +102,7 @@ class Listener:
         s = self.s
         self.stay_awake()
         s.rec_event("reply", text="Yeah?", control="wake")
+        s.line_alone = True
         self.say("Yeah?")
 
     # --- housekeeping before each block --------------------------------------------------------

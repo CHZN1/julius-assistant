@@ -128,6 +128,9 @@ class Session:
     turn: int = 0
     turn_active: bool = False
     awake_until: float = 0.0
+    line_alone: bool = (
+        False  # the next line Julius says starts its own message in the UI (the wake greeting)
+    )
     recording: bool = False
     held: dict | None = None
     text_only: bool = False

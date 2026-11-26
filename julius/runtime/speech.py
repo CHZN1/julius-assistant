@@ -163,7 +163,11 @@ def display_text(t: str) -> str:
 
 def _show(s: Session, display: str) -> None:
     if s.events_hub is not None and display:
-        s.events_hub.say("julius", display, s.turn)
+        alone, s.line_alone = (
+            getattr(s, "line_alone", False),
+            False,
+        )  # only the first sentence starts the new message
+        s.events_hub.say("julius", display, s.turn, alone=alone)
 
 
 def _speak_piece(s: Session, text: str, show: bool = True) -> None:

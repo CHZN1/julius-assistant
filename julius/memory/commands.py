@@ -61,6 +61,18 @@ UNDO = re.compile(
     re.I,
 )
 
+TRASH_NOTE = "It's in the memory trash for 30 days if you want it back."
+RESTORE_X = re.compile(
+    r"^(?:please\s+)?(?:restore|bring back|undelete|recover)\s+(?:the\s+)?(?:memor(?:y|ies)|note|fact)s?\s+(?:about|of|on)\s+(.{3,})$",
+    re.I,
+)
+TRASH_LIST = re.compile(
+    r"^(?:what(?:'s| is) in|show(?: me)?|list)\s+(?:the\s+|my\s+)?memory trash$", re.I
+)
+TRASH_EMPTY = re.compile(
+    r"^(?:please\s+)?(?:empty|clear|purge)\s+(?:the\s+|my\s+)?memory trash$", re.I
+)
+
 # "forget that my favorite team is the Sharks", "forget what I told you about the Sharks", "delete the memory about X", "remove X from memory", "stop remembering X"
 FORGET_TOPIC = (
     re.compile("^" + PRE + r"forget\s+(?:that|this)\s+(?!" + NOUN + r"\b)(.{3,})$", re.I),
@@ -107,6 +119,13 @@ def parse(text: str) -> tuple[str, None] | tuple[str, str]:
     for pat, act in ((FORGET_THAT, "forget_that"), (FORGET_ALL, "forget_all"), (UNDO, "undo")):
         if pat.match(t):
             return act, None
+    if TRASH_LIST.match(t.rstrip("?")):
+        return "trash_list", None
+    if TRASH_EMPTY.match(t):
+        return "trash_empty", None
+    m = RESTORE_X.match(t)
+    if m:
+        return "restore", m.group(1).strip()
     if RECENT.match(t.rstrip("?")):
         return "recent", None
     m = LIST.match(t.rstrip("?"))
@@ -183,6 +202,28 @@ class MemoryAssistant:
             return f"That's {len(rows)} things. Say yes to forget all of them."
         if act == "list":
             return self._list(arg)
+        if act == "trash_list":
+            rows = self.store.trash()
+            if not rows:
+                return "The memory trash is empty."
+            return (
+                f"{len(rows)} in the memory trash: "
+                + "; ".join(r["text"].rstrip(".") for r in rows[:5])
+                + "."
+            )
+        if act == "trash_empty":
+            rows = self.store.trash()
+            if not rows:
+                return "The memory trash is already empty."
+            self.pending = ("purge", rows)
+            return f"That deletes {len(rows)} forgotten things for good. Say yes to empty the memory trash."
+        if act == "restore":
+            rows = self.store.trash(arg)
+            if not rows:
+                return f"There's nothing about {arg} in the memory trash."
+            back = self.store.restore_from_trash([rows[0]["id"]])
+            self._export()
+            return f"Restored: {back[0]['text'].rstrip('.')}."
         if act == "recent":
             return self._recent()
         if act == "correct":
@@ -279,7 +320,7 @@ class MemoryAssistant:
         self._gone(rows)
         if not rows:
             return "I couldn't remove that." if self.store.get(ids) else "That's already gone."
-        return f"Forgotten: {rows[0]['text'].rstrip('.')}."
+        return f"Forgotten: {rows[0]['text'].rstrip('.')}. {TRASH_NOTE}"
 
     def _forget(self, topic: str) -> str:
         rows = self.store.search(topic, 5)
@@ -290,7 +331,7 @@ class MemoryAssistant:
             self._gone(gone)
             if not gone:
                 return "I couldn't remove that."
-            return f"Forgotten: {gone[0]['text'].rstrip('.')}."
+            return f"Forgotten: {gone[0]['text'].rstrip('.')}. {TRASH_NOTE}"
         self.pending = ("choose", rows)
         return self._ask(rows)
 
@@ -307,6 +348,11 @@ class MemoryAssistant:
         kind, rows = self.pending
         t = re.sub(r"[^\w\s]", "", text.lower()).strip()
         self.pending = None
+        if kind == "purge":
+            if re.fullmatch(r"(?:yes|yeah|yep|sure|do it|go ahead|empty it)", t):
+                n = self.store.purge_trash([r["id"] for r in rows])
+                return f"Emptied the memory trash: {n} gone for good."
+            return "Okay, the memory trash stays as it is."
         if kind == "forget_what":
             if re.fullmatch(r"(?:no|nope|cancel|never ?mind|stop|leave it|nothing|forget it)", t):
                 return "Okay, I'll keep everything."

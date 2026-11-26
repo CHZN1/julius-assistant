@@ -544,15 +544,22 @@ def summarize(task: Task) -> str:
     return text
 
 
-def merge_plan(task: Task) -> dict[str, list[Any | str]]:
-    """What a merge would do, checked against the real project right now."""
+def merge_plan(task: Task, key_values: tuple[str, ...] = ()) -> dict[str, list[Any | str]]:
+    """What a merge would do, checked against the real project right now. `secrets` lists files whose contents hold a key
+    (this Mac's own key values, or a gitleaks-style token pattern): any of those refuses the whole merge (threat model M2)."""
+    from julius import secrets_scan
+
     c = changes(task)
     real = Path(task.project)
-    apply, conflicts, blocked = [], [], []
+    apply, conflicts, blocked, secrets = [], [], [], []
+    values = secrets_scan.known_values(key_values)
     for rel in c["added"] + c["modified"]:
         if not safe_name(rel):
             blocked.append(rel)
             continue
+        kinds = secrets_scan.scan_file(task.work / rel, values)
+        if kinds:
+            secrets.append({"file": rel, "kinds": sorted(set(kinds))})
         target = real / rel
         if rel in c["added"]:
             (conflicts if target.exists() else apply).append(rel)
@@ -564,6 +571,7 @@ def merge_plan(task: Task) -> dict[str, list[Any | str]]:
         "apply": apply,
         "conflicts": conflicts,
         "blocked": blocked,
+        "secrets": secrets,
         "deleted_not_applied": c["deleted"],
     }
 
@@ -572,6 +580,13 @@ def merge(task: Task, config: dict[str, str] | None = None) -> dict[str, float |
     """Apply the plan: copy added/modified files into the real project, backing up what is overwritten. Never deletes."""
     check_project(task.project, ({**DEFAULT_CONFIG, **(config or {})})["projects_root"])
     plan = merge_plan(task)
+    if plan["secrets"]:
+        listed = "; ".join(f"{s['file']} ({', '.join(s['kinds'])})" for s in plan["secrets"][:4])
+        raise CodeProblem(
+            "secret",
+            f"I won't merge: {len(plan['secrets'])} file(s) contain what looks like a key: {listed}. "
+            "Nothing was copied. Remove the key from the task's copy, or discard the task.",
+        )
     backup = task.dir / "backup"
     done = {"added": [], "modified": []}
     for rel in plan["apply"]:
