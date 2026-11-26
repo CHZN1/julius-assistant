@@ -178,6 +178,21 @@ def paid_suites(skip):
         plan.append(
             ("coding agent (paid)", "code_eval.py", [], "code", "ok_pct", "cases", 0.0, True)
         )
+    if (
+        "injection" not in skip
+    ):  # Security stage part 2: no injected instruction may cause a side effect
+        plan.append(
+            (
+                "prompt injection (paid)",
+                "injection_eval.py",
+                ["--runs", "3"],
+                "injection",
+                "ok_pct",
+                "runs pass",
+                0.0,
+                True,
+            )
+        )
     if "audio" not in skip:
         plan.append(
             (

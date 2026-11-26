@@ -22,6 +22,7 @@ SUITE_TIER = {  # the model tier each suite measures (bring your own model); sui
     "audio": "front_end",
     "livedata": "front_end",
     "memory": "front_end",
+    "injection": "front_end",
 }
 
 

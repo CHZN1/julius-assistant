@@ -103,6 +103,9 @@ DIFF_EXCLUDE = [f":(exclude,glob)**/{d}/**" for d in sorted(SKIP_DIRS - {".git",
     ":(exclude,glob)**/*.pyo",
     ":(exclude,glob)**/.DS_Store",
 ]
+MAX_MERGE_BYTES = (
+    20 * 1024 * 1024
+)  # a file larger than this is never merged back (left in the task's copy)
 DENIED_READ = [
     "~/dev",
     "~/Documents",
@@ -123,6 +126,27 @@ DENIED_READ = [
     "~/.claude",
     "~/.julius",
     "~/.netrc",
+    # found readable by the escape tests (2026-11-25): shell history and start-up files hold exported keys, and the
+    # browsers, cookies and app containers hold logins and personal data
+    "~/.zsh_history",
+    "~/.bash_history",
+    "~/.python_history",
+    "~/.zshrc",
+    "~/.zprofile",
+    "~/.zshenv",
+    "~/.bashrc",
+    "~/.bash_profile",
+    "~/.profile",
+    "~/.zsh_sessions",
+    "~/Library/Cookies",
+    "~/Library/Containers",
+    "~/Library/Group Containers",
+    "~/Library/Accounts",
+    "~/Library/Application Support/Firefox",
+    "~/Library/Application Support/BraveSoftware",
+    "~/Library/Application Support/Microsoft Edge",
+    "~/Library/Application Support/Arc",
+    "~/Library/Application Support/Julius",  # other coding tasks; the task's own folder is allowed again below
     "/Library/Audio",
     "/Volumes",
 ]
@@ -465,6 +489,7 @@ def build_command(
         "PATH": f"{Path(sys.executable).parent}:/usr/bin:/bin:/usr/sbin:/sbin",
         "HOME": str(task.dir / "home"),
         "TMPDIR": str(task.dir / "tmp"),
+        "JULIUS_CODE_TASK": task.id,  # every process the agent starts carries it: _reap finds the ones left behind
         "CLAUDE_CODE_TMPDIR": str(task.dir / "tmp"),
         "LANG": "en_US.UTF-8",
         "ANTHROPIC_API_KEY": api_key,
@@ -554,7 +579,7 @@ def merge_plan(task: Task, key_values: tuple[str, ...] = ()) -> dict[str, list[A
     apply, conflicts, blocked, secrets = [], [], [], []
     values = secrets_scan.known_values(key_values)
     for rel in c["added"] + c["modified"]:
-        if not safe_name(rel):
+        if not safe_name(rel) or (task.work / rel).stat().st_size > MAX_MERGE_BYTES:
             blocked.append(rel)
             continue
         kinds = secrets_scan.scan_file(task.work / rel, values)
@@ -695,9 +720,50 @@ def running() -> list[Any | Run]:
         return [r for r in _RUNNING.values() if not r.done.is_set()]
 
 
+def _reap(task: Task) -> list[int]:
+    """Kill what the agent left running: a child that called setsid has left the task's process group (so killpg misses
+    it) and keeps the output pipe open, so the task never ends. Found by working directory inside the task folder, or by
+    the JULIUS_CODE_TASK marker in its environment (both only for this user's processes). Returns the pids killed."""
+    me, uid, root = os.getpid(), os.getuid(), str(task.dir.resolve())
+    pids = set()
+    with contextlib.suppress(Exception):
+        out = subprocess.run(
+            ["/usr/sbin/lsof", "-nP", "-a", "-u", str(uid), "-d", "cwd", "-Fpn"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        ).stdout
+        pid = None
+        for line in out.splitlines():
+            if line.startswith("p"):
+                pid = int(line[1:])
+            elif (
+                line.startswith("n")
+                and pid
+                and (line[1:] == root or line[1:].startswith(root + "/"))
+            ):
+                pids.add(pid)
+    with contextlib.suppress(Exception):
+        out = subprocess.run(
+            ["/bin/ps", "-Eww", "-u", str(uid), "-o", "pid=,command="],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        ).stdout
+        for line in out.splitlines():
+            if f"JULIUS_CODE_TASK={task.id}" in line:
+                pids.add(int(line.split(None, 1)[0]))
+    pids.discard(me)
+    for pid in pids:
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.kill(pid, signal.SIGKILL)
+    return sorted(pids)
+
+
 def _kill(run: Run) -> None:
     proc = run.proc
     if proc is None or proc.poll() is not None:
+        _reap(run.task)
         return
     for sig in (signal.SIGTERM, signal.SIGKILL):
         try:
@@ -706,6 +772,7 @@ def _kill(run: Run) -> None:
             return
         try:
             proc.wait(timeout=3)
+            _reap(run.task)
             return
         except subprocess.TimeoutExpired:
             continue
@@ -813,6 +880,14 @@ def _execute(
                     _kill(run)
 
             threading.Thread(target=watchdog, daemon=True).start()
+
+            def reaper() -> (
+                None
+            ):  # the agent itself exited: end anything it left behind, so the output pipe closes
+                run.proc.wait()
+                _reap(task)
+
+            threading.Thread(target=reaper, daemon=True).start()
             for line in run.proc.stdout:
                 transcript.write(line)
                 transcript.flush()
@@ -832,6 +907,7 @@ def _execute(
                     result = event
             rc = run.proc.wait()
             run.proc.stdout.close()
+            _reap(task)
     except (
         Exception
     ) as exc:  # sandbox or launch problems must end the task cleanly, not leave it "running"
