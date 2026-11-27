@@ -146,7 +146,6 @@ DENIED_READ = [
     "~/Library/Application Support/BraveSoftware",
     "~/Library/Application Support/Microsoft Edge",
     "~/Library/Application Support/Arc",
-    "~/Library/Application Support/Julius",  # other coding tasks; the task's own folder is allowed again below
     "/Library/Audio",
     "/Volumes",
 ]
@@ -430,6 +429,16 @@ def seatbelt_profile(task: Task, home: Path | None = None, proxy_port: int | Non
     prefix = Path(sys.prefix).resolve()
     if prefix.is_relative_to(home / ".julius"):
         lines.append(f'(allow file-read* (subpath "{prefix}"))')
+    # other coding tasks (their copies and transcripts) and anything else in the task area: their CONTENTS are denied, but
+    # not the folders on the path to this task, which Claude Code's Edit checks before writing (denying the whole area made
+    # every Edit fail, live 2026-11-26)
+    area = CODE_HOME.resolve()
+    lines.append(f'(deny file-read* (regex #"^{re.escape(str(area))}/[^/]+/"))')
+    for parent in (area.parent,):
+        with contextlib.suppress(OSError):
+            for child in parent.iterdir():
+                if child.resolve() != area:
+                    lines.append(f'(deny file-read* (subpath "{child.resolve()}"))')
     lines.append(f'(allow file-read* (subpath "{d}"))')
     lines.append("(deny network*)")
     if proxy_port:

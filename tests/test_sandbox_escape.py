@@ -40,7 +40,6 @@ class Escape(unittest.TestCase):
             "Library/Cookies/Cookies.binarycookies": "c",
             "Library/Containers/com.apple.Notes/Data/notes": "n",
             "Library/Group Containers/group.com.apple.notes/NoteStore.sqlite": "n",
-            "Library/Application Support/Julius/code/other-task/work/secret.py": "x",
         }
         for rel, body in self.secrets.items():
             p = self.home / rel
@@ -48,6 +47,9 @@ class Escape(unittest.TestCase):
             p.write_text(body)
         self.p = ep.EgressProxy().start()
         self.addCleanup(self.p.stop)
+        # where production keeps coding tasks (not under ~/.julius, which the sandbox denies as a whole)
+        ca.CODE_HOME = self.home / "Library" / "Application Support" / "Julius" / "code"
+        ca.CODE_HOME.mkdir(parents=True, exist_ok=True)
         self.t = self.b.task()
         (self.t.dir / "p.sb").write_text(
             ca.seatbelt_profile(self.t, home=self.home, proxy_port=self.p.port)
@@ -118,6 +120,22 @@ class Escape(unittest.TestCase):
         for rel in self.secrets:
             with self.subTest(rel):
                 self.assertEqual(out.get(rel.replace(" ", "_")), "blocked")
+
+    def test_other_coding_tasks_cannot_be_read_but_the_path_to_this_one_can(self):
+        other = ca.CODE_HOME / "other-task" / "work" / "secret.py"
+        other.parent.mkdir(parents=True)
+        other.write_text("x")
+        (self.t.dir / "p.sb").write_text(
+            ca.seatbelt_profile(self.t, home=self.home, proxy_port=self.p.port)
+        )
+        out = self.results(
+            f"import os\ntry:\n    open({str(other)!r}).read(); print('other', 'READ')\nexcept OSError: print('other', 'blocked')\n"
+            f"print('parents', 'ok' if os.path.isdir({str(ca.CODE_HOME)!r}) and os.path.isdir({str(self.t.dir)!r}) else 'hidden')\n"
+        )
+        self.assertEqual(out["other"], "blocked")
+        self.assertEqual(
+            out["parents"], "ok"
+        )  # Claude Code's Edit checks the folders above the file it writes
 
     def test_its_own_copy_can_be_read_and_written(self):
         out = self.results(
