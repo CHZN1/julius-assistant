@@ -228,7 +228,8 @@ class Processes(unittest.TestCase):
             "#!/bin/sh\n"
             # a child in a new session (outside the task's process group) that would keep running after the task ends
             f"/usr/bin/python3 -c 'import os,time,sys\nif os.fork()==0:\n os.setsid()\n open(sys.argv[1],\"w\").write(str(os.getpid()))\n time.sleep(120)' {self.marker} &\n"
-            "sleep 1\n"
+            # wait until the child has written its marker (slow CI runners), so the reaper can't kill it before it starts
+            f"for i in $(seq 1 100); do [ -s {self.marker} ] && break; sleep 0.1; done\n"
             'echo \'{"type":"result","subtype":"success","total_cost_usd":0.01,"result":"done"}\'\n'
         )
         self.agent.chmod(0o755)
