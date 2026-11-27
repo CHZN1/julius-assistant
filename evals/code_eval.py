@@ -42,6 +42,7 @@ class Env:
             "_eval_" + self.scratch.name[-8:]
         )  # the REAL location: a path under ~/.julius once made every Edit fail live
         ca.CODE_HOME.mkdir(parents=True, exist_ok=True)
+        self.home = ca.CODE_HOME
         self.tracker = CostTracker(self.scratch / "costs.jsonl", 100.0)
         self.config = {
             "projects_root": str(self.dev),
@@ -121,13 +122,20 @@ class Env:
                     results.append((name, cmd, bool(block.get("is_error")), body))
         return commands, results, "\n".join(seen)
 
+    def folders(self):
+        """The three scratch places one case uses: the system temp dir, ~/dev, and its corner of the coding home."""
+        return [self.scratch, self.dev, self.home]
+
     def close(self):
+        """Remove the three scratch folders, each only if it is one this eval made (checked by place and name)."""
         if self.dev.parent == Path.home() / "dev" and self.dev.name.startswith(
             ".julius_code_eval_"
         ):
             shutil.rmtree(self.dev, ignore_errors=True)
-        shutil.rmtree(self.scratch, ignore_errors=True)
-        shutil.rmtree(self.ca.CODE_HOME, ignore_errors=True)
+        if self.scratch.name.startswith("julius_code_eval_"):
+            shutil.rmtree(self.scratch, ignore_errors=True)
+        if self.home.parent == self.real_home and self.home.name.startswith("_eval_"):
+            shutil.rmtree(self.home, ignore_errors=True)
 
 
 def fail(msg):
@@ -323,10 +331,17 @@ def main():
         e = Env(ca, cs, CostTracker, key, claude)
         t0 = time.perf_counter()
         try:
-            ok, detail = CASES[name](e)
-        except Exception as exc:
-            ok, detail = False, f"{type(exc).__name__}: {exc}"
-        cost = e.tracker.code_today()
+            try:
+                ok, detail = CASES[name](e)
+            except Exception as exc:
+                ok, detail = False, f"{type(exc).__name__}: {exc}"
+            cost = e.tracker.code_today()
+        finally:  # every run, even on Ctrl-C or an error here, unless --keep
+            if a.keep:
+                print("kept: " + ", ".join(str(f) for f in e.folders()), flush=True)
+            else:
+                e.close()
+            ca.CODE_HOME = real_home_code
         spent += cost
         rows.append(
             {
@@ -342,8 +357,6 @@ def main():
             f"{'PASS' if ok else 'FAIL'} {name}: {detail} (${cost:.3f}, {rows[-1]['seconds']}s)",
             flush=True,
         )
-        (print(f"kept: {e.scratch} and {e.dev}") if a.keep else e.close())
-        ca.CODE_HOME = real_home_code
     n = len(rows)
     if not n:
         return 2
