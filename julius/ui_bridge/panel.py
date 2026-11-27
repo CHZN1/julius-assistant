@@ -6,6 +6,7 @@ opaque id served by the panel file server. Messages carry data only, never HTML.
 into a spoken turn. The schema table `SCHEMAS` is the single source for the validators, the conformance test and docs/EVENT_FEED.md."""
 
 import collections
+import copy
 import json
 import re
 import threading
@@ -840,7 +841,7 @@ class PanelHub:
         if not self._emit(msg):
             return None
         with self._lock:
-            self.cards[pid] = msg
+            self.cards[pid] = copy.deepcopy(msg)  # the sent message itself never changes later
             self._keep()
         return pid
 
@@ -858,7 +859,7 @@ class PanelHub:
         if not self._emit(msg):
             return None
         with self._lock:
-            self.cards[pid] = msg
+            self.cards[pid] = copy.deepcopy(msg)  # the sent message itself never changes later
             self._keep()
         return pid
 
@@ -1163,7 +1164,7 @@ class PanelHub:
         if not self._emit(msg):
             return None
         with self._lock:
-            self.cards[pid] = msg
+            self.cards[pid] = copy.deepcopy(msg)  # the sent message itself never changes later
             self._rest[pid] = rest
             self._cut[pid] = cut
             for old in list(self._rest):

@@ -1,6 +1,7 @@
 """Side-panel stage 4: the research emitter, 'open source N', 'save this card', 'close the panel' and their config."""
 
 import io
+import json
 import os
 import tempfile
 import time
@@ -104,6 +105,24 @@ class Emitter(Base):
         self.assertEqual(len(up["images"]), 1)  # the one that failed was dropped, not fatal
         self.assertTrue(self.files.local_path(up["images"][0]["image"]).exists())
         self.assertEqual(up["images"][0]["page_title"], "The Tower")
+
+    def test_a_sent_card_is_never_changed_afterwards(self):
+        """The flake (2026-11-27): update() folded late images into the very dict it had already sent, so the first
+        message changed after it went out whenever the image thread won the race. Deterministic here: no thread."""
+        pid = self.panel.research(RESULT, turn=1)
+        first = self.sent[0]
+        sent_then = json.loads(json.dumps(first))
+        image = {
+            "image": "/p/abcdefghijklmnop.jpg",
+            "alt": "dusk",
+            "page_url": "https://www.example.org/tower",
+        }
+        self.assertTrue(self.panel.update(pid, images=[image]))
+        self.assertEqual(first, sent_then)  # what went out stays what went out
+        self.assertEqual(
+            len(self.panel.cards[pid]["images"]), 1
+        )  # the remembered card has it, for reconnects
+        self.assertEqual(self.sent[1]["type"], "panel.update")
 
     def test_a_broken_result_never_raises(self):
         pe.make_sink(self.panel, self.files)({"nonsense": 1})
