@@ -1,0 +1,129 @@
+#!/usr/bin/python3 -I
+"""code-reap TASK_ID [--all]: end a Julius coding task's processes, as the coding user, and open its files to you.
+
+Installed root-owned in /usr/local/libexec/julius/ next to code-run, under the same sudo rule. It can only signal the
+coding user's own processes, because that is who it runs as.
+
+- Without --all: processes whose working directory is in the task folder, or that carry JULIUS_CODE_TASK=TASK_ID.
+- With --all: every process of the coding user except this one. Julius passes it when a task ends; nothing else should
+  run as that user, so a process that dropped both its folder and its marker can't outlive the task.
+
+Then it gives the shared group read and write on everything the task user made in the task folder, so Julius (you)
+can show the diff, merge and later delete it. Prints {"killed": [pids]}.
+"""
+
+import json
+import os
+import re
+import signal
+import stat
+import subprocess
+import sys
+
+ROOT = "/Users/Shared/julius-code"
+
+
+def processes(uid):
+    """[(pid, ppid, cwd, command with environment)] for this uid."""
+    out = subprocess.run(
+        ["/bin/ps", "-Eww", "-u", str(uid), "-o", "pid=,ppid=,command="],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    ).stdout
+    cwds = {}
+    lsof = subprocess.run(
+        ["/usr/sbin/lsof", "-nP", "-a", "-u", str(uid), "-d", "cwd", "-Fpn"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    ).stdout
+    pid = None
+    for line in lsof.splitlines():
+        if line.startswith("p"):
+            pid = int(line[1:])
+        elif line.startswith("n") and pid:
+            cwds[pid] = line[1:]
+    rows = []
+    for line in out.splitlines():
+        parts = line.split(None, 2)
+        if len(parts) >= 2 and parts[0].isdigit():
+            p = int(parts[0])
+            rows.append((p, int(parts[1]), cwds.get(p, ""), parts[2] if len(parts) > 2 else ""))
+    return rows
+
+
+def targets(rows, task_id, folder, everything, keep):
+    """The pids to kill: the task's own, or with `everything` all of them, never those in `keep` (this one and its parents)."""
+    out = []
+    for pid, _ppid, cwd, command in rows:
+        if pid in keep:
+            continue
+        mine = (
+            cwd == folder
+            or cwd.startswith(folder + "/")
+            or ("JULIUS_CODE_TASK=" + task_id) in command
+        )
+        if everything or mine:
+            out.append(pid)
+    return sorted(out)
+
+
+def ancestors(rows, pid):
+    parent = {p: pp for p, pp, _c, _cmd in rows}
+    seen = {pid}
+    while pid in parent and parent[pid] not in seen:
+        pid = parent[pid]
+        seen.add(pid)
+    return seen | {os.getppid()}
+
+
+def open_up(folder, uid):
+    """Group read and write (and search on folders) on what this user made in the task folder; never follows links."""
+    for dirpath, dirnames, filenames in os.walk(folder):
+        for name in [""] + dirnames + filenames:
+            path = os.path.join(dirpath, name) if name else dirpath
+            try:
+                st = os.lstat(path)
+            except OSError:
+                continue
+            if st.st_uid != uid or stat.S_ISLNK(st.st_mode):
+                continue
+            mode = stat.S_IMODE(st.st_mode)
+            extra = stat.S_IRWXG if stat.S_ISDIR(st.st_mode) else (stat.S_IRGRP | stat.S_IWGRP)
+            if not stat.S_ISDIR(st.st_mode) and mode & stat.S_IXUSR:
+                extra |= stat.S_IXGRP
+            os.chmod(path, (mode | extra) & ~stat.S_IRWXO)
+
+
+def main():
+    args = sys.argv[1:]
+    everything = "--all" in args
+    args = [a for a in args if a != "--all"]
+    if len(args) != 1 or not re.fullmatch(r"c[0-9a-f]{8}", args[0]):
+        sys.stderr.write("usage: code-reap <task id> [--all]\n")
+        sys.exit(2)
+    if os.getuid() == 0:
+        sys.stderr.write("code-reap: refusing to run as root\n")
+        sys.exit(2)
+    task_id, uid = args[0], os.getuid()
+    folder = os.path.join(ROOT, task_id)
+    killed = []
+    for _ in range(3):  # a dying parent can start a child; go round until nothing is left
+        rows = processes(uid)
+        pids = targets(rows, task_id, folder, everything, ancestors(rows, os.getpid()))
+        if not pids:
+            break
+        for pid in pids:
+            try:
+                os.kill(pid, signal.SIGKILL)
+                killed.append(pid)
+            except (ProcessLookupError, PermissionError):
+                pass
+    if os.path.isdir(folder) and os.path.realpath(folder) == os.path.realpath(ROOT) + "/" + task_id:
+        open_up(folder, uid)
+    print(json.dumps({"killed": sorted(set(killed))}))
+
+
+if __name__ == "__main__":
+    main()

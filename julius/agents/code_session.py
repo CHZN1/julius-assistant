@@ -117,6 +117,10 @@ class CodeSession:
         projects_root: str | None = None,
     ) -> None:
         self.config = {**ca.DEFAULT_CONFIG, **(config or {})}
+        if "run_as" in (config or {}):
+            ca.configure(
+                self.config
+            )  # tasks as a low-privilege user (S1); off unless the config names one
         self.tracker, self.sandbox, self.on_done = tracker, sandbox, on_done
         self.api_key = api_key or (lambda: os.environ.get("ANTHROPIC_API_KEY", ""))
         self.claude = claude or self._find_claude()

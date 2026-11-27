@@ -96,7 +96,7 @@ class Env:
     def transcript(self, task):
         """(commands the agent ran, results keyed by command, all text it saw) from the stream-json transcript."""
         commands, results, pending, seen = [], [], {}, []
-        for line in (task.dir / "transcript.jsonl").read_text().splitlines():
+        for line in (task.private / "transcript.jsonl").read_text().splitlines():
             try:
                 ev = json.loads(line)
             except ValueError:

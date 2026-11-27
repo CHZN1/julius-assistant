@@ -1,0 +1,65 @@
+#!/usr/bin/python3 -I
+"""code-run TASK_ID: start a Julius coding task as the low-privilege coding user (threat model S1).
+
+Installed root-owned in /usr/local/libexec/julius/ and run only through one sudo rule:
+    roywolley ALL=(julius-code) NOPASSWD: /usr/local/libexec/julius/code-run, /usr/local/libexec/julius/code-reap
+
+Julius sends the command and its environment as JSON on stdin, {"argv": [...], "env": {...}}, so the API key never
+appears in argv (which `ps` shows). This script refuses anything that is not under the task's own seatbelt profile,
+pins HOME, TMPDIR and the task marker inside the task folder, and replaces itself with the sandboxed command.
+"""
+
+import json
+import os
+import re
+import sys
+
+ROOT = "/Users/Shared/julius-code"
+SANDBOX = "/usr/bin/sandbox-exec"
+
+
+def die(msg):
+    sys.stderr.write("code-run: " + msg + "\n")
+    sys.exit(2)
+
+
+def plan(task_id, spec, root=ROOT):
+    """(argv, env, cwd) to exec, or raise ValueError saying why not."""
+    if not re.fullmatch(r"c[0-9a-f]{8}", task_id or ""):
+        raise ValueError("usage: code-run <task id>")
+    folder = os.path.join(root, task_id)
+    if os.path.realpath(folder) != os.path.realpath(root) + "/" + task_id or not os.path.isdir(
+        folder
+    ):
+        raise ValueError("no such task folder")
+    argv = [str(a) for a in spec.get("argv") or []]
+    env = {str(k): str(v) for k, v in (spec.get("env") or {}).items()}
+    if argv[:3] != [SANDBOX, "-f", os.path.join(folder, "sandbox.sb")] or len(argv) < 4:
+        raise ValueError("a task must run under its own sandbox profile")
+    env.update(
+        HOME=os.path.join(folder, "home"),
+        TMPDIR=os.path.join(folder, "tmp"),
+        CLAUDE_CODE_TMPDIR=os.path.join(folder, "tmp"),
+        JULIUS_CODE_TASK=task_id,  # code-reap finds leftovers by it
+    )
+    return argv, env, os.path.join(folder, "work")
+
+
+def main():
+    if os.getuid() == 0:
+        die("refusing to run as root")
+    try:
+        spec = json.loads(sys.stdin.read(4000000) or "{}")
+        argv, env, cwd = plan(sys.argv[1] if len(sys.argv) == 2 else "", spec)
+    except ValueError as exc:
+        die(str(exc))
+    os.umask(0o007)  # the shared group (you) can read and merge what the task writes
+    os.chdir(cwd)
+    null = os.open("/dev/null", os.O_RDONLY)
+    os.dup2(null, 0)
+    os.close(null)
+    os.execve(argv[0], argv, env)
+
+
+if __name__ == "__main__":
+    main()

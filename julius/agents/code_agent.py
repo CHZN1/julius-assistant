@@ -34,6 +34,18 @@ from julius.costs import CostTracker
 
 # Not under ~/.julius: the sandbox denies reads of ~/.julius, and with the task folder inside it Claude Code's own path checks fail and every Edit is refused (live, 17:57).
 CODE_HOME = Path("~/Library/Application Support/Julius/code").expanduser()
+
+# Running tasks as a low-privilege macOS user (threat model S1; plan in julius-orb docs/S1_M3_PLAN.md). Off unless the
+# config sets code.run_as. Then the task folders live in SHARED_ROOT (yours and that user's, through a shared group),
+# `claude` starts through the root-owned CODE_RUN wrapper by one narrow sudo rule, and everything Julius must be able to
+# trust after the run (task.json with the project to merge into, the merge backups, the transcript, the git history it
+# diffs against) lives in PRIVATE_HOME, which only you can read: the task user can rewrite anything in its own folder.
+RUN_AS = ""
+SHARED_ROOT = Path("/Users/Shared/julius-code")
+PRIVATE_HOME = Path("~/Library/Application Support/Julius/code-private").expanduser()
+CODE_RUN = "/usr/local/libexec/julius/code-run"
+CODE_REAP = "/usr/local/libexec/julius/code-reap"
+SUDO = "/usr/bin/sudo"
 MODEL = "claude-opus-5-5"
 FORBIDDEN = re.compile(
     r"(logic|garageband|waves|slate|zebra|kontakt|maschine|stems|music|audio|\bni\b|btc|bitcoin|crypto|ethereum|binance|coinbase|wallet)",
@@ -241,6 +253,77 @@ class Task:
     def work(self) -> Path:
         return self.dir / "work"
 
+    @property
+    def private(self) -> Path:
+        """Where Julius keeps what it must trust after the run: the task folder itself, unless tasks run as another user."""
+        return PRIVATE_HOME / self.id if RUN_AS else self.dir
+
+    @property
+    def git_dir(self) -> Path | None:
+        """Julius's own record of the baseline when tasks run as another user, so it never runs git on a repo that user
+        could have configured (core.fsmonitor and friends would run its code as you). None = the work folder's .git."""
+        return self.private / "git" if RUN_AS else None
+
+
+def configure(config: dict[str, Any] | None) -> None:
+    """Apply code.run_as from the config (called once by the coding session at start)."""
+    global RUN_AS, CODE_HOME
+    RUN_AS = str((config or {}).get("run_as") or "").strip()
+    if RUN_AS:
+        CODE_HOME = SHARED_ROOT
+
+
+def run_as_home(user: str | None = None) -> Path:
+    import pwd
+
+    return Path(pwd.getpwnam(user or RUN_AS).pw_dir)
+
+
+def run_as_problem(user: str | None = None) -> str:
+    """Why tasks can't run as the configured user yet ("" when they can). Checked before every task: a missing piece means
+    the task refuses to start, never that it quietly runs as you."""
+    import grp
+    import pwd
+
+    user = user or RUN_AS
+    try:
+        info = pwd.getpwnam(user)
+    except KeyError:
+        return f"the coding user {user} doesn't exist on this Mac yet"
+    if info.pw_uid == os.getuid() or info.pw_uid == 0:
+        return f"{user} is not a separate low-privilege user"
+    with contextlib.suppress(KeyError):
+        if user in grp.getgrnam("admin").gr_mem:
+            return f"{user} is an administrator; the coding user must be a standard user"
+    for script in (CODE_RUN, CODE_REAP):
+        try:
+            st = os.stat(script)
+        except OSError:
+            return f"{script} isn't installed"
+        if st.st_uid != 0 or st.st_mode & 0o022:
+            return f"{script} must be owned by root and writable by nobody else"
+    if not SHARED_ROOT.is_dir():
+        return f"the task folder {SHARED_ROOT} doesn't exist"
+    for script in (CODE_RUN, CODE_REAP):
+        ok = subprocess.run(
+            [SUDO, "-n", "-u", user, "-l", script], capture_output=True, timeout=10
+        ).returncode
+        if ok != 0:
+            return (
+                f"the sudo rule that lets Julius run {Path(script).name} as {user} isn't installed"
+            )
+    return ""
+
+
+def _share(path: Path) -> None:
+    """Give the shared group read and write on what Julius made in a task folder (Julius's own umask is 077)."""
+    for dirpath, _dirnames, filenames in os.walk(path):
+        os.chmod(dirpath, 0o2770)
+        for name in filenames:
+            f = Path(dirpath) / name
+            if not f.is_symlink():
+                os.chmod(f, 0o660 | (0o110 if f.stat().st_mode & 0o100 else 0))
+
 
 def _sha(path: Path) -> str:
     h = hashlib.sha256()
@@ -340,7 +423,9 @@ def copy_project(src: str, dst: Path) -> tuple[int, list[str]] | tuple[int, list
     return len(files), skipped
 
 
-def _git(work: Path, *args) -> subprocess.CompletedProcess:
+def _git(work: Path, *args, git_dir: Path | None = None) -> subprocess.CompletedProcess:
+    """git in a task's work folder. With `git_dir`, against Julius's private repo for that folder instead of its .git."""
+    where = ["--git-dir", str(git_dir), "--work-tree", str(work)] if git_dir else ["-C", str(work)]
     env = {
         "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
         "HOME": str(work.parent),
@@ -350,8 +435,11 @@ def _git(work: Path, *args) -> subprocess.CompletedProcess:
     return subprocess.run(
         [
             "git",
-            "-C",
-            str(work),
+            *where,
+            "-c",
+            "core.fsmonitor=false",
+            "-c",
+            "core.hooksPath=/dev/null",
             "-c",
             "user.name=Julius",
             "-c",
@@ -404,9 +492,23 @@ def prepare(task: Task) -> tuple[int, list[str]] | tuple[int, list[Any]]:
     task.work.mkdir(parents=True)
     count, skipped = copy_project(task.project, task.work)
     task.baseline = snapshot(task.work)
-    _git(task.work, "init", "-q")
+    _git(task.work, "init", "-q")  # the agent's own repo, so it can diff its work
     _git(task.work, "add", "-A")
     _git(task.work, "commit", "-q", "--allow-empty", "-m", "baseline")
+    if task.git_dir:  # and Julius's, out of the task user's reach
+        task.git_dir.parent.mkdir(parents=True, exist_ok=True)
+        _git(task.work, "init", "-q", git_dir=getattr(task, "git_dir", None))
+        _git(task.work, "add", "-A", git_dir=getattr(task, "git_dir", None))
+        _git(
+            task.work,
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "baseline",
+            git_dir=getattr(task, "git_dir", None),
+        )
+        _share(task.dir)
     save(task)
     return count, skipped
 
@@ -466,6 +568,12 @@ def build_command(
     cfg = {**DEFAULT_CONFIG, **(config or {})}
     profile = task.dir / "sandbox.sb"
     profile.write_text(seatbelt_profile(task, proxy_port=proxy.port if proxy else None))
+    path = f"{Path(sys.executable).parent}:/usr/bin:/bin:/usr/sbin:/sbin"
+    if RUN_AS:  # that user can't read your home, so it brings its own claude and tools
+        home = run_as_home()
+        claude = str(cfg.get("run_as_claude") or home / ".local" / "bin" / "claude")
+        path = f"{home / '.local' / 'bin'}:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        os.chmod(profile, 0o640)
     argv = [
         claude,
         "--bare",
@@ -496,7 +604,7 @@ def build_command(
     if sandbox:
         argv = ["/usr/bin/sandbox-exec", "-f", str(profile)] + argv
     env = {
-        "PATH": f"{Path(sys.executable).parent}:/usr/bin:/bin:/usr/sbin:/sbin",
+        "PATH": path,
         "HOME": str(task.dir / "home"),
         "TMPDIR": str(task.dir / "tmp"),
         "JULIUS_CODE_TASK": task.id,  # every process the agent starts carries it: _reap finds the ones left behind
@@ -514,6 +622,20 @@ def build_command(
     return argv, env, task.work
 
 
+def launch(
+    task: Task, argv: list[str], env: dict[str, str]
+) -> tuple[list[str], dict[str, str], str | None]:
+    """(argv, env, stdin text) that actually start the run. As another user: sudo runs the root-owned code-run wrapper
+    with the task id only; the command and its environment, API key included, go on stdin (argv shows in `ps`, and
+    sudo would drop the environment). code-run refuses anything not under this task's own sandbox profile."""
+    if not RUN_AS:
+        return argv, env, None
+    if argv[:3] != ["/usr/bin/sandbox-exec", "-f", str(task.dir / "sandbox.sb")]:
+        raise CodeProblem("unsafe", "Tasks that run as the coding user must run in the sandbox.")
+    spec = json.dumps({"argv": argv, "env": env})
+    return [SUDO, "-n", "-u", RUN_AS, CODE_RUN, task.id], {"PATH": "/usr/bin:/bin"}, spec
+
+
 # ---- results ----
 def changes(task: Task) -> dict[str, list[str] | list[Any | str]]:
     """{'added': [...], 'modified': [...], 'deleted': [...]} comparing the work folder with the baseline."""
@@ -529,9 +651,17 @@ def changes(task: Task) -> dict[str, list[str] | list[Any | str]]:
 def diff_stat(task: Task) -> tuple[int, int]:
     """(insertions, deletions) of the work folder against the baseline commit; new files count when staged."""
     try:
-        _git(task.work, "add", "-A")
+        _git(task.work, "add", "-A", git_dir=getattr(task, "git_dir", None))
         out = _git(
-            task.work, "diff", "--cached", "--numstat", "HEAD", "--", ".", *DIFF_EXCLUDE
+            task.work,
+            "diff",
+            "--cached",
+            "--numstat",
+            "HEAD",
+            "--",
+            ".",
+            *DIFF_EXCLUDE,
+            git_dir=getattr(task, "git_dir", None),
         ).stdout
     except subprocess.CalledProcessError:
         return 0, 0
@@ -546,9 +676,18 @@ def diff_stat(task: Task) -> tuple[int, int]:
 def diff_lines(task: Task, limit: int = 160) -> list[str]:
     """The unified diff of the work folder against the baseline (new files included; caches, compiled and binary files left out), for the panel's code card. [] when git cannot say."""
     try:
-        _git(task.work, "add", "-A")
+        _git(task.work, "add", "-A", git_dir=getattr(task, "git_dir", None))
         out = _git(
-            task.work, "diff", "--cached", "--no-color", "-U2", "HEAD", "--", ".", *DIFF_EXCLUDE
+            task.work,
+            "diff",
+            "--cached",
+            "--no-color",
+            "-U2",
+            "HEAD",
+            "--",
+            ".",
+            *DIFF_EXCLUDE,
+            git_dir=getattr(task, "git_dir", None),
         ).stdout
     except subprocess.CalledProcessError:
         return []
@@ -588,8 +727,15 @@ def merge_plan(task: Task, key_values: tuple[str, ...] = ()) -> dict[str, list[A
     real = Path(task.project)
     apply, conflicts, blocked, secrets = [], [], [], []
     values = secrets_scan.known_values(key_values)
+    work = task.work.resolve()
     for rel in c["added"] + c["modified"]:
-        if not safe_name(rel) or (task.work / rel).stat().st_size > MAX_MERGE_BYTES:
+        src = task.work / rel
+        if (
+            not safe_name(rel)
+            or src.is_symlink()
+            or not src.resolve().is_relative_to(work)  # a folder on the way swapped for a link
+            or src.stat().st_size > MAX_MERGE_BYTES
+        ):
             blocked.append(rel)
             continue
         kinds = secrets_scan.scan_file(task.work / rel, values)
@@ -622,7 +768,7 @@ def merge(task: Task, config: dict[str, str] | None = None) -> dict[str, float |
             f"I won't merge: {len(plan['secrets'])} file(s) contain what looks like a key: {listed}. "
             "Nothing was copied. Remove the key from the task's copy, or discard the task.",
         )
-    backup = task.dir / "backup"
+    backup = task.private / "backup"
     done = {"added": [], "modified": []}
     for rel in plan["apply"]:
         target = Path(task.project) / rel
@@ -651,8 +797,8 @@ def undo_merge(task: Task) -> tuple[int, int]:
     real = Path(task.project)
     restored = removed = 0
     for rel in done.get("modified", []):
-        if (task.dir / "backup" / rel).is_file():
-            shutil.copy2(task.dir / "backup" / rel, real / rel)
+        if (task.private / "backup" / rel).is_file():
+            shutil.copy2(task.private / "backup" / rel, real / rel)
             restored += 1
     for rel in done.get("added", []):
         p = real / rel
@@ -670,6 +816,12 @@ def discard(task: Task) -> bool:
     d = task.dir.resolve()
     if d.parent != CODE_HOME.resolve():
         raise CodeProblem("unsafe", "Refusing to remove a folder outside the coding task area.")
+    if RUN_AS:
+        _reap(
+            task
+        )  # nothing of the task user's left running, and its files opened up so they can be removed
+        if task.private.resolve().parent == PRIVATE_HOME.resolve():
+            shutil.rmtree(task.private, ignore_errors=True)
     shutil.rmtree(d)
     return True
 
@@ -688,13 +840,20 @@ DEFAULT_CONFIG = {
 
 def save(task: Task) -> None:
     task.dir.mkdir(parents=True, exist_ok=True)
-    tmp = task.dir / "task.json.tmp"
+    task.private.mkdir(parents=True, exist_ok=True)
+    tmp = task.private / "task.json.tmp"
     tmp.write_text(json.dumps(asdict(task), indent=1))
-    os.replace(tmp, task.dir / "task.json")
+    os.replace(tmp, task.private / "task.json")
+
+
+def _records() -> Path:
+    return PRIVATE_HOME if RUN_AS else CODE_HOME
 
 
 def load(task_id: str) -> Task:
-    path = CODE_HOME / task_id / "task.json"
+    if not re.fullmatch(r"c[0-9a-f]{8}", str(task_id)):
+        raise CodeProblem("no_task", "I don't have a coding task with that id.")
+    path = _records() / task_id / "task.json"
     if not path.is_file():
         raise CodeProblem("no_task", "I don't have a coding task with that id.")
     return Task(**json.loads(path.read_text()))
@@ -702,7 +861,7 @@ def load(task_id: str) -> Task:
 
 def all_tasks() -> list[Task | Any]:
     out = []
-    for p in sorted(CODE_HOME.glob("c*/task.json")) if CODE_HOME.is_dir() else []:
+    for p in sorted(_records().glob("c*/task.json")) if _records().is_dir() else []:
         try:
             out.append(Task(**json.loads(p.read_text())))
         except (ValueError, TypeError):
@@ -873,7 +1032,19 @@ class CostMeter:
 def _reap(task: Task) -> list[int]:
     """Kill what the agent left running: a child that called setsid has left the task's process group (so killpg misses
     it) and keeps the output pipe open, so the task never ends. Found by working directory inside the task folder, or by
-    the JULIUS_CODE_TASK marker in its environment (both only for this user's processes). Returns the pids killed."""
+    the JULIUS_CODE_TASK marker in its environment (both only for this user's processes). Returns the pids killed.
+    As another user, the code-reap wrapper does it in that user's name, and ends EVERY process of that user (only one task
+    runs at a time and nothing else runs as it, so a process that shed both its folder and its marker can't survive)."""
+    if RUN_AS:
+        out = subprocess.run(
+            [SUDO, "-n", "-u", RUN_AS, CODE_REAP, task.id, "--all"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        ).stdout
+        with contextlib.suppress(ValueError):
+            return sorted(int(x) for x in json.loads(out or "{}").get("killed", []))
+        return []
     me, uid, root = os.getpid(), os.getuid(), str(task.dir.resolve())
     pids = set()
     with contextlib.suppress(Exception):
@@ -916,6 +1087,11 @@ def _kill(run: Run, hard: bool = False) -> None:
     proc = run.proc
     if proc is None or proc.poll() is not None:
         _reap(run.task)
+        return
+    if RUN_AS:  # the process is sudo's, which you can't signal: the task user's wrapper ends the task's processes
+        _reap(run.task)
+        with contextlib.suppress(subprocess.TimeoutExpired):
+            proc.wait(timeout=5)
         return
     for sig in (signal.SIGKILL,) if hard else (signal.SIGTERM, signal.SIGKILL):
         try:
@@ -961,6 +1137,13 @@ def start(
         )
     if task.status != "staged":
         raise CodeProblem("not_staged", "That coding task has already been started.")
+    if RUN_AS:
+        problem = run_as_problem()
+        if problem:
+            raise CodeProblem(
+                "run_as",
+                f"I won't start the coding task: {problem}. It never runs as you instead. Finish the setup, or clear code.run_as.",
+            )
     with _LOCK:
         if any(not r.done.is_set() for r in _RUNNING.values()):
             raise CodeProblem(
@@ -1003,25 +1186,29 @@ def _execute(
         from julius.agents import egress_proxy
 
         proxy = egress_proxy.EgressProxy(
-            log_path=task.dir / "egress.log"
+            log_path=task.private / "egress.log"
         ).start()  # Anthropic API only; see julius_egress_proxy.py
         argv, env, cwd = build_command(
             task, api_key, claude=claude, config=cfg, sandbox=sandbox, proxy=proxy
         )
+        argv, env, spec = launch(task, argv, env)
         with (
-            open(task.dir / "claude.err", "wb") as err,
-            open(task.dir / "transcript.jsonl", "w") as transcript,
+            open(task.private / "claude.err", "wb") as err,
+            open(task.private / "transcript.jsonl", "w") as transcript,
         ):
             run.proc = subprocess.Popen(
                 argv,
-                cwd=cwd,
+                cwd=cwd if spec is None else "/",
                 env=env,
-                stdin=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL if spec is None else subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=err,
                 text=True,
                 start_new_session=True,
             )
+            if spec is not None:
+                run.proc.stdin.write(spec)
+                run.proc.stdin.close()
             if (
                 run.cancelled
             ):  # cancel() arrived before the process existed: it had nothing to kill then
