@@ -275,7 +275,9 @@ def case_cap_hit(e):
         return fail(f"cap was {task.cap_usd}, not 0.1")
     if task.status != "capped":
         return fail(f"status {task.status} at ${task.cost_usd}")
-    if task.cost_usd > 0.1 * 1.25 + 0.02:
+    if (
+        task.cost_usd > 0.1 * 1.05
+    ):  # stops within a few chunks of the cap (2026-11-26: $0.101 three times)
         return fail(f"overshot the cap: ${task.cost_usd}")
     if e.ca.running():
         return fail("a process is still running")

@@ -476,6 +476,7 @@ def build_command(
         "--output-format",
         "stream-json",
         "--verbose",
+        "--include-partial-messages",  # running output-token counts (thinking included), so the cost cap can act mid-task
         "--permission-mode",
         "dontAsk",
         "--max-budget-usd",
@@ -729,6 +730,146 @@ def running() -> list[Any | Run]:
         return [r for r in _RUNNING.values() if not r.done.is_set()]
 
 
+# USD per million tokens (Claude Opus 5.5: $4 in, $20 out, cache writes $5 for 5 minutes or $8 for 1 hour, cache reads $0.20).
+# Unknown models are priced as Opus 5.5, the most a task here can cost per token.
+CODE_RATES = {
+    "claude-opus-5-5": {"in": 4.0, "out": 20.0, "write_5m": 5.0, "write_1h": 8.0, "read": 0.20},
+}
+
+
+def message_cost(usage: dict[str, Any], model: str = MODEL) -> float:
+    """USD for one message's token usage (input, output, cache writes by lifetime, cache reads)."""
+    r = CODE_RATES.get(model) or CODE_RATES["claude-opus-5-5"]
+    n = lambda k: float(usage.get(k) or 0)  # noqa: E731
+    split = usage.get("cache_creation") or {}
+    w1h = float(split.get("ephemeral_1h_input_tokens") or 0)
+    w5m = (
+        float(split.get("ephemeral_5m_input_tokens") or 0)
+        if split
+        else n("cache_creation_input_tokens") - w1h
+    )
+    return (
+        n("input_tokens") * r["in"]
+        + n("output_tokens") * r["out"]
+        + w5m * r["write_5m"]
+        + w1h * r["write_1h"]
+        + n("cache_read_input_tokens") * r["read"]
+    ) / 1_000_000
+
+
+# Estimating a message while it is written. The CLI streams text and thinking chunks but gives the output token count
+# only in message_delta at the END of each message, and one Opus message can cost most of a $0.10 cap. Measured on
+# 2026-11-26: text ran about 2.75 characters a token; thinking chunks carry no text, and 1,602 thinking tokens took 16 s.
+CHARS_PER_TOKEN = (
+    2.5  # a little under the measured 2.75, so the estimate errs toward stopping early
+)
+THINKING_TOKENS_PER_S = 100.0
+
+
+class CostMeter:
+    """The task's running cost from what the CLI streams (it runs with --include-partial-messages).
+
+    Each message is priced once, from its largest usage so far: message_start brings the input and cache tokens,
+    message_delta (at the end of the message) the final output tokens, thinking included. While a message is still being
+    written its output is estimated from the text chunks and the time spent in thinking blocks, and the real count
+    replaces the estimate when it arrives. The whole `assistant` events report usage as the message STARTS (a handful of
+    output tokens), so on their own they undercount badly: on 2026-11-26 they showed $0.019 of a $0.149 task."""
+
+    def __init__(self, clock=time.monotonic) -> None:
+        self.clock = clock
+        self.usage: dict[str, dict[str, Any]] = {}
+        self.model: dict[str, str] = {}
+        self.current: str | None = None
+        self.open_chars = 0  # text in the message being written
+        self.open_thinking_s = 0.0
+        self.thinking_since: float | None = None
+        self.finished: set[str] = set()
+        self.wants_another_turn = (
+            False  # the last message ended in a tool call, so the CLI will send another request
+        )
+
+    def _merge(self, key: str, usage: dict[str, Any], model: str | None = None) -> None:
+        u = self.usage.setdefault(key, {})
+        for k, v in usage.items():
+            if isinstance(v, (int, float)):
+                u[k] = max(u.get(k, 0), v)
+            elif k == "cache_creation" and isinstance(v, dict):
+                c = u.setdefault("cache_creation", {})
+                for ck, cv in v.items():
+                    if isinstance(cv, (int, float)):
+                        c[ck] = max(c.get(ck, 0), cv)
+        if model:
+            self.model[key] = model
+
+    def _close_thinking(self) -> None:
+        if self.thinking_since is not None:
+            self.open_thinking_s += self.clock() - self.thinking_since
+            self.thinking_since = None
+
+    def add(self, event: dict[str, Any]) -> None:
+        if not isinstance(event, dict):
+            return
+        if event.get("type") == "stream_event" and isinstance(event.get("event"), dict):
+            ev = event["event"]
+            kind = ev.get("type")
+            if kind == "message_start" and isinstance(ev.get("message"), dict):
+                m = ev["message"]
+                self.wants_another_turn = False
+                self.current = str(m.get("id") or f"m{len(self.usage)}")
+                self.open_chars, self.open_thinking_s, self.thinking_since = 0, 0.0, None
+                self._merge(self.current, m.get("usage") or {}, m.get("model"))
+            elif kind == "content_block_start" and isinstance(ev.get("content_block"), dict):
+                self._close_thinking()
+                if ev["content_block"].get("type") in ("thinking", "redacted_thinking"):
+                    self.thinking_since = self.clock()
+            elif kind == "content_block_delta" and isinstance(ev.get("delta"), dict):
+                d = ev["delta"]
+                self.open_chars += len(str(d.get("text") or d.get("partial_json") or ""))
+            elif kind == "content_block_stop":
+                self._close_thinking()
+            elif kind == "message_delta" and isinstance(ev.get("usage"), dict):
+                key = self.current or f"m{len(self.usage)}"
+                self._merge(key, ev["usage"])
+                self.finished.add(key)
+                self.wants_another_turn = (ev.get("delta") or {}).get("stop_reason") == "tool_use"
+            elif kind == "message_stop" and self.current:
+                self._close_thinking()
+                self.finished.add(self.current)
+            return
+        msg = event.get("message")
+        if (
+            event.get("type") == "assistant"
+            and isinstance(msg, dict)
+            and isinstance(msg.get("usage"), dict)
+        ):
+            self._merge(str(msg.get("id") or f"m{len(self.usage)}"), msg["usage"], msg.get("model"))
+
+    def _estimated_output(self) -> int:
+        thinking_s = self.open_thinking_s
+        if self.thinking_since is not None:
+            thinking_s += self.clock() - self.thinking_since
+        return int(self.open_chars / CHARS_PER_TOKEN + thinking_s * THINKING_TOKENS_PER_S)
+
+    @property
+    def next_turn_usd(self) -> float:
+        """What the next request's input will cost at least: the last message's input again (the context only grows).
+        It is billed when the request is SENT, before any of its output streams back, so Julius stops between turns
+        when it would cross the cap. 0 unless the last message ended in a tool call (another request coming)."""
+        if not (self.wants_another_turn and self.current in self.finished):
+            return 0.0
+        u = {k: v for k, v in self.usage.get(self.current, {}).items() if k != "output_tokens"}
+        return message_cost(u, self.model.get(self.current) or MODEL)
+
+    @property
+    def usd(self) -> float:
+        total = 0.0
+        for key, u in self.usage.items():
+            if key == self.current and key not in self.finished:
+                u = {**u, "output_tokens": max(u.get("output_tokens", 0), self._estimated_output())}
+            total += message_cost(u, self.model.get(key) or MODEL)
+        return round(total, 6)
+
+
 def _reap(task: Task) -> list[int]:
     """Kill what the agent left running: a child that called setsid has left the task's process group (so killpg misses
     it) and keeps the output pipe open, so the task never ends. Found by working directory inside the task folder, or by
@@ -769,12 +910,14 @@ def _reap(task: Task) -> list[int]:
     return sorted(pids)
 
 
-def _kill(run: Run) -> None:
+def _kill(run: Run, hard: bool = False) -> None:
+    """Stop the task's process group: SIGTERM with 3 s grace, then SIGKILL. `hard` skips the grace. The budget stop
+    uses it, because the CLI ignores SIGTERM long enough to keep generating (2026-11-26: $0.012 more on a $0.10 cap)."""
     proc = run.proc
     if proc is None or proc.poll() is not None:
         _reap(run.task)
         return
-    for sig in (signal.SIGTERM, signal.SIGKILL):
+    for sig in (signal.SIGKILL,) if hard else (signal.SIGTERM, signal.SIGKILL):
         try:
             os.killpg(proc.pid, sig)
         except (ProcessLookupError, PermissionError):
@@ -854,6 +997,7 @@ def _execute(
     on_done: Any,
 ) -> None:
     task, result, cost, rc, proxy = run.task, {}, 0.0, None, None
+    meter = CostMeter()
     try:
         count, _ = prepare(task) if not task.baseline else (0, [])
         from julius.agents import egress_proxy
@@ -906,12 +1050,18 @@ def _execute(
                     continue
                 if not isinstance(event, dict):
                     continue
+                meter.add(event)  # each streamed message priced from its token usage, as it arrives
                 seen = event.get("total_cost_usd", event.get("cost_usd"))
                 if isinstance(seen, (int, float)):
                     cost = max(cost, float(seen))
-                    if cost > task.cap_usd * 1.25 and not run.over_budget:
-                        run.over_budget = True
-                        _kill(run)  # the CLI's own limit failed to stop it
+                cost = max(cost, meter.usd)
+                # at the cap, or between turns when the next request's input alone would cross it
+                at_cap = cost >= task.cap_usd or cost + meter.next_turn_usd >= task.cap_usd
+                if at_cap and not run.over_budget and event.get("type") != "result":
+                    run.over_budget = True
+                    _kill(
+                        run, hard=True
+                    )  # now, not at the CLI's own total, which comes only at the end
                 if event.get("type") == "result":
                     result = event
             rc = run.proc.wait()
