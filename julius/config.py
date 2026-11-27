@@ -89,6 +89,11 @@ DEFAULTS = {
 }
 
 
+DOTENV_LOADED: set[str] = (
+    set()
+)  # names this process took from .env (julius/keys.py prefers the Keychain over these)
+
+
 def load_dotenv(path: Path | None = None) -> bool:
     """Load KEY=VALUE lines from .env into os.environ without overriding existing variables."""
     path = Path(path or os.environ.get("JULIUS_ENV_FILE") or ROOT / ".env")
@@ -102,6 +107,7 @@ def load_dotenv(path: Path | None = None) -> bool:
         key, value = key.strip(), value.strip().strip("'\"")
         if key and value and key not in os.environ:
             os.environ[key] = value
+            DOTENV_LOADED.add(key)
     return True
 
 
@@ -192,8 +198,9 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
 
 
 def api_key() -> str | None:
-    load_dotenv()
-    return os.environ.get("ANTHROPIC_API_KEY") or None
+    from julius import keys
+
+    return keys.get("ANTHROPIC_API_KEY")
 
 
 def describe_key() -> str:

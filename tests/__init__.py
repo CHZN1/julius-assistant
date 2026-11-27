@@ -25,6 +25,7 @@ ISOLATED = {
     "JULIUS_CONVERSATIONS_DB": os.path.join(ROOT, "conversations.sqlite3"),
     "JULIUS_COSTS_FILE": os.path.join(ROOT, "memory", "costs.jsonl"),
     "JULIUS_LOCAL_CONFIG": os.path.join(ROOT, "no-local-config.toml"),
+    "JULIUS_NO_KEYCHAIN": "1",  # never read the real Keychain (julius/keys.py)
 }
 os.environ.update(
     ISOLATED

@@ -79,6 +79,7 @@ Every cost-ledger row records which provider and model answered (your own hardwa
    ```bash
    cp .env.example .env && open -e .env
    ```
+   Or keep it in the macOS Keychain instead, where Julius looks first: `scripts/jkey set ANTHROPIC_API_KEY` asks for the key at a hidden prompt, so it never appears in a command or your shell history. The same works for `SERPAPI_KEY` and any provider key a tier names.
    Set a monthly spend limit in the Anthropic console too. Julius also has its own daily cap (`[spend] daily_cap_usd` in `julius.toml`, $5 by default).
 4. Download the models once: the wake-word features, Whisper small.en and the voice, about 3 GB. Without this step, the first start waits on downloads.
    ```bash

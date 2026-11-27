@@ -254,9 +254,10 @@ def build_provider(
 
         return AnthropicProvider(tm.model, anthropic_client)
     if tm.adapter == "openai_compat":
+        from julius import keys
         from julius.brain.providers.openai_compat import OpenAICompatProvider
 
-        key = os.environ.get(tm.api_key_env) if tm.api_key_env else None
+        key = keys.get(tm.api_key_env) if tm.api_key_env else None
         if tm.api_key_env and not key:
             raise ProviderAuthError(f"{tm.api_key_env} is not set")
         return OpenAICompatProvider(

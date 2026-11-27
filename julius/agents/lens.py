@@ -14,7 +14,6 @@ handed to the identify step as evidence.
 """
 
 import io
-import os
 import re
 from typing import Any
 from urllib.parse import urlparse
@@ -56,7 +55,9 @@ MAX_OVERVIEW = 1200
 
 
 def key() -> str:
-    return os.environ.get("SERPAPI_KEY", "").strip()
+    from julius import keys
+
+    return keys.get("SERPAPI_KEY") or ""
 
 
 def available() -> bool:

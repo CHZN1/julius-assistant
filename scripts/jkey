@@ -1,0 +1,29 @@
+#!/bin/bash
+# jkey: keep API keys in the macOS Keychain instead of shell files and history.
+#   jkey NAME          print the key, for use as "$(jkey NAME)"
+#   jkey set NAME      store or replace it: macOS asks for the value at a hidden prompt, so it is never on a command line
+#   jkey list          the names stored (never the values)
+#   jkey delete NAME   remove one (asks first)
+# Items are generic passwords in your login keychain, service "julius:NAME". Julius reads them the same way (julius/keys.py).
+set -euo pipefail
+svc() { printf 'julius:%s' "$1"; }
+valid() { [[ "${1:-}" =~ ^[A-Z][A-Z0-9_]{1,63}$ ]] || { echo "jkey: a name looks like ODDS_API_KEY" >&2; exit 2; }; }
+case "${1:-}" in
+  set)
+    valid "${2:-}"
+    security add-generic-password -U -a "$USER" -s "$(svc "$2")" -l "Julius: $2" -w
+    echo "stored $2 in the login keychain" ;;
+  list)
+    security dump-keychain 2>/dev/null | sed -n 's/.*"svce"<blob>="julius:\([A-Z0-9_]*\)".*/\1/p' | sort -u ;;
+  delete)
+    valid "${2:-}"
+    read -r -p "Delete $2 from the Keychain? [y/N] " answer
+    if [[ "$answer" == [yY]* ]]; then security delete-generic-password -a "$USER" -s "$(svc "$2")" >/dev/null && echo "deleted $2"; fi ;;
+  ""|-h|--help)
+    sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *)
+    valid "$1"
+    if ! security find-generic-password -a "$USER" -s "$(svc "$1")" -w 2>/dev/null; then
+      echo "jkey: no $1 in the Keychain (store it with: jkey set $1)" >&2; exit 1
+    fi ;;
+esac
