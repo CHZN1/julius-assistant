@@ -26,6 +26,9 @@ class Isolation(unittest.TestCase):
     def test_state_memory_conversations_costs_and_local_config_are_throwaway(self):
         root = Path(tests.ROOT)
         for key in tests.ISOLATED:
+            if key == "JULIUS_NO_KEYCHAIN":  # a switch, not a path: the tests never read the real Keychain
+                self.assertEqual(os.environ[key], "1")
+                continue
             self.assertTrue(Path(os.environ[key]).is_relative_to(root), key)
         self.assertTrue(state.state_dir().is_relative_to(root))
         self.assertTrue(Path(jm.MEM).is_relative_to(root))
