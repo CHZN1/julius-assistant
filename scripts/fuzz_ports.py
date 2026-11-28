@@ -177,7 +177,7 @@ def panel_seeds(t):
 def mutate_json(rng, body):
     try:
         obj = json.loads(body)
-    except ValueError:
+    except (ValueError, RecursionError):  # nested past the limit: keep it as it is
         return body
     if not isinstance(obj, dict):
         obj = {"value": obj}
