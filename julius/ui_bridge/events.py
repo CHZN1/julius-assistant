@@ -277,7 +277,9 @@ class _Client(threading.Thread):
                 if not chunk:
                     return
                 req += chunk
-            lines = req.decode("latin-1").split("\r\n")
+            lines = (
+                req.split(b"\r\n\r\n", 1)[0].decode("latin-1").split("\r\n")
+            )  # headers end at the blank line
             first = lines[0].split(" ")
             pairs = [
                 (k.strip().lower(), v.strip())

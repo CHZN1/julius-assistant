@@ -270,3 +270,26 @@ class FuzzFindings(unittest.TestCase):
         ):
             got = self.handshake(*extra)
             self.assertTrue(got.startswith(b"HTTP/1.1 400"), (extra, got[:60]))
+
+
+class FeedHeaderEnd(unittest.TestCase):
+    """Found by the 24-hour fuzz: header lines after the blank line were read as part of the handshake."""
+
+    def test_bytes_after_the_blank_line_are_not_headers(self):
+        token = "t" * 32
+        hub = ev.EventHub()
+        srv = ev.EventServer(hub, port=0, token=token).start()
+        try:
+            s = socket.create_connection(("127.0.0.1", srv.port), timeout=5)
+            s.sendall(
+                (
+                    f"GET / HTTP/1.1\r\nHost: 127.0.0.1:{srv.port}\r\nUpgrade: websocket\r\n"
+                    "Connection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n"
+                    f"Authorization: Bearer {token}\r\n\r\n"
+                ).encode()
+            )
+            got = s.recv(64)
+            s.close()
+            self.assertTrue(got.startswith(b"HTTP/1.1 401"), got)
+        finally:
+            srv.stop()

@@ -24,6 +24,7 @@ import base64
 import json
 import os
 import random
+import re
 import socket
 import subprocess
 import sys
@@ -321,9 +322,9 @@ def status_of(resp):
 
 
 def headers_of(data):
-    head = [
-        x.rstrip(b"\r") for x in data.partition(b"\r\n\r\n")[0].split(b"\n")
-    ]  # as http.client reads it
+    head = re.split(
+        rb"\r\n|\n|\r", data.partition(b"\r\n\r\n")[0]
+    )  # as the servers' parsers read it
     out = {}
     for line in head[1:]:
         k, _, v = line.partition(b":")
@@ -389,14 +390,16 @@ class Fuzzer:
                 self.found("hang", "feed", data)
             elif resp.startswith(b"HTTP/1.1 101"):
                 _, h = headers_of(data)
-                host = (h.get(b"host") or [b""])[0].split(b":")[0].lower()
+                hv = (h.get(b"host") or [b""])[0].strip().lower()
+                bracketed = hv.startswith(b"[") and b"]" in hv
+                host = hv[1 : hv.find(b"]")] if bracketed else hv.split(b":")[0]
                 origin = (h.get(b"origin") or [b""])[0]
                 auths = h.get(b"authorization") or [b""]
                 proto = b",".join(h.get(b"sec-websocket-protocol", []))
                 tok = self.t.token.encode()
                 authed = any(a[7:].strip() == tok for a in auths) or b"julius.token." + tok in proto
                 if (
-                    host not in (b"127.0.0.1", b"localhost")
+                    host not in (b"127.0.0.1", b"localhost", b"::1")
                     or not authed
                     or (origin and b"127.0.0.1" not in origin and b"localhost" not in origin)
                 ):
