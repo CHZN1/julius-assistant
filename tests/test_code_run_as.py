@@ -317,7 +317,11 @@ class EndToEnd(Base):
         ca.configure({"run_as": USER})
         ca.PRIVATE_HOME = self.home / "private"
         self.claude = ca.SHARED_ROOT / "_e2e_claude.sh"
-        mine = Path.home()
+        import pwd
+
+        mine = Path(
+            pwd.getpwuid(os.getuid()).pw_dir
+        )  # the real home: the suite points HOME at a temp folder
         self.claude.write_text(
             "#!/bin/sh\n"
             f"ls {mine} >/dev/null 2>&1 && h=READ || h=denied\n"
