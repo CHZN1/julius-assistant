@@ -15,6 +15,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from julius import platforms
 from julius.music import policy
 
 SR = 22050
@@ -100,10 +101,8 @@ def _decode_audio(p: Path, out: Path) -> None:
             "wav",
             str(out),
         ]
-    elif exe := shutil.which("afconvert") or (
-        "/usr/bin/afconvert" if Path("/usr/bin/afconvert").exists() else None
-    ):
-        cmd = [exe, "-f", "WAVE", "-d", f"LEI16@{SR}", "-c", "1", str(p), str(out)]
+    elif exe := platforms.current().audio.path():
+        cmd = platforms.current().audio.pcm(exe, str(p), str(out), "wav", 16, SR, channels=1)
     else:
         raise AudioProblem("I have no audio converter: install ffmpeg, or use macOS afconvert.")
     r = subprocess.run(

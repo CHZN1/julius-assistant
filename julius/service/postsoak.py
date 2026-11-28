@@ -17,6 +17,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from julius import platforms
 from julius.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
@@ -159,14 +160,11 @@ def plist_dict() -> dict[str, Any]:
 
 def main(argv: list[str]) -> Any:
     cmd = (argv[1:2] or ["run"])[0]
-    dom = f"gui/{os.getuid()}"
     if cmd == "schedule":
         LOG_DIR.mkdir(parents=True, exist_ok=True)
         PLIST.write_bytes(plistlib.dumps(plist_dict()))
-        subprocess.run(["launchctl", "bootout", f"{dom}/{LABEL}"], capture_output=True)
-        r = subprocess.run(
-            ["launchctl", "bootstrap", dom, str(PLIST)], capture_output=True, text=True
-        )
+        subprocess.run(platforms.current().services.unload(LABEL), capture_output=True)
+        r = subprocess.run(platforms.current().services.load(PLIST), capture_output=True, text=True)
         print(
             "scheduled for 2026-11-09 00:15"
             if r.returncode == 0
@@ -174,14 +172,14 @@ def main(argv: list[str]) -> Any:
         )
         return r.returncode
     if cmd == "unschedule":
-        subprocess.run(["launchctl", "bootout", f"{dom}/{LABEL}"], capture_output=True)
+        subprocess.run(platforms.current().services.unload(LABEL), capture_output=True)
         print(f"unloaded; {PLIST} left in place")
         return 0
     ok, msg = run(force="--force" in argv)
     print(msg)
     if ok:
         subprocess.run(
-            ["launchctl", "bootout", f"{dom}/{LABEL}"], capture_output=True
+            platforms.current().services.unload(LABEL), capture_output=True
         )  # one shot: unload itself (the plist file stays)
     return 0 if ok else 1
 

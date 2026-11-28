@@ -8,6 +8,7 @@ from typing import Any
 import numpy as np
 from numpy import ndarray
 
+from julius import platforms
 from julius.audio.cancellation import check_cancel
 from julius.paths import REPO_ROOT
 
@@ -64,7 +65,7 @@ class SpeechEngine:
             [
                 str(executable),
                 "-m",
-                "julius.audio.mlx_tts_worker" if mlx else "julius.audio.tts_worker",
+                platforms.current().speech.tts_worker(mlx),
             ],
             cwd=str(root),
             stdin=subprocess.PIPE,

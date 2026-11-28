@@ -12,7 +12,7 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from julius import config
+from julius import config, platforms
 from julius.music import policy
 
 FORMATS = {"wav": ".wav", "aiff": ".aiff", "mp3": ".mp3"}
@@ -79,8 +79,8 @@ def refuse_destination(dst: Path) -> str | None:
 def backend() -> str | None:
     if shutil.which("ffmpeg"):
         return "ffmpeg"
-    if shutil.which("afconvert"):
-        return "afconvert"
+    if platforms.current().audio.available():
+        return platforms.current().audio.name
     return None
 
 
@@ -126,10 +126,8 @@ def command(src: Path, dst: str, spec: Spec, which: str) -> list[str]:
         return cmd + [dst]
     if spec.fmt == "mp3":
         raise ConvertError("mp3 needs ffmpeg (or lame) installed.")
-    fileformat = "WAVE" if spec.fmt == "wav" else "AIFF"
-    order = "LE" if spec.fmt == "wav" else "BE"
-    data = f"{order}I{spec.depth}" + (f"@{spec.rate}" if spec.rate else "")
-    return ["afconvert", "-f", fileformat, "-d", data, str(src), dst]
+    audio = platforms.current().audio
+    return audio.pcm(audio.name, str(src), dst, spec.fmt, spec.depth, spec.rate)
 
 
 def run(src: Path, dst: str, spec_dict: dict, runner=subprocess.run) -> None:
@@ -141,7 +139,7 @@ def run(src: Path, dst: str, spec_dict: dict, runner=subprocess.run) -> None:
     if os.path.exists(dst) and os.path.getsize(dst) > 0:
         raise ConvertError("The output already exists; nothing is overwritten.")
     try:
-        if which == "afconvert" and spec.fmt == "mp3":
+        if which == platforms.current().audio.name and spec.fmt == "mp3":
             lame = shutil.which("lame")
             if not lame:
                 raise ConvertError("mp3 needs ffmpeg or lame installed.")

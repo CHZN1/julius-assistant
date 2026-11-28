@@ -11,6 +11,7 @@ from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import Mock
 
+from julius import platforms
 from julius.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
@@ -28,7 +29,7 @@ def build(
         return binary
     binary.parent.mkdir(parents=True, exist_ok=True)
     r = runner(
-        ["/usr/bin/clang", "-O2", str(source), "-framework", "Carbon", "-o", str(binary)],
+        platforms.current().helpers.compile(source, binary, ("Carbon",)),
         capture_output=True,
         text=True,
     )

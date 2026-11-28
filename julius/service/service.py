@@ -12,7 +12,6 @@ No API key is written into the plist: Julius reads ANTHROPIC_API_KEY from the re
 
 import contextlib
 import json
-import os
 import plistlib
 import subprocess
 import sys
@@ -21,7 +20,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from julius import state
+from julius import platforms, state
 from julius.paths import REPO_ROOT
 from julius.profile import CLOUD_DEFAULTS
 
@@ -59,7 +58,7 @@ def plist_dict(root: Path = ROOT, log_dir: str | None = None) -> dict[str, Any]:
 
 
 def domain() -> str:
-    return f"gui/{os.getuid()}"
+    return platforms.current().services.domain()
 
 
 def run(args: list[str], runner: Callable = subprocess.run) -> Any:
@@ -71,22 +70,22 @@ def on(runner: Callable = subprocess.run, plist_path: Path = PLIST) -> tuple[boo
     Path(d["StandardOutPath"]).parent.mkdir(parents=True, exist_ok=True)
     plist_path.parent.mkdir(parents=True, exist_ok=True)
     plist_path.write_bytes(plistlib.dumps(d))
-    run(["launchctl", "bootout", f"{domain()}/{LABEL}"], runner)  # reload cleanly if already loaded
-    run(["launchctl", "enable", f"{domain()}/{LABEL}"], runner)
-    r = run(["launchctl", "bootstrap", domain(), str(plist_path)], runner)
+    run(platforms.current().services.unload(LABEL), runner)  # reload cleanly if already loaded
+    run(platforms.current().services.enable(LABEL), runner)
+    r = run(platforms.current().services.load(plist_path), runner)
     return r.returncode == 0, (r.stderr or r.stdout).strip()
 
 
 def off(runner: Callable = subprocess.run, plist_path: Path = PLIST) -> Any:
-    run(["launchctl", "bootout", f"{domain()}/{LABEL}"], runner)
-    run(["launchctl", "disable", f"{domain()}/{LABEL}"], runner)
+    run(platforms.current().services.unload(LABEL), runner)
+    run(platforms.current().services.disable(LABEL), runner)
     if plist_path.exists():
         plist_path.unlink()
     return True, "stopped and removed from login"
 
 
 def status(runner: Callable = subprocess.run) -> dict[str, str | bool]:
-    r = run(["launchctl", "print", f"{domain()}/{LABEL}"], runner)
+    r = run(platforms.current().services.describe(LABEL), runner)
     if r.returncode != 0:
         return {"installed": PLIST.exists(), "loaded": False}
     out = {"installed": True, "loaded": True}
@@ -103,7 +102,7 @@ def status(runner: Callable = subprocess.run) -> dict[str, str | bool]:
 
 
 def wake(runner: Callable = subprocess.run) -> bool:
-    return run(["launchctl", "kill", "SIGUSR1", f"{domain()}/{LABEL}"], runner).returncode == 0
+    return run(platforms.current().services.signal(LABEL, "SIGUSR1"), runner).returncode == 0
 
 
 LOG = Path("~/Library/Logs/Julius/julius.jsonl").expanduser()
@@ -204,13 +203,13 @@ def doctor(
             }
         )
     )
-    run(["launchctl", "bootout", f"{domain()}/{label}"], runner)
-    run(["launchctl", "bootstrap", domain(), str(pl)], runner)
+    run(platforms.current().services.unload(label), runner)
+    run(platforms.current().services.load(pl), runner)
     for _ in range(20):
         sleep(0.5)
         if out_file.exists() and "ready" in out_file.read_text():
             break
-    run(["launchctl", "bootout", f"{domain()}/{label}"], runner)
+    run(platforms.current().services.unload(label), runner)
     verdict = (
         " ".join(out_file.read_text().split())
         if out_file.exists() and out_file.read_text().strip()
@@ -234,7 +233,7 @@ def _cmd_restart(_argv: list[str]) -> int:
     from julius.service import logscan
 
     logscan.mark_stderr()
-    run(["launchctl", "kickstart", "-k", f"{domain()}/{LABEL}"])
+    run(platforms.current().services.restart(LABEL))
     print("restarting")
     return 0
 
@@ -262,7 +261,7 @@ def _smoke_window(argv: list[str], err_path: Any) -> Any:
         size = err_path.stat().st_size if err_path.exists() else 0
         logscan.mark_stderr()
         start = datetime.datetime.now().strftime(stamp)
-        run(["launchctl", "kickstart", "-k", f"{domain()}/{LABEL}"])
+        run(platforms.current().services.restart(LABEL))
         time.sleep(2)
         return start, size
     import psutil

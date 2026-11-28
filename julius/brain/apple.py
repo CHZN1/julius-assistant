@@ -6,6 +6,7 @@ import uuid
 from typing import Any
 from unittest.mock import Mock
 
+from julius import platforms
 from julius.brain.planning import Planner, output
 from julius.paths import REPO_ROOT
 
@@ -26,12 +27,7 @@ class AppleProvider:
     def call(self, request: dict[str, str | float | int | None]) -> dict[str, bool | str]:
         try:
             process = self.runner(
-                [
-                    "/usr/bin/osascript",
-                    "-l",
-                    "JavaScript",
-                    str(REPO_ROOT / "native/apple/bridge.js"),
-                ],
+                platforms.current().automation.run_script(REPO_ROOT / "native/apple/bridge.js"),
                 input=json.dumps(request),
                 text=True,
                 capture_output=True,

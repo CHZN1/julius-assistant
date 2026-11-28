@@ -22,7 +22,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from julius import costs, identity, log
+from julius import costs, identity, log, platforms
 from julius.brain import providers
 from julius.paths import REPO_ROOT
 
@@ -179,10 +179,9 @@ def build(
         "Carbon",
         "Vision",
     )
-    cmd = ["/usr/bin/clang", "-O2", "-fobjc-arc", str(source)]
-    for f in frameworks:
-        cmd += ["-framework", f]
-    cmd += ["-sectcreate", "__TEXT", "__info_plist", str(plist), "-o", str(binary)]
+    cmd = platforms.current().helpers.compile(
+        source, binary, frameworks, objc=True, info_plist=plist
+    )
     r = runner(cmd, capture_output=True, text=True)
     if r.returncode != 0 or not binary.exists():
         raise VisionProblem("I couldn't set up the vision helper.")

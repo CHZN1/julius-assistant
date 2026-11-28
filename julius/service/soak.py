@@ -22,6 +22,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from julius import platforms
 from julius.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
@@ -38,7 +39,7 @@ def _domain() -> str:
 
 
 def service_state(runner: Callable = subprocess.run) -> Any:
-    r = runner(["launchctl", "print", f"{_domain()}/{SERVICE}"], capture_output=True, text=True)
+    r = runner(platforms.current().services.describe(SERVICE), capture_output=True, text=True)
     out = {"loaded": r.returncode == 0}
     for line in (r.stdout or "").splitlines():
         line = line.strip()
@@ -251,20 +252,20 @@ def install(runner: Callable = subprocess.run) -> Any:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     PLIST.parent.mkdir(parents=True, exist_ok=True)
     PLIST.write_bytes(plistlib.dumps(d))
-    runner(["launchctl", "bootout", f"{_domain()}/{LABEL}"], capture_output=True, text=True)
-    r = runner(["launchctl", "bootstrap", _domain(), str(PLIST)], capture_output=True, text=True)
+    runner(platforms.current().services.unload(LABEL), capture_output=True, text=True)
+    r = runner(platforms.current().services.load(PLIST), capture_output=True, text=True)
     return r.returncode == 0, (r.stderr or r.stdout).strip()
 
 
 def uninstall(runner: Callable = subprocess.run) -> Any:
-    runner(["launchctl", "bootout", f"{_domain()}/{LABEL}"], capture_output=True, text=True)
+    runner(platforms.current().services.unload(LABEL), capture_output=True, text=True)
     if PLIST.exists():
         PLIST.unlink()
     return True, "sampler stopped and removed"
 
 
 def status(runner: Callable = subprocess.run) -> Any:
-    r = runner(["launchctl", "print", f"{_domain()}/{LABEL}"], capture_output=True, text=True)
+    r = runner(platforms.current().services.describe(LABEL), capture_output=True, text=True)
     rows = load()
     return {
         "installed": PLIST.exists(),
