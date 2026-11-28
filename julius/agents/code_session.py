@@ -21,6 +21,7 @@ from julius.agents.file_agent import result
 from julius.agents.result import AgentResult
 from julius.brain import confirm
 from julius.costs import CostTracker
+from julius.money import find_cap
 
 YES = re.compile(
     r"^(?:yes|yeah|yep|yup|ok|okay|sure|go ahead|do it|confirm|confirmed|start it|merge it|apply it|please do)\b",
@@ -31,12 +32,8 @@ START = re.compile(
     r"^(?:please\s+)?(?:(?:ask|tell|have|get|let)\s+(?:the\s+)?(?:(?:coding|code)\s+agent|opus)\s+(?:to\s+)?|(?:can|could|would|will)\s+(?:the\s+)?(?:(?:coding|code)\s+agent|opus)\s+(?=(?:fix|add|write|build|refactor|implement|change|update|make|create|debug|clean|rename|remove|test)\b)|(?:start|run|begin)\s+(?:a\s+)?(?:coding|code)\s+task\s*(?:to|that|:)?\s*)(?P<goal>.+?)(?:\s+for\s+me)?[?.!]*$",
     re.I,
 )
-CAP = re.compile(
-    r"\b(?:with|up to|limit(?:ed)?(?: it)? to|budget of|spend(?: up to)?|capped at)\s+(?:a\s+)?\$?(?P<n>\d+(?:\.\d+)?)\s*(?:dollars?|bucks|usd)?(?:\s+(?:limit|cap|budget|max))?\b",
-    re.I,
-)
 IN_PROJECT = re.compile(
-    r"\s+(?:in|on|for|inside)\s+(?:the\s+|my\s+)?(?P<p>[\w .-]+?)(?:\s+(?:project|folder|repo|repository))?\s*$",
+    r"\s+(?:in|on|for|inside)\s+(?:the\s+|my\s+)?(?P<p>[\w .-]+?)(?:\s+(?:project|folder|repo|repository))?(?:,?\s+(?:please|thanks|thank you|for me))?\s*[?.!]*$",
     re.I,
 )
 FIX_IT = re.compile(
@@ -143,16 +140,20 @@ class CodeSession:
             else []
         )
 
-    def match_project(self, phrase: str) -> str:
-        key = _key(
-            re.sub(r"\s+(?:project|folder|repo|repository)$", "", phrase.strip(), flags=re.I)
-        )
+    def match_project(self, phrase: str) -> str | None:
+        """The folder a spoken name means: the exact name first, then one whose letters and digits match, then a close
+        fuzzy match. Two folders that fit equally well (demo-calc and demo_calc for "demo calc") mean ask."""
+        bare = re.sub(r"\s+(?:project|folder|repo|repository)$", "", phrase.strip(), flags=re.I)
+        key = _key(bare)
         if not key:
             return None
         names = self.projects()
+        literal = [n for n in names if n.casefold() == bare.casefold()]
+        if literal:
+            return literal[0]
         exact = [n for n in names if _key(n) == key]
         if exact:
-            return exact[0]
+            return exact[0] if len(exact) == 1 else None
         scored = sorted(
             ((difflib.SequenceMatcher(None, key, _key(n)).ratio(), n) for n in names), reverse=True
         )
@@ -320,12 +321,41 @@ class CodeSession:
         )
         return self.stage(goal, project, spoken="fix that error and add a test that proves the fix")
 
+    def named_in(self, text: str) -> str | None:
+        """A project named anywhere in a request ("fix the tests for demo calc"). A name must match as a whole, so
+        "julius" is not found inside "julius-runas-demo"; when several match, the longest wins."""
+        names, low = self.projects(), text.casefold()
+        hits = []
+        for n in names:
+            chunks = re.findall(r"[a-z0-9]+", n.casefold())
+            pattern = r"(?<![\w-])" + r"[\s_.-]*".join(map(re.escape, chunks)) + r"(?![\w-])"
+            if chunks and re.search(pattern, low):
+                hits.append(n)
+        if not hits:  # run-together spellings: "democalc" for demo_calc
+            k = _key(text)
+            hits = [n for n in names if _key(n) and _key(n) in k]
+        return max(hits, key=lambda n: len(_key(n))) if hits else None
+
     def _start_command(self, goal: str) -> dict[str, str | bool | dict[str, float | str]]:
         cap = None
-        c = CAP.search(goal)
+        c = find_cap(goal)
         if c:
-            cap = float(c.group("n"))
-            goal = (goal[: c.start()] + goal[c.end() :]).strip(" ,.")
+            if c.ambiguous:
+                n = c.number
+                return self._out(
+                    False,
+                    "clarification",
+                    f"Did you mean ${n:.2f} or {n:g} cents? Say the limit again with dollars or cents.",
+                )
+            if not c.value or c.value <= 0:
+                return self._out(
+                    False,
+                    "clarification",
+                    "A coding task needs a limit above zero. How much can it spend?",
+                )
+            cap = c.value
+            left = re.sub(r"(?:,?\s+and|,)\s*$", "", goal[: c.start].rstrip())
+            goal = " ".join((left + " " + goal[c.end :]).split()).strip(" ,.")
         project = None
         m = IN_PROJECT.search(goal)
         if m:
@@ -336,10 +366,7 @@ class CodeSession:
             else:
                 project = None
         if not project:
-            for name in self.projects():  # "fix the tests for demo calc"
-                if _key(name) and _key(name) in _key(goal):
-                    project = name
-                    break
+            project = self.named_in(goal)
         return self.stage(goal, project, cap=cap)
 
     def _confirm(self, kind: str, task_id: str) -> dict[str, Any]:

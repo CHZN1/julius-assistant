@@ -124,6 +124,56 @@ class StageTests(FlowBase):
         self.assertIn("$5.00", out["message"])
         self.assertIn("capped", out["message"])
 
+    def test_spoken_amounts_are_exact(self):
+        for said, shown in (
+            ("and limit it to 50 cents", "$0.50"),
+            ("with half a dollar", "$0.50"),
+            ("and spend a dollar fifty", "$1.50"),
+            ("for 2 bucks", "$2.00"),
+            ("limit it to $0.75", "$0.75"),
+        ):
+            out = self.s.handle(f"have the coding agent FIXIT make add work in demo {said}")
+            self.assertEqual(out["code"], "preview", said)
+            self.assertIn(f"at most {shown}", out["message"], said)
+            self.assertEqual(out["data"]["project"], "demo", said)
+            self.s.handle("cancel")
+
+    def test_an_amount_with_no_unit_asks_dollars_or_cents_and_stages_nothing(self):
+        out = self.s.handle("have the coding agent FIXIT make add work in demo, limit it to 50")
+        self.assertEqual(out["code"], "clarification")
+        self.assertIn("$50.00 or 50 cents", out["message"])
+        self.assertEqual(ca.all_tasks(), [])
+        self.assertIn(
+            "at most $0.50",
+            self.s.handle(
+                "have the coding agent FIXIT make add work in demo, limit it to 50 cents"
+            )["message"],
+        )
+
+    def test_a_hyphenated_project_name_wins_over_a_shorter_one_inside_it(self):
+        for n in ("julius", "julius-runas-demo"):
+            (self.dev / n).mkdir()
+            (self.dev / n / "calc.py").write_text("x = 1\n")
+        for said in (
+            "have the coding agent fix calc.py and limit it to 50 cents in julius-runas-demo",
+            "have the coding agent fix calc.py in julius-runas-demo, limit it to 50 cents",
+            "have the coding agent fix calc.py in julius-runas-demo please",
+            "have the coding agent fix the julius-runas-demo tests",
+            "have the coding agent fix the julius runas demo tests",
+        ):
+            out = self.s.handle(said)
+            self.assertEqual(out.get("data", {}).get("project"), "julius-runas-demo", said)
+            self.s.handle("cancel")
+        out = self.s.handle("have the coding agent fix the julius tests")
+        self.assertEqual(out.get("data", {}).get("project"), "julius")
+
+    def test_an_exact_folder_name_beats_a_loose_one(self):
+        for n in ("demo-calc", "demo_calc"):
+            (self.dev / n).mkdir()
+        self.assertEqual(self.s.match_project("demo-calc"), "demo-calc")
+        self.assertEqual(self.s.match_project("Demo_Calc"), "demo_calc")
+        self.assertIsNone(self.s.match_project("demo calc"))  # two folders fit equally: ask
+
     def test_an_unknown_or_missing_project_asks_which_one(self):
         out = self.s.handle("have the coding agent fix the failing tests")
         self.assertEqual(out["code"], "clarification")
