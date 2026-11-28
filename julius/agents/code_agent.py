@@ -779,13 +779,18 @@ def merge(task: Task, config: dict[str, str] | None = None) -> dict[str, float |
     for rel in plan["apply"]:
         target = Path(task.project) / rel
         if target.exists():
+            mode = target.stat().st_mode & 0o7777  # the project's file keeps its own permissions
             (backup / rel).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(target, backup / rel)
             done["modified"].append(rel)
         else:
+            mode = (
+                task.work / rel
+            ).stat().st_mode & 0o755 | 0o600  # never group- or world-writable
             done["added"].append(rel)
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(task.work / rel, target)
+        shutil.copyfile(task.work / rel, target)
+        os.chmod(target, mode)
     task.merged = {
         **done,
         "at": time.time(),

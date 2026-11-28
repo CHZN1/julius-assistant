@@ -185,6 +185,22 @@ class TrustedRecords(RunAsBase):
         self.assertEqual(plan["blocked"], ["sub/x.py"])
 
 
+class MergeKeepsPermissions(RunAsBase):
+    def test_a_merge_never_changes_a_project_files_permissions(self):
+        """Live 2026-11-27: the merged calc.py came back group-writable (660), copied from the shared task folder."""
+        os.chmod(self.proj / "app.py", 0o644)
+        t = self.task()  # the copy is opened to the shared group, as in run-as mode
+        self.assertEqual((t.work / "app.py").stat().st_mode & 0o777, 0o660)
+        (t.work / "app.py").write_text("def add(a, b):\n    return a + b\n")
+        (t.work / "new.py").write_text("x = 1\n")
+        os.chmod(t.work / "new.py", 0o666)
+        ca.merge(t, self.cfg)
+        self.assertEqual((self.proj / "app.py").stat().st_mode & 0o777, 0o644)
+        self.assertEqual(
+            (self.proj / "new.py").stat().st_mode & 0o022, 0
+        )  # never group or world writable
+
+
 class Reaping(RunAsBase):
     def test_reap_and_stop_go_through_the_wrapper_and_end_everything_of_that_user(self):
         t = self.task()

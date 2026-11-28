@@ -10,6 +10,7 @@ nothing else in ~/dev is read or written. Cases (each one real Opus run, capped)
 Headline `ok_pct` = share of cases passed; any safety failure also sets `safety_failures`. Usage: python evals/code_eval.py [--only bugfix,cap_hit] [--limit-usd 6]"""
 
 import argparse
+import contextlib
 import json
 import shutil
 import sys
@@ -38,11 +39,16 @@ class Env:
         self.dev = Path.home() / "dev" / (".julius_code_eval_" + self.scratch.name[-8:])
         self.dev.mkdir()
         self.real_home = ca.CODE_HOME
-        ca.CODE_HOME = self.real_home / (
-            "_eval_" + self.scratch.name[-8:]
-        )  # the REAL location: a path under ~/.julius once made every Edit fail live
-        ca.CODE_HOME.mkdir(parents=True, exist_ok=True)
-        self.home = ca.CODE_HOME
+        self.real_private = ca.PRIVATE_HOME
+        if ca.RUN_AS:  # as the coding user: tasks live where production keeps them (code-run accepts nothing else)
+            self.home = None
+            ca.PRIVATE_HOME = self.scratch / "private"
+        else:
+            ca.CODE_HOME = self.real_home / (
+                "_eval_" + self.scratch.name[-8:]
+            )  # the REAL location: a path under ~/.julius once made every Edit fail live
+            ca.CODE_HOME.mkdir(parents=True, exist_ok=True)
+            self.home = ca.CODE_HOME
         self.tracker = CostTracker(self.scratch / "costs.jsonl", 100.0)
         self.config = {
             "projects_root": str(self.dev),
@@ -124,17 +130,24 @@ class Env:
 
     def folders(self):
         """The three scratch places one case uses: the system temp dir, ~/dev, and its corner of the coding home."""
-        return [self.scratch, self.dev, self.home]
+        return [f for f in (self.scratch, self.dev, self.home) if f is not None]
 
     def close(self):
-        """Remove the three scratch folders, each only if it is one this eval made (checked by place and name)."""
+        """Remove the three scratch folders, each only if it is one this eval made (checked by place and name). As the
+        coding user, this eval's own tasks are discarded from the shared folder instead (found by their project)."""
+        if self.ca.RUN_AS:
+            for t in self.ca.all_tasks():
+                if Path(t.project).is_relative_to(self.dev.resolve()):
+                    with contextlib.suppress(Exception):
+                        self.ca.discard(t)
+            self.ca.PRIVATE_HOME = self.real_private
         if self.dev.parent == Path.home() / "dev" and self.dev.name.startswith(
             ".julius_code_eval_"
         ):
             shutil.rmtree(self.dev, ignore_errors=True)
         if self.scratch.name.startswith("julius_code_eval_"):
             shutil.rmtree(self.scratch, ignore_errors=True)
-        if self.home.parent == self.real_home and self.home.name.startswith("_eval_"):
+        if self.home and self.home.parent == self.real_home and self.home.name.startswith("_eval_"):
             shutil.rmtree(self.home, ignore_errors=True)
 
 
@@ -310,6 +323,9 @@ def main():
     ap.add_argument("--only", default="")
     ap.add_argument("--limit-usd", type=float, default=6.0)
     ap.add_argument("--keep", action="store_true", help="keep the scratch folders for inspection")
+    ap.add_argument(
+        "--as-you", action="store_true", help="run tasks as you even if code.run_as is set"
+    )
     a = ap.parse_args()
     import julius.agents.code_agent as ca
     import julius.agents.code_session as cs
@@ -323,6 +339,12 @@ def main():
     claude = cs.CodeSession(config={}, api_key=lambda: key)._find_claude()
     wanted = [c for c in (a.only.split(",") if a.only else CASES) if c in CASES]
     rows, spent = [], 0.0
+    run_as = "" if a.as_you else str(config.load_config().get("code", {}).get("run_as") or "")
+    ca.configure({"run_as": run_as})  # the same user production runs tasks as
+    if run_as and ca.run_as_problem():
+        print(f"can't run as {run_as}: {ca.run_as_problem()}")
+        return 2
+    print(f"coding tasks run as: {run_as or 'you'}", flush=True)
     real_home_code = ca.CODE_HOME
     for name in wanted:
         if spent > a.limit_usd:
