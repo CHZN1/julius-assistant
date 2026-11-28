@@ -84,6 +84,30 @@ class NeverAsYou(RunAsBase):
         self.assertIn("owned by root", ca.run_as_problem("nobody"))
 
 
+class SudoRuleCheck(RunAsBase):
+    def test_the_rule_is_proven_by_running_the_wrapper_not_by_asking_sudo(self):
+        """`sudo -l` says yes to any command once one no-password rule exists, so the check runs the wrapper itself."""
+        ca.CODE_RUN, ca.CODE_REAP = "/usr/bin/true", "/usr/bin/false"  # root-owned stand-ins
+        ca.SHARED_ROOT = self.tmp
+        seen = []
+
+        def sudo(answer):
+            def run(argv, **kw):
+                seen.append(argv)
+                self.assertNotIn("-l", argv)
+                return subprocess.CompletedProcess(argv, *answer)
+
+            return run
+
+        refused = (1, "", "sudo: a password is required\n")
+        with mock.patch.object(ca.subprocess, "run", side_effect=sudo(refused)):
+            self.assertIn("sudo rule", ca.run_as_problem("nobody"))
+        usage = (2, "", "usage: code-run <task id>\n")
+        with mock.patch.object(ca.subprocess, "run", side_effect=sudo(usage)):
+            self.assertEqual(ca.run_as_problem("nobody"), "")
+        self.assertEqual(seen[-1], [ca.SUDO, "-n", "-u", "nobody", "/usr/bin/false"])
+
+
 class Launch(RunAsBase):
     def test_the_key_goes_on_stdin_and_the_command_through_one_wrapper(self):
         t = self.task()

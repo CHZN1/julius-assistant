@@ -305,10 +305,16 @@ def run_as_problem(user: str | None = None) -> str:
     if not SHARED_ROOT.is_dir():
         return f"the task folder {SHARED_ROOT} doesn't exist"
     for script in (CODE_RUN, CODE_REAP):
-        ok = subprocess.run(
-            [SUDO, "-n", "-u", user, "-l", script], capture_output=True, timeout=10
-        ).returncode
-        if ok != 0:
+        # run it for real with no arguments: it prints its usage and exits 2. (`sudo -l` can't be trusted here: by
+        # default it says yes to anything once any no-password rule exists for you, 2026-11-27.)
+        r = subprocess.run(
+            [SUDO, "-n", "-u", user, script],
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+            timeout=10,
+        )
+        if r.returncode != 2 or "usage" not in r.stderr:
             return (
                 f"the sudo rule that lets Julius run {Path(script).name} as {user} isn't installed"
             )
