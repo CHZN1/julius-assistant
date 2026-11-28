@@ -1,0 +1,29 @@
+name: Nightly port fuzz
+
+# Ten minutes of scripts/fuzz_ports.py against throwaway copies of the three local servers (8765, 8775, 8785):
+# no live Julius, no API key, no network beyond 127.0.0.1. Findings are uploaded as an artifact to replay locally.
+on:
+  schedule:
+    - cron: "17 9 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install numpy
+      - name: Fuzz for ten minutes
+        run: python scripts/fuzz_ports.py --minutes 10 --out fuzz-out --seed ${{ github.run_number }}
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-findings
+          path: fuzz-out

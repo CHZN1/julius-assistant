@@ -45,13 +45,18 @@ Checks run in this order; the first failure answers.
 
 1. `Host` other than `127.0.0.1:<port>` or `localhost:<port>`: 403 (DNS rebinding)
 2. any `Origin` header: 403 (the native app sends none; a web page always does; there is no CORS)
-3. more than 20 requests in 10 s, failures included: 429
-4. missing or wrong token: 401 (constant-time compare)
-5. unknown endpoint or method: 404; wrong `Content-Type`: 415; no `Content-Length`: 411; body over 16 KiB: 413; not a JSON object: 400
+3. missing or wrong token: 401 (constant-time compare); more than 20 of those in 10 s: 429. Bad-token requests have their own budget, so guessing is slow but can never lock the orb app out
+4. more than 20 authenticated requests in 10 s: 429
+5. unknown endpoint or method: 404; wrong `Content-Type`: 415; no `Content-Length`: 411; body over 16 KiB: 413; a body that stops short of its `Content-Length`: 408; not a JSON object (or nested too deep to parse): 400
 6. typed text empty, not a string, over 2000 characters (413), containing control characters, or starting with `/` (400: `/quit` and `/stop` are keyboard commands, never UI commands)
 7. paths: a non-empty list of at most 50 absolute strings, otherwise 400/413
 
 A handler bug answers 500 with no details.
+
+At most 32 connections are served at once (more are closed straight away), and any connection still open after 15 s is
+closed, so a flood of idle or slowly dripping connections clears by itself (`julius/ui_bridge/connguard.py`; the event
+feed and the panel file server use the same guard). `scripts/fuzz_ports.py` fuzzes all three servers, and
+`tests/test_browser_rebinding.py` attacks them from a real headless Chrome (opt-in: `JULIUS_TEST_BROWSER=1`).
 
 ## Audit log
 

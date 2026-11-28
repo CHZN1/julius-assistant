@@ -18,8 +18,9 @@ A tiny HTTP server on 127.0.0.1 (default port 8775), JSON in, JSON out, no third
 Safety, in the order the checks run:
   1. binds 127.0.0.1 only; Host must be 127.0.0.1/localhost with this port (DNS rebinding)
   2. any Origin header is refused: the native app sends none, a web page always does
-  3. rate limit (all requests, failures included, so guessing the token is slow): 20 per 10 s
-  4. Authorization: Bearer <per-install token> (~/.julius/ui_token, created with mode 0600), constant-time compare
+  3. Authorization: Bearer <per-install token> (~/.julius/ui_token, created with mode 0600), constant-time compare
+  4. rate limit, 20 per 10 s; requests with a bad token have their own 20 per 10 s, so guessing is slow but can't lock the app out
+  (and at most 32 connections at once, each closed after 15 s: julius/ui_bridge/connguard.py)
   5. body at most 16 KiB, Content-Type application/json, valid JSON object (a photo: at most 4 MiB, Content-Type image/jpeg, JPEG magic bytes)
   6. endpoint validation: typed text 1..2000 chars and never a slash command (/quit and /stop are keyboard commands, not UI commands); at most 50 paths, strings only
 Every request is appended to ~/.julius/ui_audit.log as one JSON line (time, endpoint, status, sizes; never the token and never the typed text)."""
@@ -39,6 +40,7 @@ from pathlib import Path
 from typing import Any
 
 from julius import log
+from julius.ui_bridge.connguard import GuardedServerMixin
 
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8775
@@ -151,6 +153,10 @@ class Channel:
         self.token, self.handlers, self.port = token, handlers, port
         self.audit_path = Path(audit_path) if audit_path else HOME / "ui_audit.log"
         self.limiter = limiter or _Limiter()
+        self.fail_limiter = (
+            _Limiter()
+        )  # bad tokens get their own budget, so they slow guessing without locking out the app
+        self.deadline_s = 15.0  # a connection still open after this is closed (connguard)
         self.card_limiter = _Limiter(
             CARD_RATE_N, RATE_S
         )  # card button edits are tiny and local: a bigger budget
@@ -250,20 +256,31 @@ class Channel:
         return 200, {"ok": True, **(res or {})}
 
     def _authenticate(self, headers: Any, limiter: Any = None) -> None:
-        """Local host, no browser Origin, under the rate limit, and the right bearer token."""
+        """Local host, no browser Origin, the right bearer token, and under the rate limit. Requests with a bad token
+        count against their own limit, so a program guessing tokens is slowed down without locking the orb app out."""
         host = (headers.get("Host") or "").lower()
         if host not in (f"127.0.0.1:{self.port}", f"localhost:{self.port}"):
             raise Refused(403, "bad Host")
         if headers.get("Origin") is not None:
             raise Refused(403, "Origin not allowed")
-        if not (limiter or self.limiter).allow():
-            raise Refused(429, "slow down")
         auth = headers.get("Authorization") or ""
         if not (
             auth.startswith("Bearer ")
             and hmac.compare_digest(auth[7:].strip().encode(), self.token.encode())
         ):
+            if not self.fail_limiter.allow():
+                raise Refused(429, "slow down")
             raise Refused(401, "bad token")
+        if not (limiter or self.limiter).allow():
+            raise Refused(429, "slow down")
+
+    @staticmethod
+    def _read_body(body_reader: Any, length: int) -> bytes:
+        """The body, or 408 when the client sends less than its Content-Length and stalls (found by fuzzing: was a 500)."""
+        try:
+            return body_reader(length)
+        except OSError:
+            raise Refused(408, "the body did not arrive in time") from None
 
     @staticmethod
     def _read_photo(headers: Any, body_reader: Any) -> bytes:
@@ -275,7 +292,7 @@ class Channel:
             raise Refused(411, "Content-Length required") from None
         if length < 4 or length > MAX_PHOTO:
             raise Refused(413, "photo too large")
-        data = body_reader(length)
+        data = Channel._read_body(body_reader, length)
         if data[:2] != b"\xff\xd8":
             raise Refused(400, "not a JPEG")
         return data
@@ -290,9 +307,14 @@ class Channel:
             raise Refused(411, "Content-Length required") from None
         if length < 0 or length > (limit or MAX_BODY):
             raise Refused(413, "body too large")
+        raw = Channel._read_body(body_reader, length)
         try:
-            body = json.loads(body_reader(length).decode("utf-8"))
-        except (ValueError, UnicodeDecodeError):
+            body = json.loads(raw.decode("utf-8"))
+        except (
+            ValueError,
+            UnicodeDecodeError,
+            RecursionError,
+        ):  # RecursionError: "[[[[..." nested past Python's limit
             raise Refused(400, "body is not JSON") from None
         if not isinstance(body, dict):
             raise Refused(400, "body must be an object")
@@ -338,11 +360,14 @@ class Channel:
                     )
                     chan.audit(self.path.split("?")[0][:40], 500, why=type(e).__name__)
                 data = json.dumps(out).encode()
-                self.send_response(status)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(data)))
-                self.end_headers()
-                self.wfile.write(data)
+                try:
+                    self.send_response(status)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.end_headers()
+                    self.wfile.write(data)
+                except OSError:  # the client went away (or the guard closed it at its deadline)
+                    pass
 
             def do_GET(self) -> None:
                 self._go("GET")
@@ -362,11 +387,15 @@ class Channel:
             def do_OPTIONS(self) -> None:
                 self._go("OPTIONS")  # no CORS: a browser preflight gets a refusal
 
-        class S(socketserver.ThreadingMixIn, http.server.HTTPServer):
+        class S(GuardedServerMixin, socketserver.ThreadingMixIn, http.server.HTTPServer):
             daemon_threads = True
             allow_reuse_address = True
 
+            def handle_error(self, request: Any, client_address: Any) -> None:
+                pass  # a dropped connection is not worth a traceback; handler errors are logged in _go
+
         self.httpd = S((HOST, self.port), H)
+        self.httpd.deadline_s = self.deadline_s
         self.port = self.httpd.server_address[1]
         self.httpd.timeout = 5
         threading.Thread(target=self.httpd.serve_forever, daemon=True, name="ui-channel").start()

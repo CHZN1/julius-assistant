@@ -180,20 +180,26 @@ class Channel(Base):
         self.assertEqual(self.req("GET", "/v1/typed")[0], 404)
         self.assertEqual(self.req("PUT", "/v1/typed", body={"text": "hi"})[0], 404)
 
-    def test_rate_limit_counts_failures_too(self):
-        ch = uc.Channel(
-            self.token, {}, audit_path=self.dir / "a2.log", port=0, limiter=uc._Limiter(3, 60)
-        ).start()
+    def test_bad_tokens_have_their_own_rate_limit(self):
+        ch = uc.Channel(self.token, {}, audit_path=self.dir / "a2.log", port=0)
+        ch.fail_limiter = uc._Limiter(3, 60)
+        ch.start()
         try:
-            codes = []
-            for _ in range(5):
+
+            def ping(token):
                 c = http.client.HTTPConnection("127.0.0.1", ch.port, timeout=5)
-                c.request("GET", "/v1/ping", headers={"Authorization": "Bearer wrong"})
+                c.request(
+                    "GET",
+                    "/v1/ping",
+                    headers={"Host": f"127.0.0.1:{ch.port}", "Authorization": "Bearer " + token},
+                )
                 r = c.getresponse()
                 r.read()
-                codes.append(r.status)
                 c.close()
-            self.assertEqual(codes, [401, 401, 401, 429, 429])
+                return r.status
+
+            self.assertEqual([ping("wrong") for _ in range(5)], [401, 401, 401, 429, 429])
+            self.assertEqual(ping(self.token), 200)  # guessing never locks the app out
         finally:
             ch.stop()
 

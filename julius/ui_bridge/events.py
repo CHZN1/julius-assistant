@@ -12,7 +12,8 @@ Safety: binds 127.0.0.1 only (the host is not configurable); a request whose Hos
 the per-install UI token (~/.julius/ui_token, the same one the UI channel on 8775 uses) is required, so another program on the Mac can't read the transcript:
 send it as `Authorization: Bearer <token>`, or, from a browser page that can't set headers, as the subprotocol `julius.token.<token>` (offer `julius.v1` too; that
 is the one echoed back); a missing or wrong token gets 401;
-clients cannot send commands; frames from clients larger than 64 kB close the connection; a client that falls 300 messages behind is dropped; at most 8 clients.
+clients cannot send commands; frames from clients larger than 64 kB close the connection; a client that falls 300 messages behind is dropped; at most 8 clients;
+at most 32 connections still in their handshake, each closed if the handshake isn't done in 5 s (julius/ui_bridge/connguard.py).
 No third-party packages: the WebSocket framing (RFC 6455) is implemented here."""
 
 import base64
@@ -32,6 +33,7 @@ from typing import Any
 from numpy import ndarray
 
 from julius import identity
+from julius.ui_bridge.connguard import MAX_CONNS, ConnectionGuard
 
 GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 HOST = "127.0.0.1"
@@ -184,6 +186,14 @@ class EventHub:
 
 PROTOCOL = "julius.v1"
 TOKEN_PROTOCOL = "julius.token."
+SINGLE_HEADERS = (
+    "host",
+    "origin",
+    "authorization",
+    "sec-websocket-key",
+    "sec-websocket-protocol",
+    "upgrade",
+)
 _REQUIRED = object()
 
 
@@ -205,9 +215,9 @@ def token_ok(hdr: dict[str, str], token: str) -> str | None:
 
 
 class _Client(threading.Thread):
-    def __init__(self, sock: Any, hub: Any, token: str | None = None) -> None:
+    def __init__(self, sock: Any, hub: Any, token: str | None = None, guard: Any = None) -> None:
         super().__init__(daemon=True)
-        self.sock, self.hub, self.token = sock, hub, token
+        self.sock, self.hub, self.token, self.guard = sock, hub, token, guard
         self.q = queue.Queue(maxsize=300)
         self.alive = True
 
@@ -269,10 +279,18 @@ class _Client(threading.Thread):
                 req += chunk
             lines = req.decode("latin-1").split("\r\n")
             first = lines[0].split(" ")
-            hdr = {
-                k.strip().lower(): v.strip()
+            pairs = [
+                (k.strip().lower(), v.strip())
                 for k, v in (line.split(":", 1) for line in lines[1:] if ":" in line)
-            }
+            ]
+            hdr = dict(pairs)
+            names = [k for k, _ in pairs]
+            if any(names.count(k) > 1 for k in SINGLE_HEADERS):
+                # found by fuzzing: a repeated Origin or Host would otherwise be judged by its last copy only
+                self.sock.sendall(
+                    b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                )
+                return
             if (
                 len(first) < 2
                 or first[0] != "GET"
@@ -307,6 +325,8 @@ class _Client(threading.Thread):
                     + "\r\n\r\n"
                 ).encode()
             )
+            if self.guard:
+                self.guard.release(self.sock)  # past its checks: MAX_CLIENTS caps it from here on
             self.sock.settimeout(None)
             self.q.put_nowait(frame(json.dumps(self.hub.hello(), separators=(",", ":"))))
             threading.Thread(target=self._reader, daemon=True).start()
@@ -318,6 +338,8 @@ class _Client(threading.Thread):
         except (OSError, ConnectionError, ValueError):
             pass
         finally:
+            if self.guard:
+                self.guard.release(self.sock)
             self.alive = False
             self.hub.remove(self)
             with contextlib.suppress(OSError):
@@ -350,6 +372,10 @@ class EventServer:
         )
         self._stop = threading.Event()
         self._sock = None
+        self.handshake_deadline_s = (
+            5.0  # a connection that hasn't finished its handshake by then is closed
+        )
+        self._guard = None
 
     def start(self) -> "EventServer":
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -358,6 +384,7 @@ class EventServer:
         s.listen(8)
         self._sock = s
         self.port = s.getsockname()[1]
+        self._guard = ConnectionGuard(MAX_CONNS, self.handshake_deadline_s)
         threading.Thread(target=self._accept, daemon=True).start()
         threading.Thread(target=self._sample, daemon=True).start()
         return self
@@ -368,7 +395,11 @@ class EventServer:
                 conn, _ = self._sock.accept()
             except OSError:
                 return
-            _Client(conn, self.hub, self.token).start()
+            if not self._guard.admit(conn):
+                with contextlib.suppress(OSError):
+                    conn.close()
+                continue
+            _Client(conn, self.hub, self.token, self._guard).start()
 
     def _sample(self) -> None:
         period = 1.0 / self.hz
@@ -385,6 +416,8 @@ class EventServer:
 
     def stop(self) -> None:
         self._stop.set()
+        if self._guard:
+            self._guard.stop()
         with contextlib.suppress(OSError, AttributeError):
             self._sock.close()
 

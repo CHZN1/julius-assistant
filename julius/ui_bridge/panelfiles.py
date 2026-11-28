@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+from julius.ui_bridge.connguard import GuardedServerMixin
 from julius.ui_bridge.events import HOST, origin_ok
 
 DEFAULT_PORT = 8785
@@ -238,6 +239,7 @@ class _Handler(BaseHTTPRequestHandler):
     server_version = "JuliusPanel"
     sys_version = ""
     protocol_version = "HTTP/1.1"
+    timeout = 10  # an idle keep-alive connection is closed after this
 
     def log_message(self, *a: Any) -> None:  # never log paths: they contain the token
         pass
@@ -280,7 +282,11 @@ class _Handler(BaseHTTPRequestHandler):
     do_POST = do_PUT = do_DELETE = do_PATCH = do_OPTIONS = _no
 
 
-class _Httpd(ThreadingHTTPServer):
+class _Httpd(GuardedServerMixin, ThreadingHTTPServer):
+    deadline_s = (
+        30.0  # at most 32 connections, each closed after 30 s (julius/ui_bridge/connguard.py)
+    )
+
     def handle_error(
         self, request: Any, client_address: Any
     ) -> None:  # a browser dropping a connection is not an event worth a traceback
